@@ -1,6 +1,20 @@
-import { Plus, Edit, AlertCircle, History, RefreshCcw, ShieldAlert } from 'lucide-react';
+import { Plus, Edit, AlertCircle, History, RefreshCcw, ShieldAlert, Download, Share2 } from 'lucide-react';
+import { useState } from 'react';
 
-export default function Storyboard() {
+interface StoryboardProps {
+  onNext?: () => void;
+  onBack?: () => void;
+}
+
+export default function Storyboard({ onNext, onBack }: StoryboardProps) {
+  const [scriptName, setScriptName] = useState('宠鲜鲜加热饭盒_职场加班版_v3');
+  const [feedback, setFeedback] = useState('');
+
+  const showFeedback = (message: string) => {
+    setFeedback(message);
+    setTimeout(() => setFeedback(''), 1800);
+  };
+
   const scenes = [
     {
       id: 1,
@@ -60,14 +74,46 @@ export default function Storyboard() {
           <p className="text-sm text-gray-500 mt-1">已生成 {scenes.length} 个分镜 · 当前处于待审核区，可继续编辑、合规检查与回看版本。</p>
         </div>
         <div className="flex gap-3">
-          <button className="px-4 py-2 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all flex items-center gap-2">
+          <button onClick={() => showFeedback(`${scriptName} 已准备下载。`)} className="px-4 py-2 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all flex items-center gap-2">
+            <Download className="w-4 h-4" />
+            下载脚本
+          </button>
+          <button onClick={() => showFeedback('脚本分享链接已生成。')} className="px-4 py-2 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all flex items-center gap-2">
+            <Share2 className="w-4 h-4" />
+            分享
+          </button>
+          <button onClick={() => showFeedback('已基于当前修改意见重新生成脚本。')} className="px-4 py-2 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all flex items-center gap-2">
             <RefreshCcw className="w-4 h-4" />
             重新生成
           </button>
-          <button className="px-4 py-2 bg-[#00d084] text-black font-medium rounded-lg hover:bg-[#00e894] transition-all flex items-center gap-2">
+          <button onClick={() => showFeedback('已添加一个空白分镜。')} className="px-4 py-2 bg-[#00d084] text-black font-medium rounded-lg hover:bg-[#00e894] transition-all flex items-center gap-2">
             <Plus className="w-4 h-4" />
             添加分镜
           </button>
+        </div>
+      </div>
+
+      <div className="bg-[#1e1e1e] rounded-xl p-6 border border-[#2a2a2a]">
+        <div className="flex items-center justify-between gap-6">
+          <div className="flex-1">
+            <label className="block text-white font-semibold mb-2">脚本名称</label>
+            <input
+              className="w-full bg-[#0a0a0a] border border-[#3a3a3a] rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-[#00d084]"
+              value={scriptName}
+              onChange={(e) => setScriptName(e.target.value)}
+              placeholder="请为当前脚本命名，便于下载、分享和版本追溯"
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3 w-[360px]">
+            <button onClick={() => showFeedback(`${scriptName}.xlsx 已导出。`)} className="py-3 bg-[#0a0a0a] border border-[#2a2a2a] text-white rounded-lg hover:border-[#00d084] transition-all flex items-center justify-center gap-2">
+              <Download className="w-4 h-4 text-[#00d084]" />
+              导出 Excel
+            </button>
+            <button onClick={() => showFeedback('只读分享链接已生成。')} className="py-3 bg-[#0a0a0a] border border-[#2a2a2a] text-white rounded-lg hover:border-[#00d084] transition-all flex items-center justify-center gap-2">
+              <Share2 className="w-4 h-4 text-[#00d084]" />
+              生成分享链接
+            </button>
+          </div>
         </div>
       </div>
 
@@ -95,7 +141,7 @@ export default function Storyboard() {
             <h3 className="text-white font-semibold">待审核区</h3>
             <p className="text-sm text-gray-500 mt-1">按需求文档中的分镜表结构展示镜号、景别、画面描述、台词、时长和卖点植入说明。</p>
           </div>
-          <button className="px-4 py-2 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all flex items-center gap-2 text-sm">
+          <button onClick={() => showFeedback('合规检查已完成，发现 1 处风险。')} className="px-4 py-2 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all flex items-center gap-2 text-sm">
             <ShieldAlert className="w-4 h-4" />
             运行合规检查
           </button>
@@ -137,7 +183,7 @@ export default function Storyboard() {
                   <td className="px-6 py-5 text-gray-400 leading-6">{scene.note}</td>
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-2">
-                      <button className="px-3 py-2 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all flex items-center gap-2">
+                      <button onClick={() => showFeedback(`${scene.title} 已进入编辑状态。`)} className="px-3 py-2 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all flex items-center gap-2">
                         <Edit className="w-4 h-4" />
                         编辑
                       </button>
@@ -191,13 +237,23 @@ export default function Storyboard() {
       </div>
 
       <div className="flex justify-end gap-3">
-        <button className="px-6 py-3 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all">
+        {feedback && <div className="mr-auto px-4 py-3 rounded-lg bg-[#00d084]/10 text-[#00d084] border border-[#00d084]/20 text-sm">{feedback}</div>}
+        <button onClick={onBack} className="px-6 py-3 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all">
+          上一步
+        </button>
+        <button onClick={() => showFeedback('草稿已保存。')} className="px-6 py-3 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all">
           保存草稿
         </button>
-        <button className="px-6 py-3 bg-white text-black font-medium rounded-lg hover:bg-gray-200 transition-all">
+        <button onClick={() => showFeedback(`${scriptName} 已准备下载。`)} className="px-6 py-3 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all">
+          下载脚本
+        </button>
+        <button onClick={() => showFeedback('脚本分享链接已生成。')} className="px-6 py-3 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all">
+          分享脚本
+        </button>
+        <button onClick={() => showFeedback('已基于当前修改意见重新生成脚本。')} className="px-6 py-3 bg-white text-black font-medium rounded-lg hover:bg-gray-200 transition-all">
           重新生成
         </button>
-        <button className="px-6 py-3 bg-[#00d084] text-black font-medium rounded-lg hover:bg-[#00e894] transition-all">
+        <button onClick={onNext} className="px-6 py-3 bg-[#00d084] text-black font-medium rounded-lg hover:bg-[#00e894] transition-all">
           提交审核
         </button>
       </div>

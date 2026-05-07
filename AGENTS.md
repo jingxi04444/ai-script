@@ -1,64 +1,39 @@
-# AI Script Project Rules
+# AGENTS.md
 
-## Project Overview
-- This repository is an AI short-video script generation and replication project.
-- `ui/` contains the project UI implementation.
-- `ui/ui-front-web/` is the current frontend application, built with Vite + React.
-- `ui/ui-admin-web/` is the current admin-side management application, built with Vite + React.
-- `doc/` contains project documentation.
-- `doc/request/` contains product requirement documents.
-- `doc/request/前台需求.md` is the frontend user-side requirement document.
-- `doc/request/后台需求.md` is the admin-side requirement document.
+## Repo Shape
+- `ui/` contains existing Figma/Make UI prototypes only: `ui/ui-front-web/` and `ui/ui-admin-web/` are design references, not the production frontends.
+- Production frontends now live under `apps/front-web/` and `apps/admin-web/`; add new business UI there instead of continuing under `ui/`.
+- Production app entrypoints are `apps/*/src/main.tsx`; current page/routing logic is in `apps/*/src/app/App.tsx`, with mock backend data in `apps/*/src/app/mock.js`.
+- Product requirements live in `doc/request/`; treat them as behavior source of truth when implementing UI.
+- Architecture details live in `doc/architecture/方案1-模块化单体架构.md`.
 
-## Instruction Priority
-- Requirement documents in `doc/request/` are the primary source of product behavior.
-- When code behavior conflicts with requirement docs, follow the requirement docs unless the user explicitly says otherwise.
-- For frontend tasks, prioritize `doc/request/前台需求.md`.
-- For management, review, permissions, knowledge base, and operations tasks, prioritize `doc/request/后台需求.md`.
-- If requirements are unclear, preserve the current implementation and ask one focused question instead of guessing.
+## Product Sources
+- User-facing workflow changes must follow `doc/request/前台需求.md`, especially the 9-step flow: global settings, selling points, viral/original source, storyboard, scene-role-props, video generation, dubbing, preview, analytics.
+- Admin, permissions, review/audit, knowledge base, materials, parsing, and operations changes must follow `doc/request/后台需求.md`.
+- Do not add admin-only capability into the user-facing app unless the frontend requirement document explicitly calls for it.
+- Compliance checks, originality checks, audit semantics, brand isolation, and permission boundaries are core product concepts; do not remove or weaken their UI without explicit direction.
 
-## Directory Responsibilities
-- Place user-side frontend page or component changes under `ui/ui-front-web/`.
-- Place admin-side management UI changes under `ui/ui-admin-web/`.
-- Do not treat `doc/` as runnable code; it is the project documentation source.
-- Do not move or rename files in `doc/request/` unless the user explicitly requests documentation restructuring.
-- When a new project, app, package, or major directory is added, update this `AGENTS.md` in the same task so the new structure and ownership rules stay current.
+## Commands
+- Production front app: run commands from `apps/front-web/`.
+- Production admin app: run commands from `apps/admin-web/`.
+- Install per app with `npm install`; each app has its own `package-lock.json`.
+- Start dev server: `npm run dev`.
+- Production build / primary verification: `npm run build`.
+- No lint, test, typecheck, CI, or root package scripts are currently configured; do not invent those checks.
 
-## Frontend Working Rules
-- Follow the existing React + Vite structure already used in `ui/ui-front-web/src/` and `ui/ui-admin-web/src/`.
-- Prefer small, local changes over broad refactors.
-- Reuse existing UI components in `src/app/components/` and `src/app/components/ui/` before creating new ones.
-- Keep step-oriented workflow naming consistent with the current product flow: global settings, selling points, viral analysis, storyboard, scene-role, dubbing, preview, analytics.
-- Maintain Chinese product language in user-facing UI unless the user explicitly requests English or bilingual copy.
-- Keep the dark visual style and existing layout direction unless a redesign is explicitly requested.
-- For admin-side UI, keep permission boundaries, audit semantics, and brand isolation visible in the interface.
+## UI Implementation Notes
+- Use `ui/*` components as visual references, but implement production components inside `apps/*`.
+- Keep existing user-facing copy in Chinese unless the task asks otherwise.
+- Preserve the current visual direction: front app uses a dark step-workbench style; admin app uses a management-console layout with sidebar modules.
+- Prefer small local edits in the relevant app over cross-app refactors.
 
-## Product Behavior Rules
-- The product is workflow-driven; new UI or logic should fit the existing multi-step creation flow.
-- Frontend changes should reflect the documented sequence in the requirement docs instead of inventing a parallel flow.
-- Compliance and originality checks are core product capabilities; do not remove or weaken related UI, labels, or placeholders without explicit instruction.
-- Distinguish clearly between user-side features and admin-side features.
-- Do not place admin-side capability into the frontend user workflow unless the requirement doc calls for it.
+## Vite / Asset Quirks
+- Both Vite configs include `figmaAssetResolver()` for `figma:asset/...` imports and alias `@` to `src`; keep these when editing config.
+- Both Vite configs require both `react()` and `tailwindcss()` plugins for the Make/Figma export; do not remove either just because Tailwind usage looks indirect.
+- `assetsInclude` intentionally includes SVG/CSV only; do not add `.css`, `.tsx`, or `.ts` there.
+- Existing imported screenshots/assets under `src/imports/` are design references; do not delete or rename them unless asked.
 
-## Editing Safety
-- Do not modify `.env` or secret-like files unless the user explicitly asks.
-- Do not delete existing assets, screenshots, or imported reference images unless the user asks.
-- Do not overwrite documentation content in `doc/request/` when implementing UI tasks.
-- If a task needs assumptions beyond the requirement docs, state the assumption clearly in the response.
-
-## Verification
-- For changes inside `ui/ui-front-web/`, use the frontend app's commands when verification is needed:
-- Install dependencies: `npm install`
-- Start dev server: `npm run dev`
-- Build production bundle: `npm run build`
-- For changes inside `ui/ui-admin-web/`, use the same verification commands:
-- Install dependencies: `npm install`
-- Start dev server: `npm run dev`
-- Build production bundle: `npm run build`
-- If the change affects visible UI flow, prefer at least a build check before finishing when the environment allows it.
-
-## Collaboration Notes
-- When describing work, reference affected requirement sections when useful.
-- Keep summaries concise and implementation-oriented.
-- If the user asks for rules, conventions, or project behavior guidance, update this `AGENTS.md` first unless they explicitly want a separate doc.
-- Treat `AGENTS.md` as the source of truth for project-level working rules; keep it in sync as the repository structure evolves.
+## Documentation Edits
+- Update `doc/request/前台需求.md` when adding user-facing product behavior.
+- Update `doc/request/后台需求.md` when adding admin-side product behavior.
+- Do not move or rename files in `doc/request/` unless the user asks for documentation restructuring.

@@ -1,10 +1,22 @@
 import { Play, Pause, Download, Share2, Clock } from 'lucide-react';
 import { useState } from 'react';
 
-export default function VideoPreview() {
+interface VideoPreviewProps {
+  onNext?: () => void;
+  onBack?: () => void;
+}
+
+export default function VideoPreview({ onNext, onBack }: VideoPreviewProps) {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(3);
   const [selectedClip, setSelectedClip] = useState(0);
+  const [feedback, setFeedback] = useState('');
+
+  const showFeedback = (message: string) => {
+    setFeedback(message);
+    setTimeout(() => setFeedback(''), 1800);
+  };
+
   const timeline = [
     { id: 1, duration: 3, thumbnail: '', title: '镜号01' },
     { id: 2, duration: 4, thumbnail: '', title: '镜号02' },
@@ -21,11 +33,11 @@ export default function VideoPreview() {
           <p className="text-sm text-gray-500 mt-1">总时长 14 秒 · 9:16 竖屏</p>
         </div>
         <div className="flex gap-3">
-          <button className="px-4 py-2 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all flex items-center gap-2">
+          <button onClick={() => showFeedback('视频分享链接已生成。')} className="px-4 py-2 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all flex items-center gap-2">
             <Share2 className="w-4 h-4" />
             分享
           </button>
-          <button className="px-4 py-2 bg-[#00d084] text-black font-medium rounded-lg hover:bg-[#00e894] transition-all flex items-center gap-2">
+          <button onClick={() => showFeedback('视频已导出为 MP4。')} className="px-4 py-2 bg-[#00d084] text-black font-medium rounded-lg hover:bg-[#00e894] transition-all flex items-center gap-2">
             <Download className="w-4 h-4" />
             导出视频
           </button>
@@ -143,6 +155,19 @@ export default function VideoPreview() {
             </div>
           </div>
         </div>
+      </div>
+
+      <div className="flex justify-end gap-3">
+        {feedback && <div className="mr-auto px-4 py-3 rounded-lg bg-[#00d084]/10 text-[#00d084] border border-[#00d084]/20 text-sm">{feedback}</div>}
+        <button onClick={onBack} className="px-6 py-3 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all">
+          上一步
+        </button>
+        <button onClick={() => showFeedback('视频已导出并保存到项目素材库。')} className="px-6 py-3 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all">
+          导出 / 发布完成
+        </button>
+        <button onClick={onNext} className="px-6 py-3 bg-[#00d084] text-black font-medium rounded-lg hover:bg-[#00e894] transition-all">
+          进入投放数据
+        </button>
       </div>
     </div>
   );

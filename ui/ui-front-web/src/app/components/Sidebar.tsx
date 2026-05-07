@@ -7,18 +7,20 @@ interface SidebarProps {
 }
 
 const steps = [
-  { id: 'global', label: '全局设定', icon: Settings, status: 'completed' },
-  { id: 'selling-points', label: '产品卖点', icon: Sparkles, status: 'completed' },
-  { id: 'viral-analysis', label: '爆款链接/原创', icon: TrendingUp, status: 'completed' },
-  { id: 'storyboard', label: '分镜脚本', icon: FileText, status: 'active' },
-  { id: 'scene-role', label: '场景角色道具', icon: Users, status: 'pending' },
-  { id: 'video-gen', label: '分镜视频', icon: Video, status: 'pending' },
-  { id: 'dubbing', label: '配音对口型', icon: Mic, status: 'pending' },
-  { id: 'preview', label: '视频预览', icon: Eye, status: 'pending' },
-  { id: 'analytics', label: '投放数据', icon: BarChart, status: 'pending' },
+  { id: 'global', label: '全局设定', icon: Settings },
+  { id: 'selling-points', label: '产品卖点', icon: Sparkles },
+  { id: 'viral-analysis', label: '爆款链接/原创', icon: TrendingUp },
+  { id: 'storyboard', label: '分镜脚本', icon: FileText },
+  { id: 'scene-role', label: '场景角色道具', icon: Users },
+  { id: 'video-gen', label: '分镜视频', icon: Video },
+  { id: 'dubbing', label: '配音对口型', icon: Mic },
+  { id: 'preview', label: '视频预览', icon: Eye },
+  { id: 'analytics', label: '投放数据', icon: BarChart },
 ];
 
 export default function Sidebar({ activeStep, onStepChange, onBackToHome }: SidebarProps) {
+  const activeIndex = steps.findIndex((step) => step.id === activeStep);
+
   return (
     <div className="w-64 bg-[#1a1a1a] border-r border-[#2a2a2a] flex flex-col">
       <div className="p-6 border-b border-[#2a2a2a]">
@@ -38,9 +40,10 @@ export default function Sidebar({ activeStep, onStepChange, onBackToHome }: Side
       )}
 
       <nav className="flex-1 p-4 space-y-1">
-        {steps.map((step) => {
+        {steps.map((step, index) => {
           const Icon = step.icon;
           const isActive = activeStep === step.id;
+          const isCompleted = index < activeIndex;
 
           return (
             <button
@@ -54,7 +57,7 @@ export default function Sidebar({ activeStep, onStepChange, onBackToHome }: Side
             >
               <div className="relative">
                 <Icon className="w-5 h-5" />
-                {step.status === 'completed' && !isActive && (
+                {isCompleted && !isActive && (
                   <div className="absolute -top-1 -right-1 w-2 h-2 bg-[#00d084] rounded-full" />
                 )}
               </div>

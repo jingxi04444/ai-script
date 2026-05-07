@@ -1,6 +1,10 @@
 import { useState } from 'react';
 
-export default function GlobalSettings() {
+interface GlobalSettingsProps {
+  onNext?: () => void;
+}
+
+export default function GlobalSettings({ onNext }: GlobalSettingsProps) {
   const [videoRatio, setVideoRatio] = useState('9:16');
   const [videoType, setVideoType] = useState('');
   const [platform, setPlatform] = useState('');
@@ -118,7 +122,7 @@ export default function GlobalSettings() {
       </div>
 
       <div className="flex justify-end">
-        <button className="px-6 py-3 bg-[#00d084] text-black font-medium rounded-lg hover:bg-[#00e894] transition-all">
+        <button onClick={onNext} className="px-6 py-3 bg-[#00d084] text-black font-medium rounded-lg hover:bg-[#00e894] transition-all">
           下一步：产品卖点输入
         </button>
       </div>

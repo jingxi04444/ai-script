@@ -1,9 +1,20 @@
 import { Mic, Upload, Volume2, User } from 'lucide-react';
 import { useState } from 'react';
 
-export default function Dubbing() {
+interface DubbingProps {
+  onNext?: () => void;
+  onBack?: () => void;
+}
+
+export default function Dubbing({ onNext, onBack }: DubbingProps) {
   const [selectedVoice, setSelectedVoice] = useState(1);
   const [lipSyncEnabled, setLipSyncEnabled] = useState(true);
+  const [feedback, setFeedback] = useState('');
+
+  const showFeedback = (message: string) => {
+    setFeedback(message);
+    setTimeout(() => setFeedback(''), 1800);
+  };
 
   const voices = [
     { id: 1, name: '甜美女声', type: '女声', style: '温柔' },
@@ -20,11 +31,11 @@ export default function Dubbing() {
           <p className="text-sm text-gray-500 mt-1">AI 配音 · 自动对口型</p>
         </div>
         <div className="flex gap-3">
-          <button className="px-4 py-2 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all flex items-center gap-2">
+          <button onClick={() => showFeedback('音频已上传，可替换当前旁白。')} className="px-4 py-2 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all flex items-center gap-2">
             <Upload className="w-4 h-4" />
             上传音频
           </button>
-          <button className="px-4 py-2 bg-[#00d084] text-black font-medium rounded-lg hover:bg-[#00e894] transition-all flex items-center gap-2">
+          <button onClick={() => showFeedback('AI 配音已生成，并应用到所有分镜。')} className="px-4 py-2 bg-[#00d084] text-black font-medium rounded-lg hover:bg-[#00e894] transition-all flex items-center gap-2">
             <Mic className="w-4 h-4" />
             AI 生成配音
           </button>
@@ -63,7 +74,7 @@ export default function Dubbing() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    // 播放试听
+                    showFeedback(`${voice.name} 试听播放中。`);
                   }}
                   className="mt-2 p-2 bg-[#2a2a2a] rounded-full hover:bg-[#3a3a3a] transition-all"
                 >
@@ -131,11 +142,15 @@ export default function Dubbing() {
       </div>
 
       <div className="flex justify-end gap-3">
-        <button className="px-6 py-3 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all">
+        {feedback && <div className="mr-auto px-4 py-3 rounded-lg bg-[#00d084]/10 text-[#00d084] border border-[#00d084]/20 text-sm">{feedback}</div>}
+        <button onClick={onBack} className="px-6 py-3 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all">
+          上一步
+        </button>
+        <button onClick={() => showFeedback('配音设置已保存。')} className="px-6 py-3 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all">
           保存设置
         </button>
-        <button className="px-6 py-3 bg-[#00d084] text-black font-medium rounded-lg hover:bg-[#00e894] transition-all">
-          开始处理
+        <button onClick={onNext} className="px-6 py-3 bg-[#00d084] text-black font-medium rounded-lg hover:bg-[#00e894] transition-all">
+          音频配置完成
         </button>
       </div>
     </div>

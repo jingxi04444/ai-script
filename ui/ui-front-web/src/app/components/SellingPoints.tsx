@@ -1,7 +1,12 @@
-import { Sparkles, X, CheckCircle2 } from 'lucide-react';
+import { Sparkles, X, CheckCircle2, Upload, Database, FileSpreadsheet, Star } from 'lucide-react';
 import { useState } from 'react';
 
-export default function SellingPoints() {
+interface SellingPointsProps {
+  onNext?: () => void;
+  onBack?: () => void;
+}
+
+export default function SellingPoints({ onNext, onBack }: SellingPointsProps) {
   const [productName, setProductName] = useState('宠鲜鲜智能加热饭盒');
   const [points, setPoints] = useState([
     '20 分钟快速加热，办公室也能吃上热饭',
@@ -12,6 +17,32 @@ export default function SellingPoints() {
   const [subPoints, setSubPoints] = useState<string[]>(['分层防串味设计，主食配菜口感更完整']);
   const [targetGroups, setTargetGroups] = useState(['25-35岁女性', '职场白领']);
   const [otherRequirements, setOtherRequirements] = useState('品牌调性偏真实生活化，不要使用夸张广告词，可参考加班场景。');
+  const [templateName, setTemplateName] = useState('加热饭盒_职场人群卖点模板.xlsx');
+  const [feedback, setFeedback] = useState('');
+
+  const assets = [
+    {
+      id: 1,
+      name: '职场加班人群卖点包',
+      tag: '高频复用',
+      main: '20 分钟快速加热，办公室也能吃上热饭',
+      count: 8,
+    },
+    {
+      id: 2,
+      name: '便携餐具新品 Brief',
+      tag: '本周新增',
+      main: '小体积通勤友好，桌面收纳不占空间',
+      count: 5,
+    },
+    {
+      id: 3,
+      name: '健康轻食场景库',
+      tag: '已审核',
+      main: '分层保鲜不串味，适合减脂餐和儿童餐',
+      count: 6,
+    },
+  ];
 
   const addPoint = () => {
     setPoints([...points, '']);
@@ -39,11 +70,76 @@ export default function SellingPoints() {
     );
   };
 
+  const showFeedback = (message: string) => {
+    setFeedback(message);
+    setTimeout(() => setFeedback(''), 1800);
+  };
+
   return (
     <div className="space-y-6">
       <div className="bg-[#141414] rounded-xl p-5 border border-[#2a2a2a]">
         <h2 className="text-2xl font-bold text-white">步骤 2：产品卖点输入</h2>
-        <p className="text-sm text-gray-500 mt-1">按标准模板补齐产品名称、特色卖点、主卖点、辅助卖点、使用人群和补充要求。</p>
+        <p className="text-sm text-gray-500 mt-1">按标准模板补齐产品名称、特色卖点、主卖点、辅助卖点、使用人群和补充要求，也可上传模板或从资产库复用。</p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-6">
+        <div className="bg-[#1e1e1e] rounded-xl p-6 border border-[#2a2a2a]">
+          <div className="flex items-center justify-between gap-4 mb-5">
+            <div className="flex items-center gap-2 text-white font-semibold">
+              <FileSpreadsheet className="w-5 h-5 text-[#00d084]" />
+              模板上传
+            </div>
+            <span className="text-xs px-2 py-1 rounded-full bg-[#00d084]/10 text-[#00d084] border border-[#00d084]/30">支持 xlsx / csv</span>
+          </div>
+          <label className="block rounded-xl border-2 border-dashed border-[#3a3a3a] bg-[#0a0a0a] p-5 hover:border-[#00d084] transition-all cursor-pointer">
+            <input
+              type="file"
+              className="hidden"
+              accept=".xlsx,.xls,.csv"
+              onChange={(e) => setTemplateName(e.target.files?.[0]?.name || templateName)}
+            />
+            <div className="flex items-start gap-4">
+              <div className="w-11 h-11 rounded-lg bg-[#00d084] text-black flex items-center justify-center flex-shrink-0">
+                <Upload className="w-5 h-5" />
+              </div>
+              <div>
+                <div className="text-white font-medium">上传产品卖点模板</div>
+                <p className="text-sm text-gray-500 mt-1">模板字段包含产品名称、特色卖点、主卖点、辅助卖点、人群与补充要求。</p>
+                <div className="text-sm text-[#00d084] mt-3">当前模板：{templateName}</div>
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <div className="bg-[#1e1e1e] rounded-xl p-6 border border-[#2a2a2a]">
+          <div className="flex items-center gap-2 text-white font-semibold mb-5">
+            <Database className="w-5 h-5 text-[#00d084]" />
+            产品卖点资产库
+          </div>
+          <div className="space-y-3">
+            {assets.map((asset) => (
+              <button
+                key={asset.id}
+                onClick={() => setMainPoint(asset.main)}
+                className="w-full text-left bg-[#0a0a0a] border border-[#2a2a2a] rounded-lg p-4 hover:border-[#00d084] transition-all"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="flex items-center gap-2 text-white font-medium">
+                      {asset.name}
+                      {asset.tag === '高频复用' && <Star className="w-3.5 h-3.5 text-[#00d084]" />}
+                    </div>
+                    <div className="text-sm text-gray-500 mt-1">{asset.main}</div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="text-xs text-[#00d084]">{asset.tag}</div>
+                    <div className="text-xs text-gray-500 mt-1">{asset.count} 条卖点</div>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="bg-[#1e1e1e] rounded-xl p-6 border border-[#2a2a2a]">
@@ -195,13 +291,17 @@ export default function SellingPoints() {
       </div>
 
       <div className="flex justify-end gap-3">
-        <button className="px-6 py-3 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all">
+        {feedback && <div className="mr-auto px-4 py-3 rounded-lg bg-[#00d084]/10 text-[#00d084] border border-[#00d084]/20 text-sm">{feedback}</div>}
+        <button onClick={onBack} className="px-6 py-3 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all">
+          上一步
+        </button>
+        <button onClick={() => showFeedback('草稿已保存，可在项目列表继续编辑。')} className="px-6 py-3 bg-[#2a2a2a] text-white rounded-lg hover:bg-[#3a3a3a] transition-all">
           保存草稿
         </button>
-        <button className="px-6 py-3 bg-[#00d084] text-black font-medium rounded-lg hover:bg-[#00e894] transition-all">
+        <button onClick={() => showFeedback('AI 已根据当前信息优化 Brief。')} className="px-6 py-3 bg-[#00d084] text-black font-medium rounded-lg hover:bg-[#00e894] transition-all">
           AI 优化 Brief
         </button>
-        <button className="px-6 py-3 bg-white text-black font-medium rounded-lg hover:bg-gray-200 transition-all">
+        <button onClick={onNext} className="px-6 py-3 bg-white text-black font-medium rounded-lg hover:bg-gray-200 transition-all">
           下一步：内容来源选择
         </button>
       </div>
