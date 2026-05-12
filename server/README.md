@@ -9,7 +9,7 @@ cd server
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 The default database URL targets the local PostgreSQL database created from `doc/database/schema.sql` and `doc/database/seed.sql`:
@@ -98,7 +98,7 @@ Example create payload:
 
 ```bash
 VITE_USE_MOCK_API=false
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
 ## API Docs
@@ -106,5 +106,5 @@ VITE_API_BASE_URL=http://localhost:8000
 After starting the server:
 
 ```text
-http://localhost:8000/docs
+http://127.0.0.1:8000/docs
 ```

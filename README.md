@@ -23,7 +23,7 @@ npm run dev
 
 ```bash
 VITE_USE_MOCK_API=false
-VITE_API_BASE_URL=http://localhost:8000
+VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
 
 ## 后端服务
@@ -35,10 +35,10 @@ cd server
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-API 文档：`http://localhost:8000/docs`
+API 文档：`http://127.0.0.1:8000/docs`
 
 后端支持多个 OpenAI-compatible 大模型供应商。默认从数据库 `api_provider_configs(provider_type='llm')` 读取启用配置，并按 `priority` 自动选择和故障切换；密钥建议用 `env:VAR_NAME` 存引用。
 
