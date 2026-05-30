@@ -39,6 +39,80 @@ summary 用中文一句话说明目标人群、核心痛点、主卖点和脚本
     }
 
 
+def score_product_brief(db: Session | None, tenant_id: str | None, brief: dict[str, Any], context: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    template = _prompt_template("prompt_brief_score")
+    prompt = f"""
+{template['userPromptTemplate']}
+
+上下文：
+{json.dumps(context or {}, ensure_ascii=False)}
+
+Brief：
+{json.dumps(brief, ensure_ascii=False)}
+
+只返回 JSON，字段必须包含：score, summary, dimensions, suggestions, risks。
+dimensions 每项包含 name, score, comment。
+""".strip()
+    result = get_llm_client().complete(template["systemPrompt"], prompt, db=db, tenant_id=tenant_id, max_tokens=1800)
+    if result is None:
+        return None
+    data = _parse_json(result.content)
+    if not isinstance(data, dict):
+        return None
+    return {
+        "score": int(data.get("score") or 0),
+        "summary": str(data.get("summary") or ""),
+        "dimensions": _dimensions(data.get("dimensions")),
+        "suggestions": _string_list(data.get("suggestions")),
+        "risks": _string_list(data.get("risks")),
+        "modelProvider": result.provider,
+        "modelName": result.model,
+        "promptName": template["name"],
+        "promptVersion": template["version"],
+        "rawPreview": result.content[:2000],
+    }
+
+
+def compare_product_briefs(db: Session | None, tenant_id: str | None, current: dict[str, Any], baseline: dict[str, Any], context: dict[str, Any] | None = None) -> dict[str, Any] | None:
+    template = _prompt_template("prompt_brief_compare")
+    prompt = f"""
+{template['userPromptTemplate']}
+
+上下文：
+{json.dumps(context or {}, ensure_ascii=False)}
+
+基线版本：
+{json.dumps(baseline, ensure_ascii=False)}
+
+对比版本：
+{json.dumps(current, ensure_ascii=False)}
+
+只返回 JSON，字段必须包含：score, baselineScore, summary, changes, suggestions, risks, conclusion。
+changes 每项包含 field, before, after, impact。
+""".strip()
+    result = get_llm_client().complete(template["systemPrompt"], prompt, db=db, tenant_id=tenant_id, max_tokens=2200)
+    if result is None:
+        return None
+    data = _parse_json(result.content)
+    if not isinstance(data, dict):
+        return None
+    return {
+        **current,
+        "score": int(data.get("score") or 0),
+        "baselineScore": int(data.get("baselineScore") or data.get("baseline_score") or 0),
+        "summary": str(data.get("summary") or ""),
+        "changes": _changes(data.get("changes")),
+        "suggestions": _string_list(data.get("suggestions")),
+        "risks": _string_list(data.get("risks")),
+        "conclusion": str(data.get("conclusion") or ""),
+        "modelProvider": result.provider,
+        "modelName": result.model,
+        "promptName": template["name"],
+        "promptVersion": template["version"],
+        "rawPreview": result.content[:2000],
+    }
+
+
 def analyze_source_link(db: Session | None, tenant_id: str | None, url: str, platform: str) -> dict[str, Any] | None:
     prompt = f"""
 请基于短视频平台链接信息，生成一个可编辑的爆款结构分析占位结果。
@@ -115,6 +189,24 @@ def _complete_json(db: Session | None, tenant_id: str | None, user_prompt: str, 
     return _parse_json(result.content)
 
 
+def _prompt_template(template_id: str) -> dict[str, str]:
+    templates = {
+        "prompt_brief_score": {
+            "name": "Brief 评分检测",
+            "version": "v1.0",
+            "systemPrompt": "你是资深短视频增长策略师，请对单个产品 Brief 做质量评分，重点评估信息完整度、主卖点清晰度、差异化竞争力、人群与场景匹配度，并给出可执行优化建议。必须只返回合法 JSON。",
+            "userPromptTemplate": "请评估产品 Brief 的质量。",
+        },
+        "prompt_brief_compare": {
+            "name": "Brief 版本对比检测",
+            "version": "v1.2",
+            "systemPrompt": "你是资深短视频增长策略师，请对两个产品 Brief 版本做结构化差异检测，重点判断卖点清晰度、目标人群匹配度、脚本生成风险和优化建议。必须只返回合法 JSON。",
+            "userPromptTemplate": "请对比两个产品 Brief 版本。",
+        },
+    }
+    return templates[template_id]
+
+
 def _parse_json(content: str) -> Any | None:
     text = content.strip()
     if text.startswith("```"):
@@ -142,6 +234,26 @@ def _string_list(value: Any) -> list[str]:
     if isinstance(value, str):
         return [item.strip() for item in re.split(r"[,，、\n]", value) if item.strip()]
     return [str(value)]
+
+
+def _dimensions(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [
+        {"name": str(item.get("name") or "维度"), "score": int(item.get("score") or 0), "comment": str(item.get("comment") or "")}
+        for item in value
+        if isinstance(item, dict)
+    ]
+
+
+def _changes(value: Any) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        return []
+    return [
+        {"field": str(item.get("field") or "字段"), "before": str(item.get("before") or ""), "after": str(item.get("after") or ""), "impact": str(item.get("impact") or "")}
+        for item in value
+        if isinstance(item, dict)
+    ]
 
 
 def _normalize_storyboard_row(item: dict[str, Any], index: int) -> dict[str, Any]:

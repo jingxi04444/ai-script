@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { navigate, routes } from '../app/router';
 import { ThemeButton } from '../components/ThemeButton';
 import { ToastView } from '../components/ToastView';
-import { projectApi } from '../services/projectApi';
+import { projectApi, type CreateProjectParams } from '../services/projectApi';
 import type { User } from '../types/auth';
 import type { Project } from '../types/project';
 import type { ThemeKey, Toast } from '../types/ui';
@@ -13,6 +13,14 @@ export function ProjectHomePage({ user, showToast, toast, theme, onThemeToggle, 
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState('最新更新');
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [creating, setCreating] = useState(false);
+
+  const [avatarPreview, setAvatarPreview] = useState('');
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [projectTitle, setProjectTitle] = useState('');
+  const [projectAnnouncement, setProjectAnnouncement] = useState('');
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     projectApi.getProjects().then((data) => {
@@ -21,10 +29,49 @@ export function ProjectHomePage({ user, showToast, toast, theme, onThemeToggle, 
     });
   }, []);
 
-  const createProject = async () => {
-    const project = await projectApi.createProject();
-    showToast('项目已创建，进入 9 步工作台。');
-    navigate(routes.workspace(project.id, 'global'));
+  const openCreateModal = () => {
+    setAvatarPreview('');
+    setAvatarFile(null);
+    setProjectTitle('');
+    setProjectAnnouncement('');
+    setShowCreateModal(true);
+  };
+
+  const handleAvatarChange = () => {
+    const file = avatarInputRef.current?.files?.[0];
+    if (!file) return;
+    setAvatarFile(file);
+    const reader = new FileReader();
+    reader.onload = (ev) => setAvatarPreview(ev.target?.result as string);
+    reader.readAsDataURL(file);
+  };
+
+  const handleCreateProject = async () => {
+    const title = projectTitle.trim();
+    if (!title) {
+      showToast('请填写项目名称。', 'warning');
+      return;
+    }
+    setCreating(true);
+    try {
+      const params: CreateProjectParams = {
+        title,
+        announcement: projectAnnouncement.trim(),
+      };
+      const project = await projectApi.createProject(params);
+
+      if (avatarFile) {
+        await projectApi.uploadAvatar(project.id, avatarFile);
+      }
+
+      setShowCreateModal(false);
+      showToast('项目已创建，进入 9 步工作台。');
+      navigate(routes.workspace(project.id, 'global'));
+    } catch {
+      showToast('创建失败，请重试。', 'warning');
+    } finally {
+      setCreating(false);
+    }
   };
 
   const userPoints = user.points ?? 1280;
@@ -33,6 +80,85 @@ export function ProjectHomePage({ user, showToast, toast, theme, onThemeToggle, 
   return (
     <main className="prototype-home">
       {toast && <ToastView toast={toast} />}
+
+      {/* Create Project Modal */}
+      {showCreateModal && (
+        <div className="modal-backdrop" onClick={(e) => e.target === e.currentTarget && setShowCreateModal(false)}>
+          <div className="modal-card create-project-modal" role="dialog" aria-modal="true" aria-labelledby="create-project-title">
+            <div className="modal-head">
+              <div>
+                <span className="eyebrow">新建项目</span>
+              </div>
+              <button onClick={() => setShowCreateModal(false)} aria-label="关闭">×</button>
+            </div>
+
+            <div className="create-project-form">
+              <div className="form-avatar-row">
+                <div
+                  className="form-avatar-box"
+                  onClick={() => avatarInputRef.current?.click()}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === 'Enter' && avatarInputRef.current?.click()}
+                  aria-label="点击上传项目头像"
+                >
+                  {avatarPreview ? (
+                    <img src={avatarPreview} alt="项目头像预览" className="form-avatar-img" />
+                  ) : (
+                    <div className="form-avatar-placeholder">
+                      <span className="avatar-add-icon">+</span>
+                      <span className="avatar-hint">项目头像</span>
+                    </div>
+                  )}
+                </div>
+                <input
+                  ref={avatarInputRef}
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  style={{ display: 'none' }}
+                  onChange={handleAvatarChange}
+                />
+                <p className="form-avatar-tip">点击上传项目头像（可选）</p>
+              </div>
+
+              <div className="form-field">
+                <label htmlFor="project-title">项目名称 <span className="required-mark">*</span></label>
+                <input
+                  id="project-title"
+                  type="text"
+                  placeholder="例如：宠鲜鲜加热饭盒 - 抖音推广"
+                  value={projectTitle}
+                  onChange={(e) => setProjectTitle(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && handleCreateProject()}
+                  maxLength={60}
+                  autoFocus
+                />
+              </div>
+
+              <div className="form-field">
+                <label htmlFor="project-announcement">项目公告</label>
+                <textarea
+                  id="project-announcement"
+                  placeholder="描述项目目标、创作方向或注意事项..."
+                  value={projectAnnouncement}
+                  onChange={(e) => setProjectAnnouncement(e.target.value)}
+                  rows={3}
+                  maxLength={200}
+                />
+                <span className="form-char-count">{projectAnnouncement.length}/200</span>
+              </div>
+            </div>
+
+            <div className="modal-actions">
+              <button className="secondary-button" onClick={() => setShowCreateModal(false)} disabled={creating}>取消</button>
+              <button className="primary-button" onClick={handleCreateProject} disabled={creating}>
+                {creating ? '创建中...' : '确认创建'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="home-topnav">
         <div className="home-logo-group">
           <div className="home-logo">北</div>
@@ -40,7 +166,7 @@ export function ProjectHomePage({ user, showToast, toast, theme, onThemeToggle, 
         </div>
         <div className="home-top-actions">
           <button onClick={() => navigate(routes.assets)}>我的资产库</button>
-          <button className="home-primary" onClick={createProject}>+ 我的项目</button>
+          <button className="home-primary" onClick={openCreateModal}>+ 我的项目</button>
           <ThemeButton theme={theme} onClick={onThemeToggle} />
           <div className="home-user-menu">
             <button onClick={() => setShowUserMenu(!showUserMenu)}>企业版</button>
@@ -94,7 +220,7 @@ export function ProjectHomePage({ user, showToast, toast, theme, onThemeToggle, 
           </div>
 
           <div className="home-grid">
-            <button className="create-project-card" onClick={createProject}>
+            <button className="create-project-card" onClick={openCreateModal}>
               <div>+</div>
               <span>创建项目</span>
             </button>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { navigate } from '../app/router';
 import { ToastView } from '../components/ToastView';
 import { Topbar } from '../components/Topbar';
@@ -51,6 +51,8 @@ export function WorkspacePage({ projectId, user, showToast, toast, theme, onThem
     showToast('项目名称已更新。');
   };
 
+  const stepContentRef = useRef<{ openBriefDrawer: () => void; newBrief: () => void; newScript: () => void }>(null);
+
   return (
     <main className="workspace-shell">
       <aside className="workspace-sidebar">
@@ -69,20 +71,46 @@ export function WorkspacePage({ projectId, user, showToast, toast, theme, onThem
         <Topbar user={user} compact theme={theme} onThemeToggle={onThemeToggle} onLogout={onLogout} />
         {toast && <ToastView toast={toast} />}
         <div className="workspace-title panel">
-          <div>
-            <span className="eyebrow">{project?.id || projectId}</span>
-            {isEditingTitle ? <div className="workspace-title-edit">
-              <input value={titleDraft} autoFocus onChange={(event) => setTitleDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void saveProjectTitle(); if (event.key === 'Escape') { setTitleDraft(project?.title || ''); setIsEditingTitle(false); } }} />
+          {isEditingTitle ? (
+            <div className="workspace-title-edit">
+              <input
+                value={titleDraft}
+                autoFocus
+                onChange={(event) => setTitleDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') void saveProjectTitle();
+                  if (event.key === 'Escape') {
+                    setTitleDraft(project?.title || '');
+                    setIsEditingTitle(false);
+                  }
+                }}
+              />
               <button onClick={saveProjectTitle}>保存</button>
               <button onClick={() => { setTitleDraft(project?.title || ''); setIsEditingTitle(false); }}>取消</button>
-            </div> : <div className="workspace-title-display">
-              <h1>{project?.title || '加载项目中...'}</h1>
-              <button onClick={() => setIsEditingTitle(true)} disabled={!project}>修改名称</button>
-            </div>}
-          </div>
-          <div className="status-pill">以后端项目状态恢复步骤</div>
+            </div>
+          ) : (
+            <div className="workspace-title-display">
+              <h1 onClick={() => project && setIsEditingTitle(true)} role={project ? 'button' : undefined} tabIndex={project ? 0 : -1} onKeyDown={(event) => { if (!project) return; if (event.key === 'Enter') setIsEditingTitle(true); }} title={project ? '点击修改项目名称' : undefined}>
+                {project?.title || project?.product || '加载项目中...'}
+              </h1>
+            </div>
+          )}
+
+          {activeStep === 'selling-points' && !isEditingTitle && (
+            <div className="workspace-title-actions">
+              <button className="ghost-button" onClick={() => stepContentRef.current?.newBrief()}>新增 Brief</button>
+              <button className="primary-button" onClick={next}>下一步 → 脚本生成器</button>
+            </div>
+          )}
+
+          {activeStep === 'script-generator' && !isEditingTitle && (
+            <div className="workspace-title-actions">
+              <button className="ghost-button" onClick={() => stepContentRef.current?.newScript()}>新增脚本</button>
+              <button className="primary-button" onClick={next}>下一步 → 分镜脚本润色</button>
+            </div>
+          )}
         </div>
-        <StepContent step={activeStep} projectId={projectId} onNext={next} showToast={showToast} />
+        <StepContent ref={stepContentRef} step={activeStep} projectId={projectId} onNext={next} showToast={showToast} />
       </section>
     </main>
   );

@@ -1,26 +1,23 @@
 import { useEffect, useState } from 'react';
 
-export const adminRoutes = {
-  login: '/admin/login',
-  dashboard: '/admin/dashboard',
-};
-
-export const navigate = (path: string) => {
+export function navigate(path: string) {
+  if (window.location.pathname === path) return;
   window.history.pushState({}, '', path);
   window.dispatchEvent(new PopStateEvent('popstate'));
-};
+}
 
 export function usePathname() {
-  const [path, setPath] = useState(window.location.pathname);
+  const [path, setPath] = useState(window.location.pathname || '/admin/dashboard');
 
   useEffect(() => {
-    const handlePop = () => setPath(window.location.pathname);
-    window.addEventListener('popstate', handlePop);
-    return () => window.removeEventListener('popstate', handlePop);
+    const updatePath = () => setPath(window.location.pathname || '/admin/dashboard');
+    window.addEventListener('popstate', updatePath);
+    return () => window.removeEventListener('popstate', updatePath);
   }, []);
 
   return path;
 }
 
-export const isAdminRootPath = (path: string) => path === '/' || path === '/admin';
-export const isAdminLoginPath = (path: string) => path.startsWith('/admin/login');
+export function isLoginPath(path: string) {
+  return path === '/login' || path === '/';
+}

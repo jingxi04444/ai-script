@@ -1,12 +1,9 @@
 import { callApi, request } from './apiClient';
 import { mockApi } from './mock.js';
-import type { DashboardData } from '../types/admin';
+import type { DashboardOverview } from '../types/admin';
 
 export const dashboardApi = {
-  getDashboard() {
-    return callApi<DashboardData>(
-      () => mockApi.getDashboard() as Promise<DashboardData>,
-      () => request<DashboardData>('/api/admin/dashboard'),
-    );
+  getOverview() {
+    return callApi<DashboardOverview>(() => mockApi.getDashboardOverview() as Promise<DashboardOverview>, () => request<DashboardOverview>('/api/admin/dashboard/overview'));
   },
 };

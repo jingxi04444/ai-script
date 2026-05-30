@@ -1,12 +1,9 @@
-import { callApi, request } from './apiClient';
+import { callApi, request, withQuery } from './apiClient';
 import { mockApi } from './mock.js';
-import type { OperationLog } from '../types/admin';
+import type { OperationLog, OperationLogQuery, PagedResult } from '../types/admin';
 
 export const operationLogApi = {
-  getOperationLogs() {
-    return callApi<OperationLog[]>(
-      () => mockApi.getOperationLogs() as Promise<OperationLog[]>,
-      () => request<OperationLog[]>('/api/admin/operation-logs'),
-    );
+  getOperationLogs(query: OperationLogQuery = {}) {
+    return callApi<PagedResult<OperationLog>>(() => mockApi.getOperationLogs(query) as Promise<PagedResult<OperationLog>>, () => request<PagedResult<OperationLog>>(withQuery('/api/admin/operation-logs', query)));
   },
 };

@@ -36,11 +36,11 @@ VALUES
   ('00000000-0000-0000-0000-000000001004', 'audit', '审核工作流', 'admin', '处理脚本审核、合规风险和审核规则。'),
   ('00000000-0000-0000-0000-000000001005', 'materials', '素材项目库', 'admin', '管理素材、项目文件和存储占用。'),
   ('00000000-0000-0000-0000-000000001006', 'analytics', '投放数据', 'admin', '查看投放效果、监测链接和报表导出。'),
-  ('00000000-0000-0000-0000-000000001011', 'llm', '大模型配置', 'admin', '管理大模型 Provider、Endpoint、密钥引用和故障切换。'),
+  ('00000000-0000-0000-0000-000000001011', 'llm', '大模型管理', 'admin', '管理大模型、ASR、视频解析 Provider、Endpoint、密钥引用和故障切换。'),
   ('00000000-0000-0000-0000-000000001007', 'users', '用户管理', 'admin', '管理后台账号、前台用户和账号状态。'),
   ('00000000-0000-0000-0000-000000001008', 'roles', '角色权限', 'admin', '管理角色、权限点和用户授权。'),
   ('00000000-0000-0000-0000-000000001009', 'logs', '操作日志', 'admin', '查看后台操作审计日志。'),
-  ('00000000-0000-0000-0000-000000001010', 'system', '系统权限', 'admin', '管理租户、动态菜单和系统配置。'),
+  ('00000000-0000-0000-0000-000000001010', 'system', '系统字典', 'admin', '管理租户、动态菜单、系统配置和前台导入模板。'),
   ('00000000-0000-0000-0000-000000001101', 'front.projects', '前台项目', 'front', '创建、查看、重命名和归档前台项目。'),
   ('00000000-0000-0000-0000-000000001102', 'front.assets', '我的资产库', 'front', '管理我的卖点资产库和爆款链接脚本资产库。'),
   ('00000000-0000-0000-0000-000000001103', 'front.workflow', '工作台流程', 'front', '保存和推进前台 9 步工作台流程。')
@@ -123,16 +123,16 @@ ON CONFLICT DO NOTHING;
 INSERT INTO admin_menus (id, label, path, permission_code, icon, enabled, display_order)
 VALUES
   ('dashboard', '数据概览', '/admin/dashboard', 'dashboard', 'dashboard', true, 10),
-  ('parsing', '解析管理', '/admin/parsing', 'parsing', 'link', true, 20),
+  ('parsing', '解析管理', '/admin/parsing', 'parsing', 'link', false, 20),
   ('knowledge', '知识库', '/admin/knowledge', 'knowledge', 'book', true, 30),
   ('audit', '审核工作流', '/admin/audit', 'audit', 'shield', true, 40),
-  ('materials', '素材项目库', '/admin/materials', 'materials', 'folder', true, 50),
+  ('materials', '项目管理', '/admin/materials', 'materials', 'folder', true, 50),
   ('analytics', '投放数据', '/admin/analytics', 'analytics', 'chart', true, 60),
-  ('llm', '大模型配置', '/admin/llm', 'llm', 'cpu', true, 70),
+  ('llm', '大模型管理', '/admin/llm', 'llm', 'cpu', true, 70),
   ('users', '用户管理', '/admin/users', 'users', 'users', true, 80),
   ('roles', '角色权限', '/admin/roles', 'roles', 'key', true, 90),
   ('logs', '操作日志', '/admin/logs', 'logs', 'list', true, 100),
-  ('system', '系统权限', '/admin/system', 'system', 'settings', true, 110)
+  ('system', '系统字典', '/admin/system', 'system', 'settings', true, 110)
 ON CONFLICT (id) DO UPDATE SET
   label = EXCLUDED.label,
   path = EXCLUDED.path,
@@ -170,8 +170,19 @@ ON CONFLICT (id) DO UPDATE SET
 
 INSERT INTO original_templates (id, name, structure, scenario, prompt, platform, status)
 VALUES
-  ('00000000-0000-0000-0000-000000004201', '3 秒痛点 + 产品方案 + 轻 CTA', '痛点开场 -> 产品方案 -> 场景验证 -> 轻 CTA', '日用消费品短视频', '基于产品卖点生成 4-6 镜头短视频脚本，避免绝对化承诺。', '抖音', 'enabled'),
-  ('00000000-0000-0000-0000-000000004202', '测评开箱 + 三项实测 + 人群总结', '开箱 -> 三项实测 -> 使用感受 -> 适用人群总结', '小红书测评内容', '用真实测评口吻输出结构化脚本。', '小红书', 'enabled')
+  ('00000000-0000-0000-0000-000000004201', '纠正式带货模板库', '常见误区 -> 正确做法 -> 产品介入 -> 效果证明 -> 购买理由', '产品介绍模板库', '适合纠正用户错误认知，用对比方式讲清产品价值。', '抖音', 'enabled'),
+  ('00000000-0000-0000-0000-000000004202', '催眠式当你拥有模板库', '当你拥有后 -> 生活变化 -> 细节体验 -> 情绪满足 -> 轻 CTA', '产品介绍模板库', '用“拥有后”的代入感描述产品带来的生活改善。', '抖音', 'enabled'),
+  ('00000000-0000-0000-0000-000000004203', '好爽排比式模板库', '连续爽点排比 -> 核心卖点放大 -> 使用场景叠加 -> 结果收束', '产品介绍模板库', '适合节奏快、爽点密集的带货短视频。', '抖音', 'enabled'),
+  ('00000000-0000-0000-0000-000000004204', '1人剧情', '单人独白开场 -> 自我冲突 -> 产品解决 -> 情绪转正', '创意剧情模板库', '适合一个演员完成的低成本剧情短视频。', '抖音', 'enabled'),
+  ('00000000-0000-0000-0000-000000004205', '2人剧情', '人物 A 提出问题 -> 人物 B 反驳/补充 -> 产品出场 -> 双人反馈', '创意剧情模板库', '适合对话冲突、朋友安利、同事情景等双人剧情。', '抖音', 'enabled'),
+  ('00000000-0000-0000-0000-000000004206', '多人剧情', '群体场景 -> 多人痛点共鸣 -> 产品统一解决 -> 群体反馈', '创意剧情模板库', '适合家庭、办公室、朋友聚会等多人场景。', '抖音', 'enabled'),
+  ('00000000-0000-0000-0000-000000004207', '通用剧情模板', '异常开场 -> 冲突升级 -> 产品救场 -> 反转收尾', '创意剧情模板库', '通用剧情公式，适合大部分产品做情节化表达。', '抖音', 'enabled'),
+  ('00000000-0000-0000-0000-000000004208', '亲子剧情模板', '亲子生活痛点 -> 家长焦虑 -> 产品缓解 -> 温情收尾', '创意剧情模板库', '适合母婴、家庭、教育、生活用品类产品。', '抖音', 'enabled'),
+  ('00000000-0000-0000-0000-000000004209', '职场剧情模板', '职场压力 -> 同事对话 -> 产品提高效率/舒适度 -> 加班场景收束', '创意剧情模板库', '适合办公室、通勤、加班、白领人群场景。', '抖音', 'enabled'),
+  ('00000000-0000-0000-0000-000000004210', '情侣剧情模板库', '情侣矛盾 -> 需求错位 -> 产品化解 -> 甜蜜反转', '创意剧情模板库', '适合礼物、生活方式、情感关系相关产品。', '抖音', 'enabled'),
+  ('00000000-0000-0000-0000-000000004211', '限时福利口播模板库', '福利前置 -> 产品价值 -> 限时机制 -> 行动指令', '福利口播模板库', '适合优惠券、限时活动、爆品促销口播。', '抖音', 'enabled'),
+  ('00000000-0000-0000-0000-000000004212', '赠品福利口播模板库', '赠品钩子 -> 主品卖点 -> 赠品价值 -> 下单提醒', '福利口播模板库', '适合买赠、组合装、加赠活动表达。', '抖音', 'enabled'),
+  ('00000000-0000-0000-0000-000000004213', '价格锚点福利模板库', '原价锚点 -> 福利价解释 -> 价值证明 -> 立即领取', '福利口播模板库', '适合强调价格优势和福利门槛的口播脚本。', '抖音', 'enabled')
 ON CONFLICT (id) DO UPDATE SET
   name = EXCLUDED.name,
   structure = EXCLUDED.structure,
@@ -224,7 +235,8 @@ INSERT INTO api_provider_configs (id, tenant_id, provider_type, provider_name, p
 VALUES
   ('00000000-0000-0000-0000-000000004501', NULL, 'llm', 'DeepSeek OpenAI Compatible', 'deepseek', 'https://api.deepseek.com/v1', 'env:DEEPSEEK_API_KEY', 10, 60000, 2, 'enabled', '{"model":"deepseek-chat","temperature":0.3,"max_tokens":3000}'::jsonb, '00000000-0000-0000-0000-000000003001'),
   ('00000000-0000-0000-0000-000000004502', NULL, 'llm', 'Qwen DashScope Compatible', 'qwen', 'https://dashscope.aliyuncs.com/compatible-mode/v1', 'env:DASHSCOPE_API_KEY', 20, 60000, 2, 'enabled', '{"model":"qwen-plus","temperature":0.3,"max_tokens":3000}'::jsonb, '00000000-0000-0000-0000-000000003001'),
-  ('00000000-0000-0000-0000-000000004503', NULL, 'llm', 'OpenAI Compatible Fallback', 'openai', 'https://api.openai.com/v1', 'env:OPENAI_API_KEY', 30, 60000, 2, 'enabled', '{"model":"gpt-4o-mini","temperature":0.3,"max_tokens":3000}'::jsonb, '00000000-0000-0000-0000-000000003001')
+  ('00000000-0000-0000-0000-000000004503', NULL, 'llm', 'OpenAI Compatible Fallback', 'openai', 'https://api.openai.com/v1', 'env:OPENAI_API_KEY', 30, 60000, 2, 'enabled', '{"model":"gpt-4o-mini","temperature":0.3,"max_tokens":3000}'::jsonb, '00000000-0000-0000-0000-000000003001'),
+  ('00000000-0000-0000-0000-000000004504', NULL, 'asr', 'SiliconFlow ASR', 'siliconflow', 'https://api.siliconflow.cn/v1/audio/transcriptions', 'env:SILICONFLOW_API_KEY', 10, 600000, 2, 'enabled', '{"model":"FunAudioLLM/SenseVoiceSmall"}'::jsonb, '00000000-0000-0000-0000-000000003001')
 ON CONFLICT (id) DO UPDATE SET
   provider_name = EXCLUDED.provider_name,
   platform = EXCLUDED.platform,

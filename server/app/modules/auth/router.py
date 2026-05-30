@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,6 +10,7 @@ from app.common.sql import one
 from app.core.config import get_settings
 from app.core.security import make_token, verify_password
 
+logger = logging.getLogger("ai-script")
 
 router = APIRouter(tags=["auth"])
 
@@ -17,6 +19,7 @@ class AuthPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     account: str | None = None
+    email: str | None = None
     password: str | None = None
     name: str | None = None
 
@@ -36,10 +39,16 @@ def admin_user_response(db, user: dict) -> dict[str, Any]:
     return {
         "id": str(user["id"]),
         "name": user["name"],
+        "email": user.get("email") or user.get("account"),
         "role": user.get("role_label") or "管理员",
         "tenantScope": user.get("tenant_name") or "全部品牌",
+        "brandName": user.get("tenant_name"),
         "permissions": permissions,
     }
+
+
+def _payload_account(payload: AuthPayload, default_account: str) -> str:
+    return payload.account or payload.email or default_account
 
 
 def _find_login_user(db, account: str, user_type: str) -> dict | None:
@@ -61,19 +70,29 @@ def _find_login_user(db, account: str, user_type: str) -> dict | None:
 @router.post("/auth/login")
 def front_login(payload: AuthPayload, db: DbSession) -> dict[str, Any]:
     settings = get_settings()
-    account = payload.account or settings.default_front_account
+    account = _payload_account(payload, settings.default_front_account)
+    logger.info(f"[LOGIN] front account={account!r}")
     user = _find_login_user(db, account, "front")
-    if not user or user["status"] != "enabled" or not verify_password(payload.password, user.get("password_hash")):
+    if not user:
+        logger.warning(f"[LOGIN] user not found: {account!r}")
         raise HTTPException(status_code=401, detail="Invalid account or password")
+    if user["status"] != "enabled":
+        logger.warning(f"[LOGIN] user disabled: {account!r} status={user['status']}")
+        raise HTTPException(status_code=401, detail="Invalid account or password")
+    if not verify_password(payload.password, user.get("password_hash")):
+        logger.warning(f"[LOGIN] wrong password: {account!r}")
+        raise HTTPException(status_code=401, detail="Invalid account or password")
+    logger.info(f"[LOGIN] success user_id={user['id']} name={user['name']!r} tenant={user.get('tenant_name')}")
     return {"token": make_token("front", str(user["id"])), "user": front_user_response(user)}
 
 
 @router.post("/auth/register")
 def front_register(payload: AuthPayload, db: DbSession) -> dict[str, Any]:
-    if not payload.account or not payload.password:
+    account = payload.account or payload.email
+    if not account or not payload.password:
         raise HTTPException(status_code=400, detail="account and password are required")
 
-    existing = _find_login_user(db, payload.account, "front")
+    existing = _find_login_user(db, account, "front")
     if existing:
         return {"token": make_token("front", str(existing["id"])), "user": front_user_response(existing)}
 
@@ -91,9 +110,9 @@ def front_register(payload: AuthPayload, db: DbSession) -> dict[str, Any]:
         ),
         {
             "tenant_id": tenant["id"],
-            "name": payload.name or payload.account.split("@")[0],
-            "account": payload.account,
-            "email": payload.account,
+            "name": payload.name or account.split("@")[0],
+            "account": account,
+            "email": account,
             "password_hash": "$dev$replace-me",
         },
     ).mappings().first()
@@ -110,10 +129,20 @@ def front_me(user: dict = Depends(get_current_front_user)) -> dict[str, Any]:
 @router.post("/admin/auth/login")
 def admin_login(payload: AuthPayload, db: DbSession) -> dict[str, Any]:
     settings = get_settings()
-    account = payload.account or settings.default_admin_account
+    account = _payload_account(payload, settings.default_admin_account)
+    logger.info(f"[ADMIN_LOGIN] account={account!r}")
     user = _find_login_user(db, account, "admin")
-    if not user or user["status"] != "enabled" or not verify_password(payload.password, user.get("password_hash")):
+    if not user:
+        logger.warning(f"[ADMIN_LOGIN] user not found: {account!r}")
         raise HTTPException(status_code=401, detail="Invalid account or password")
+    if user["status"] != "enabled":
+        logger.warning(f"[ADMIN_LOGIN] user disabled: {account!r} status={user['status']}")
+        raise HTTPException(status_code=401, detail="Invalid account or password")
+    if not verify_password(payload.password, user.get("password_hash")):
+        logger.warning(f"[ADMIN_LOGIN] wrong password: {account!r}")
+        raise HTTPException(status_code=401, detail="Invalid account or password")
+    permissions = [code for code in get_permissions_for_user(db, str(user["id"])) if not code.startswith("front.")]
+    logger.info(f"[ADMIN_LOGIN] success user_id={user['id']} name={user['name']!r} permissions={len(permissions)}")
     return {"token": make_token("admin", str(user["id"])), "user": admin_user_response(db, user)}
 
 

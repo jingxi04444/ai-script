@@ -1,24 +1,19 @@
-import { callApi, request } from './apiClient';
+import { callApi, request, requestList, withQuery } from './apiClient';
 import { mockApi } from './mock.js';
-import type { AdminAccount, CreateAdminUserPayload, CreateAdminUserResult } from '../types/admin';
+import type { CreateUserRequest, ManagedUser, RolePermission, Status } from '../types/admin';
 
 export const userApi = {
-  getAdminUsers() {
-    return callApi<AdminAccount[]>(
-      () => mockApi.getAdminUsers() as Promise<AdminAccount[]>,
-      () => request<AdminAccount[]>('/api/admin/users'),
-    );
+  getUsers(query: Record<string, unknown> = {}) {
+    return callApi<ManagedUser[]>(() => mockApi.getUsers(query) as Promise<ManagedUser[]>, () => requestList<ManagedUser>(withQuery('/api/admin/users', query)));
   },
-  createAdminUser(payload: CreateAdminUserPayload) {
-    return callApi<CreateAdminUserResult>(
-      () => mockApi.createAdminUser(payload) as Promise<CreateAdminUserResult>,
-      () => request<CreateAdminUserResult>('/api/admin/users', { method: 'POST', body: payload }),
-    );
+  createUser(payload: CreateUserRequest) {
+    return callApi<ManagedUser>(() => mockApi.createUser(payload) as Promise<ManagedUser>, () => request<ManagedUser>('/api/admin/users', { method: 'POST', body: payload }));
   },
-  disableAdminUser(id: string) {
-    return callApi<{ id: string; status: string }>(
-      () => mockApi.disableAdminUser(id) as Promise<{ id: string; status: string }>,
-      () => request<{ id: string; status: string }>(`/api/admin/users/${id}/disable`, { method: 'POST' }),
-    );
+  updateUserStatus(id: string, status: Status) {
+    const action = status === 'inactive' ? 'disable' : 'enable';
+    return callApi<ManagedUser>(() => mockApi.updateUserStatus(id, status) as Promise<ManagedUser>, () => request<ManagedUser>(`/api/admin/users/${id}/${action}`, { method: 'POST' }));
+  },
+  getRoles() {
+    return callApi<RolePermission[]>(() => mockApi.getRoles() as Promise<RolePermission[]>, () => requestList<RolePermission>('/api/admin/roles'));
   },
 };

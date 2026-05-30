@@ -7,9 +7,12 @@ FastAPI modular-monolith backend for `apps/front-web` and `apps/admin-web`.
 ```bash
 cd server
 python3 -m venv .venv
+
 source .venv/bin/activate
 pip install -e ".[dev]"
 uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+
+brew services start postgresql@15
 ```
 
 The default database URL targets the local PostgreSQL database created from `doc/database/schema.sql` and `doc/database/seed.sql`:
@@ -63,6 +66,8 @@ Current LLM-backed business endpoints:
 | --- | --- |
 | `POST /api/product-brief/optimize` | 标准化产品 Brief 和卖点总结 |
 | `POST /api/source-analysis/parse-link` | 生成爆款结构分析草稿和拉片报告 |
+| `POST /api/video/share/url/parse` | 解析分享链接元数据，返回标题、作者、封面、视频地址等 |
+| `POST /api/script-generator/extract-copy` | 解析分享链接并在配置 ASR 后转写视频语音文案 |
 | `POST /api/scripts/generate` | 生成分镜脚本表格 |
 | `POST /api/scripts/compliance-check` | 基于词库命中给出合规修改建议 |
 
@@ -92,6 +97,58 @@ Example create payload:
 }
 ```
 
+## Video Parser / ASR
+
+`POST /api/video/share/url/parse` 接收：
+
+```json
+{ "url": "https://v.douyin.com/xxxxxx/" }
+```
+
+返回：
+
+```json
+{
+  "code": 200,
+  "msg": "success",
+  "data": {
+    "sourceUrl": "https://v.douyin.com/xxxxxx/",
+    "platform": "抖音",
+    "title": "视频标题",
+    "videoUrl": "https://example.com/video.mp4",
+    "coverUrl": "https://example.com/cover.jpg",
+    "author": { "name": "作者昵称" },
+    "images": []
+  }
+}
+```
+
+`POST /api/script-generator/extract-copy` 会先解析分享链接；如果解析结果里有 `videoUrl` 且已配置 ASR，会下载视频、调用 `ffmpeg` 抽音频、再调用 SiliconFlow 转写文案。
+
+推荐在后台 `API 管理 -> AI 模型 API -> 添加 API` 维护 ASR Provider：
+
+```json
+{
+  "providerName": "SiliconFlow ASR",
+  "providerType": "asr",
+  "platform": "siliconflow",
+  "endpointUrl": "https://api.siliconflow.cn/v1/audio/transcriptions",
+  "apiKeyRef": "env:SILICONFLOW_API_KEY",
+  "model": "FunAudioLLM/SenseVoiceSmall",
+  "priority": 1
+}
+```
+
+如果数据库没有启用的 `asr` Provider，后端才会使用 `.env` 兜底：
+
+```bash
+SILICONFLOW_API_KEY=your-siliconflow-key
+SILICONFLOW_ASR_MODEL=FunAudioLLM/SenseVoiceSmall
+VIDEO_AUTO_CLEANUP_TEMP_FILES=true
+```
+
+服务器需要安装 `ffmpeg` 才能做语音转写；只做链接元数据解析不需要 `ffmpeg`。
+
 ## Frontend Integration
 
 `apps/front-web` and `apps/admin-web` default to `src/services/mock.js`. Set these when integrating the frontends with this backend:
@@ -100,6 +157,8 @@ Example create payload:
 VITE_USE_MOCK_API=false
 VITE_API_BASE_URL=http://127.0.0.1:8000
 ```
+
+Login responses return `{ token, user }`. The MVP token is a Bearer token formatted as `front:<userId>` or `admin:<userId>`; it is not a standard JWT yet. Frontend API clients send it as `Authorization: Bearer <token>`.
 
 ## API Docs
 

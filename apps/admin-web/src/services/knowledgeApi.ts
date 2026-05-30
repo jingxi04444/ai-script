@@ -1,18 +1,18 @@
-import { callApi, request } from './apiClient';
+import { callApi, request, withQuery } from './apiClient';
 import { mockApi } from './mock.js';
-import type { Formula, KnowledgeImportPayload, KnowledgeImportResult } from '../types/admin';
+import type { KnowledgeBaseData, KnowledgeQuery, OriginalTemplate, OriginalTemplateRequest } from '../types/admin';
 
 export const knowledgeApi = {
-  getFormulas() {
-    return callApi<Formula[]>(
-      () => mockApi.getFormulas() as Promise<Formula[]>,
-      () => request<Formula[]>('/api/admin/knowledge/formulas'),
-    );
+  getKnowledgeBase(query: KnowledgeQuery = {}) {
+    return callApi<KnowledgeBaseData>(() => mockApi.getKnowledgeBase(query) as Promise<KnowledgeBaseData>, () => request<KnowledgeBaseData>(withQuery('/api/admin/knowledge-base', query)));
   },
-  importKnowledgeFile(payload: KnowledgeImportPayload) {
-    return callApi<KnowledgeImportResult>(
-      () => mockApi.importKnowledgeFile(payload) as Promise<KnowledgeImportResult>,
-      () => request<KnowledgeImportResult>('/api/admin/knowledge/imports', { method: 'POST', body: payload }),
-    );
+  createOriginalTemplate(payload: OriginalTemplateRequest) {
+    return callApi<OriginalTemplate>(() => mockApi.createOriginalTemplate(payload) as Promise<OriginalTemplate>, () => request<OriginalTemplate>('/api/admin/original-templates', { method: 'POST', body: payload }));
+  },
+  updateOriginalTemplate(id: string, payload: OriginalTemplateRequest) {
+    return callApi<OriginalTemplate>(() => mockApi.updateOriginalTemplate(id, payload) as Promise<OriginalTemplate>, () => request<OriginalTemplate>(`/api/admin/original-templates/${id}`, { method: 'PATCH', body: payload }));
+  },
+  deleteOriginalTemplate(id: string) {
+    return callApi<{ id: string; status: string }>(() => mockApi.deleteOriginalTemplate(id) as Promise<{ id: string; status: string }>, () => request<{ id: string; status: string }>(`/api/admin/original-templates/${id}`, { method: 'DELETE' }));
   },
 };

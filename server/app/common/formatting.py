@@ -29,18 +29,10 @@ def risk_label(value: str | None) -> str:
 
 def time_label(value: datetime | None) -> str:
     if value is None:
-        return "刚刚"
+        return ""
     if value.tzinfo is None:
         value = value.replace(tzinfo=timezone.utc)
-    now = datetime.now(value.tzinfo)
-    delta = now - value
-    if delta.total_seconds() < 300:
-        return "刚刚"
-    if value.date() == now.date():
-        return f"今天 {value:%H:%M}"
-    if delta.days == 1:
-        return f"昨天 {value:%H:%M}"
-    return value.strftime("%m-%d %H:%M")
+    return value.strftime("%Y-%m-%d %H:%M:%S")
 
 
 def bytes_label(value: int | None) -> str:
