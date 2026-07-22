@@ -1,0 +1,208 @@
+import { useCallback, useEffect, useState } from 'react';
+import { message, Upload } from 'antd';
+import { DeleteOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
+import { assetApi, fileApi } from '../../../api/asset';
+import type { Asset, SellingPointAsset, ViralAsset } from '../../../types/asset';
+import './assets-panel.css';
+
+interface AssetsPanelProps {
+  projectId: string | null;
+  ensureProjectId: () => Promise<string>;
+}
+
+const AssetsPanel = ({ projectId, ensureProjectId }: AssetsPanelProps) => {
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [sellingPoints, setSellingPoints] = useState<SellingPointAsset[]>([]);
+  const [viralAssets, setViralAssets] = useState<ViralAsset[]>([]);
+  const [assetName, setAssetName] = useState('');
+  const [assetCategory, setAssetCategory] = useState('image');
+  const [sellingPointName, setSellingPointName] = useState('');
+  const [sellingPointText, setSellingPointText] = useState('');
+  const [viralName, setViralName] = useState('');
+  const [viralUrl, setViralUrl] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const loadAssets = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [assetPage, pointPage, viralPage] = await Promise.all([
+        assetApi.list({ projectId: projectId || undefined, page: 1, pageSize: 20 }),
+        assetApi.sellingPoints({ page: 1, pageSize: 8 }),
+        assetApi.viralAssets({ page: 1, pageSize: 8 }),
+      ]);
+      setAssets(assetPage.list || []);
+      setSellingPoints(pointPage.list || []);
+      setViralAssets(viralPage.list || []);
+    } catch {
+      message.error('资产数据加载失败');
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    loadAssets();
+  }, [loadAssets]);
+
+  const createAsset = async () => {
+    if (!assetName.trim()) return message.warning('请输入素材名称');
+    const currentProjectId = await ensureProjectId();
+    try {
+      await assetApi.create({
+        projectId: currentProjectId,
+        name: assetName.trim(),
+        type: assetCategory,
+        category: 'project',
+      });
+      setAssetName('');
+      message.success('素材已保存');
+      loadAssets();
+    } catch {
+      message.error('素材保存失败');
+    }
+  };
+
+  const createSellingPoint = async () => {
+    if (!sellingPointName.trim()) return message.warning('请输入卖点资产名称');
+    try {
+      await assetApi.createSellingPoint({
+        name: sellingPointName.trim(),
+        mainPoint: sellingPointText,
+        tagText: sellingPointText,
+      });
+      setSellingPointName('');
+      setSellingPointText('');
+      message.success('卖点资产已保存');
+      loadAssets();
+    } catch {
+      message.error('卖点资产保存失败');
+    }
+  };
+
+  const createViralAsset = async () => {
+    if (!viralName.trim()) return message.warning('请输入爆款资产名称');
+    try {
+      await assetApi.createViral({
+        name: viralName.trim(),
+        kind: 'script',
+        platform: 'short-video',
+        sourceUrl: viralUrl,
+      });
+      setViralName('');
+      setViralUrl('');
+      message.success('爆款资产已保存');
+      loadAssets();
+    } catch {
+      message.error('爆款资产保存失败');
+    }
+  };
+
+  const removeAsset = async (id: string) => {
+    try {
+      await assetApi.delete(id);
+      message.success('素材已删除');
+      loadAssets();
+    } catch {
+      message.error('删除失败');
+    }
+  };
+
+  return (
+    <section className="assets-panel">
+      <header className="workspace-panel-head">
+        <div>
+          <h2>资产管理</h2>
+          <p>管理项目素材、卖点资产和爆款脚本资产。</p>
+        </div>
+        <button onClick={loadAssets} disabled={loading}><ReloadOutlined />刷新</button>
+      </header>
+
+      <div className="assets-grid">
+        <section className="asset-block asset-upload-block">
+          <h3>项目素材</h3>
+          <div className="asset-form-row">
+            <input value={assetName} onChange={(event) => setAssetName(event.target.value)} placeholder="素材名称" />
+            <select value={assetCategory} onChange={(event) => setAssetCategory(event.target.value)}>
+              <option value="image">图片</option>
+              <option value="video">视频</option>
+              <option value="audio">音频</option>
+              <option value="document">文档</option>
+            </select>
+            <button onClick={createAsset}><PlusOutlined />新增</button>
+          </div>
+          <Upload
+            showUploadList={false}
+            customRequest={async ({ file, onSuccess, onError }) => {
+              try {
+                const currentProjectId = await ensureProjectId();
+                const uploadedFile = file as File;
+                const result = await fileApi.upload(uploadedFile, 'assets');
+                await assetApi.create({
+                  projectId: currentProjectId,
+                  name: result.fileName || uploadedFile.name,
+                  type: uploadedFile.type?.startsWith('video') ? 'video' : uploadedFile.type?.startsWith('audio') ? 'audio' : 'image',
+                  category: 'upload',
+                  storageKey: result.objectKey,
+                  previewUrl: result.url,
+                  mimeType: result.contentType,
+                  fileSizeBytes: result.size,
+                });
+                message.success('文件已上传并入库');
+                loadAssets();
+                onSuccess?.(result);
+              } catch (error) {
+                message.error('上传失败');
+                onError?.(error as Error);
+              }
+            }}
+          >
+            <button className="asset-upload-button"><UploadOutlined />上传素材文件</button>
+          </Upload>
+          <div className="asset-list">
+            {assets.map((asset) => (
+              <article key={asset.id}>
+                <span>{asset.type}</span>
+                <strong>{asset.name}</strong>
+                <small>{asset.status || 'ready'}</small>
+                <button aria-label="删除素材" onClick={() => removeAsset(asset.id)}><DeleteOutlined /></button>
+              </article>
+            ))}
+            {!assets.length && <p className="empty-hint">暂无项目素材</p>}
+          </div>
+        </section>
+
+        <section className="asset-block">
+          <h3>卖点资产库</h3>
+          <input value={sellingPointName} onChange={(event) => setSellingPointName(event.target.value)} placeholder="资产名称" />
+          <textarea value={sellingPointText} onChange={(event) => setSellingPointText(event.target.value)} placeholder="核心卖点或标签" />
+          <button onClick={createSellingPoint}><PlusOutlined />保存卖点资产</button>
+          <div className="compact-list">
+            {sellingPoints.map((item) => (
+              <article key={item.id}>
+                <strong>{item.name}</strong>
+                <span>{item.mainPoint || item.tagText || '未填写卖点'}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="asset-block">
+          <h3>爆款脚本资产库</h3>
+          <input value={viralName} onChange={(event) => setViralName(event.target.value)} placeholder="爆款资产名称" />
+          <input value={viralUrl} onChange={(event) => setViralUrl(event.target.value)} placeholder="来源链接" />
+          <button onClick={createViralAsset}><PlusOutlined />保存爆款资产</button>
+          <div className="compact-list">
+            {viralAssets.map((item) => (
+              <article key={item.id}>
+                <strong>{item.name}</strong>
+                <span>{item.platform || item.kind || 'short-video'}</span>
+              </article>
+            ))}
+          </div>
+        </section>
+      </div>
+    </section>
+  );
+};
+
+export default AssetsPanel;

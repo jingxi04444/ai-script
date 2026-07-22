@@ -1,0 +1,18 @@
+package com.aiscript.modules.script.dto;
+
+import lombok.Data;
+
+@Data
+public class GenerateScriptDTO {
+    private String projectId;
+    private String type;
+    private String templateId;
+    private String briefId;
+    private String referenceUrl;
+    private String referenceCopy;
+    private String structureAnalysis;
+    private String prompt;
+    private String duration;
+    private String format;
+    private String formatRequirement;
+}

@@ -1,0 +1,60 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ai-script-server
+  profiles:
+    active: dev
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 120MB
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  type-aliases-package: com.aiscript.modules.*.entity
+  global-config:
+    db-config:
+      id-type: auto
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+
+springdoc:
+  api-docs:
+    enabled: true
+  swagger-ui:
+    enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+payment:
+  enabled: ${PAYMENT_ENABLED:false}
+  dev-mode: ${PAYMENT_DEV_MODE:false}
+  base-notify-url: ${PAYMENT_BASE_NOTIFY_URL:http://localhost:8080}
+  front-return-url: ${PAYMENT_FRONT_RETURN_URL:http://localhost:5173/payment/result}
+  wechat:
+    enabled: ${PAYMENT_WECHAT_ENABLED:false}
+    app-id: ${WECHAT_PAY_APP_ID:}
+    mch-id: ${WECHAT_PAY_MCH_ID:}
+    api-v3-key: ${WECHAT_PAY_API_V3_KEY:}
+    private-key-path: ${WECHAT_PAY_PRIVATE_KEY_PATH:}
+    mch-serial-no: ${WECHAT_PAY_MCH_SERIAL_NO:}
+    notify-url: ${WECHAT_PAY_NOTIFY_URL:}
+  alipay:
+    enabled: ${PAYMENT_ALIPAY_ENABLED:false}
+    app-id: ${ALIPAY_APP_ID:}
+    merchant-private-key: ${ALIPAY_MERCHANT_PRIVATE_KEY:}
+    alipay-public-key: ${ALIPAY_PUBLIC_KEY:}
+    notify-url: ${ALIPAY_NOTIFY_URL:}
+    server-url: ${ALIPAY_SERVER_URL:https://openapi.alipay.com/gateway.do}
+    sign-type: ${ALIPAY_SIGN_TYPE:RSA2}
+    seller-id: ${ALIPAY_SELLER_ID:}

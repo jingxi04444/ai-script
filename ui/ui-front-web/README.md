@@ -1,11 +1,27 @@
+# ui-front-web
 
-  # Daily Photo Diary App
+前台生产应用 `apps/front-web` 的 UI 映射原型项目。
 
-  This is a code bundle for Daily Photo Diary App. The original project is available at https://www.figma.com/design/uj5nwnQk8ejAxUfsVs55Xd/Daily-Photo-Diary-App.
+用途：
 
-  ## Running the code
+- 用静态数据复刻当前前台页面结构。
+- 方便后续先在 `ui/ui-front-web` 调整视觉、布局、交互，再迁移到生产应用。
+- 不连接真实后端，不承载业务逻辑。
 
-  Run `npm i` to install the dependencies.
+运行：
 
-  Run `npm run dev` to start the development server.
-  
+```bash
+cd ui/ui-front-web
+npm install
+npm run dev
+```
+
+覆盖页面：
+
+- 项目首页
+- 9 步视频脚本工作台
+- 产品 Brief 表单
+- Brief / 版本管理弹窗
+- 导入卖点表格弹窗
+- 灵感模板库
+- 分镜、素材、生成、配音、预览、数据面板

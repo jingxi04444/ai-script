@@ -1,0 +1,34 @@
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/ai_script?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: javacui
+    password: 123456
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      database: 0
+
+logging:
+  level:
+    com.aiscript: debug
+    org.springframework.security: info
+
+payment:
+  dev-mode: ${PAYMENT_DEV_MODE:true}
+
+app:
+  jwt:
+    secret: change-me-change-me-change-me-change-me
+    access-token-expire-minutes: 120
+  secret:
+    cipher-key: change-me-provider-secret-cipher-key
+  storage:
+    provider: ${STORAGE_PROVIDER:aliyun-oss}
+    endpoint: ${STORAGE_ENDPOINT:oss-cn-hangzhou.aliyuncs.com}
+    bucket: ${STORAGE_BUCKET:datalefoss}
+    access-key: ${STORAGE_ACCESS_KEY:}
+    secret-key: ${STORAGE_SECRET_KEY:}
+    region: ${STORAGE_REGION:cn-hangzhou}
+    public-base-url: ${STORAGE_PUBLIC_BASE_URL:}

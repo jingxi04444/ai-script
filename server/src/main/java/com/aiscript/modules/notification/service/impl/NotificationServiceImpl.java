@@ -1,0 +1,105 @@
+package com.aiscript.modules.notification.service.impl;
+
+import com.aiscript.common.api.PageResult;
+import com.aiscript.common.pagination.PageQuery;
+import com.aiscript.framework.tenant.TenantContext;
+import com.aiscript.modules.notification.dto.NotificationSendDTO;
+import com.aiscript.modules.notification.entity.SysNotification;
+import com.aiscript.modules.notification.mapper.SysNotificationMapper;
+import com.aiscript.modules.notification.service.NotificationService;
+import com.aiscript.modules.notification.vo.NotificationVO;
+import com.aiscript.security.LoginUser;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+
+@Service
+public class NotificationServiceImpl implements NotificationService {
+    private static final Integer DEFAULT_TENANT_ID = 1;
+    private final SysNotificationMapper notificationMapper;
+
+    public NotificationServiceImpl(SysNotificationMapper notificationMapper) {
+        this.notificationMapper = notificationMapper;
+    }
+
+    @Override
+    public PageResult<NotificationVO> adminPage(PageQuery query, String status) {
+        QueryWrapper<SysNotification> wrapper = new QueryWrapper<>();
+        wrapper.eq(StringUtils.hasText(status), "status", status)
+            .like(StringUtils.hasText(query.getKeyword()), "title", query.getKeyword())
+            .orderByDesc("create_time");
+        IPage<SysNotification> page = notificationMapper.selectPage(new Page<>(query.getPage(), query.getPageSize()), wrapper);
+        return new PageResult<>(page.getRecords().stream().map(this::toVO).toList(), page.getTotal(), page.getCurrent(), page.getSize(), page.getPages());
+    }
+
+    @Override
+    public PageResult<NotificationVO> myPage(PageQuery query, String status) {
+        QueryWrapper<SysNotification> wrapper = new QueryWrapper<>();
+        wrapper.eq("user_id", currentUserId())
+            .eq(StringUtils.hasText(status), "status", status)
+            .like(StringUtils.hasText(query.getKeyword()), "title", query.getKeyword())
+            .orderByDesc("create_time");
+        IPage<SysNotification> page = notificationMapper.selectPage(new Page<>(query.getPage(), query.getPageSize()), wrapper);
+        return new PageResult<>(page.getRecords().stream().map(this::toVO).toList(), page.getTotal(), page.getCurrent(), page.getSize(), page.getPages());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void send(NotificationSendDTO dto) {
+        List<String> userIds = dto.userIds == null || dto.userIds.isEmpty() ? Collections.singletonList(null) : dto.userIds;
+        for (String userId : userIds) {
+            SysNotification notification = new SysNotification();
+            notification.tenantId = currentTenantId();
+            notification.userId = StringUtils.hasText(userId) ? Integer.valueOf(userId) : null;
+            notification.channel = StringUtils.hasText(dto.channel) ? dto.channel : "system";
+            notification.title = dto.title;
+            notification.content = dto.content;
+            notification.status = 0;
+            notificationMapper.insert(notification);
+        }
+    }
+
+    @Override
+    public void markRead(Integer id) {
+        SysNotification notification = notificationMapper.selectById(id);
+        if (notification != null) {
+            notification.status = 1;
+            notification.readTime = LocalDateTime.now();
+            notificationMapper.updateById(notification);
+        }
+    }
+
+    private NotificationVO toVO(SysNotification entity) {
+        NotificationVO vo = new NotificationVO();
+        vo.id = String.valueOf(entity.id);
+        vo.userId = entity.userId == null ? null : String.valueOf(entity.userId);
+        vo.channel = entity.channel;
+        vo.title = entity.title;
+        vo.content = entity.content;
+        vo.status = entity.status;
+        vo.readTime = entity.readTime;
+        vo.createTime = entity.createTime;
+        return vo;
+    }
+
+    private Integer currentTenantId() {
+        Integer tenantId = TenantContext.getTenantId();
+        return tenantId == null ? DEFAULT_TENANT_ID : tenantId;
+    }
+
+    private Integer currentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof LoginUser loginUser) {
+            return loginUser.getUserId();
+        }
+        return null;
+    }
+}

@@ -1,0 +1,101 @@
+import type { PaginatedResponse, PaginationParams } from './api';
+
+export interface GenerationTask {
+  id: string;
+  status: string;
+  progress?: number;
+  result?: string;
+  errorMessage?: string;
+}
+
+export interface VideoSegment {
+  id: string;
+  projectId: string;
+  shotId?: string;
+  taskId?: string;
+  assetId?: string;
+  status?: string;
+  tagsJson?: string;
+  durationSeconds?: number;
+  createdAt?: string;
+}
+
+export interface VideoGenerateParams {
+  projectId: string;
+  shotId?: string;
+  prompt?: string;
+  tagsJson?: string;
+  durationSeconds?: number;
+}
+
+export interface DubbingAsset {
+  id: string;
+  projectId: string;
+  taskId?: string;
+  assetId?: string;
+  mode?: string;
+  voice?: string;
+  speed?: string;
+  tone?: string;
+  volume?: string;
+  lipPrecision?: string;
+  status?: string;
+  createdAt?: string;
+}
+
+export interface DubbingCreateParams {
+  projectId: string;
+  text: string;
+  mode?: string;
+  voice?: string;
+  speed?: string;
+  tone?: string;
+  volume?: string;
+  lipPrecision?: string;
+}
+
+export interface TimelineConfig {
+  id?: string;
+  projectId: string;
+  selectedClip?: string;
+  transitionEffect?: string;
+  backgroundMusicAssetId?: string;
+  resolution?: string;
+  configJson?: string;
+  updatedAt?: string;
+}
+
+export interface TimelineSaveParams {
+  projectId: string;
+  selectedClip?: string;
+  transitionEffect?: string;
+  backgroundMusicAssetId?: string;
+  resolution?: string;
+  configJson?: string;
+}
+
+export interface ExportJob {
+  id: string;
+  projectId?: string;
+  taskId?: string;
+  exportType?: string;
+  resolution?: string;
+  fileName?: string;
+  assetId?: string;
+  status?: string;
+  createdAt?: string;
+}
+
+export interface ExportCreateParams {
+  projectId?: string;
+  exportType: string;
+  resolution?: string;
+  fileName?: string;
+}
+
+export interface ExportQueryParams extends PaginationParams {
+  projectId?: string;
+  keyword?: string;
+}
+
+export type ExportJobPage = PaginatedResponse<ExportJob>;

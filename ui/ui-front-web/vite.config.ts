@@ -1,36 +1,33 @@
-import { defineConfig } from 'vite'
-import path from 'path'
-import tailwindcss from '@tailwindcss/vite'
-import react from '@vitejs/plugin-react'
+import { defineConfig, loadEnv } from 'vite';
+import react from '@vitejs/plugin-react';
 
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+  const devPort = Number(env.VITE_DEV_PORT || 5190);
+  const previewPort = Number(env.VITE_PREVIEW_PORT || 5191);
+  const tunnelHost = env.VITE_TUNNEL_HOST?.replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  const tunnelProtocol = env.VITE_TUNNEL_PROTOCOL === 'http' ? 'http' : 'https';
 
-function figmaAssetResolver() {
   return {
-    name: 'figma-asset-resolver',
-    resolveId(id) {
-      if (id.startsWith('figma:asset/')) {
-        const filename = id.replace('figma:asset/', '')
-        return path.resolve(__dirname, 'src/assets', filename)
-      }
+    plugins: [react()],
+    server: {
+      host: '0.0.0.0',
+      port: devPort,
+      strictPort: true,
+      allowedHosts: true,
+      hmr: tunnelHost
+        ? {
+            protocol: tunnelProtocol === 'http' ? 'ws' : 'wss',
+            host: tunnelHost,
+            clientPort: Number(env.VITE_TUNNEL_CLIENT_PORT || (tunnelProtocol === 'http' ? 80 : 443)),
+          }
+        : undefined,
     },
-  }
-}
-
-export default defineConfig({
-  plugins: [
-    figmaAssetResolver(),
-    // The React and Tailwind plugins are both required for Make, even if
-    // Tailwind is not being actively used – do not remove them
-    react(),
-    tailwindcss(),
-  ],
-  resolve: {
-    alias: {
-      // Alias @ to the src directory
-      '@': path.resolve(__dirname, './src'),
+    preview: {
+      host: '0.0.0.0',
+      port: previewPort,
+      strictPort: true,
+      allowedHosts: true,
     },
-  },
-
-  // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
-  assetsInclude: ['**/*.svg', '**/*.csv'],
-})
+  };
+});

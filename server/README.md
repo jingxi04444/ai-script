@@ -1,169 +1,201 @@
 # AI Script Server
 
-FastAPI modular-monolith backend for `apps/front-web` and `apps/admin-web`.
+Spring Boot + MyBatis-Plus backend for AI Script.
 
-## Local Setup
+## Stack
+
+- Java 17
+- Spring Boot 3.x
+- MyBatis-Plus
+- MySQL 8.0
+- Redis
+- JWT + Spring Security
+- springdoc-openapi
+- EasyExcel
+- MinIO / OSS compatible storage
+
+## Local Start
+
+1. Create MySQL schema using `doc/global-database/mysql/ai_script_mysql_schema.sql`.
+2. Initialize default data using `doc/global-database/mysql/ai_script_mysql_seed.sql`.
+3. Update `src/main/resources/application-dev.yml`.
+4. Start Redis and MySQL.
+5. Run:
 
 ```bash
-cd server
-python3 -m venv .venv
-
-source .venv/bin/activate
-pip install -e ".[dev]"
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
-
-brew services start postgresql@15
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
 ```
 
-The default database URL targets the local PostgreSQL database created from `doc/database/schema.sql` and `doc/database/seed.sql`:
+Swagger UI:
 
 ```text
-postgresql+psycopg://jingxi:123456@localhost:5432/ai_script_dev
+http://localhost:8080/swagger-ui/index.html
 ```
 
-## LLM Providers
+## Implemented Modules
 
-The backend supports multiple OpenAI-compatible chat completion providers stored in `api_provider_configs`.
+- Auth: `/api/auth/**`, `/api/admin/auth/**`
+- Project: `/api/projects/**`, `/api/admin/projects/**`
+- Brief: `/api/briefs/**`
+- Script and template: `/api/scripts/**`, `/api/admin/templates/**`
+- Storyboard: `/api/storyboards/**`
+- Source analysis: `/api/source-analysis`, `/api/video/share-url/parse`, `/api/script-generator/extract-copy`
+- Asset library: `/api/assets/**`, `/api/selling-point-assets/**`, `/api/viral-assets/**`
+- Compliance: `/api/compliance/**`, `/api/admin/compliance/words/**`
+- Audit flow: `/api/audit/tasks`, `/api/admin/audit/tasks/**`
+- Membership and payment: `/api/membership/**`, `/api/payments/**`
+- Generation task: `/api/tasks/**`
+- Admin dashboard and users: `/api/admin/dashboard/**`, `/api/admin/users/**`
+- System management:
+  - Prompt templates: `/api/admin/system/prompt-templates/**`
+  - Import templates: `/api/admin/system/import-templates/**`
+  - Roles: `/api/admin/system/roles/**`
+  - Permissions and menus: `/api/admin/system/permissions/**`
+  - User roles: `/api/admin/system/users/{id}/roles`
+- Notifications: `/api/notifications/**`, `/api/admin/notifications/**`
 
-Provider selection order:
+## Provider Configuration
 
-1. Enabled tenant-specific providers, sorted by `priority` ascending.
-2. Enabled global providers, sorted by `priority` ascending.
-3. Environment-only provider from `LLM_API_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`.
-4. Deterministic local fallback when no provider is usable.
+Provider configs are maintained through `/api/admin/providers` and stored in `sys_api_provider_config`.
+Provider API keys are encrypted before persistence. Configure `app.secret.cipher-key` with a stable production secret before creating Provider records.
 
-Seeded providers use `api_key_encrypted` values like `env:DEEPSEEK_API_KEY`, so metadata lives in PostgreSQL while secrets stay in environment variables.
+### LLM
 
-```bash
-DEEPSEEK_API_KEY=your-deepseek-key
-DASHSCOPE_API_KEY=your-qwen-key
-OPENAI_API_KEY=your-openai-key
-```
-
-You can also run a single env-only provider without database config:
-
-```bash
-LLM_API_BASE_URL=https://api.deepseek.com/v1
-LLM_API_KEY=your-api-key
-LLM_MODEL=deepseek-chat
-LLM_TEMPERATURE=0.3
-LLM_TIMEOUT_SECONDS=60
-LLM_MAX_TOKENS=3000
-```
-
-Compatible examples:
-
-| Provider | `LLM_API_BASE_URL` | `LLM_MODEL` example |
-| --- | --- | --- |
-| DeepSeek | `https://api.deepseek.com/v1` | `deepseek-chat` |
-| OpenAI | `https://api.openai.com/v1` | `gpt-4o-mini` |
-| 通义千问 | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
-| 豆包 / 火山方舟 | Use the provider's OpenAI-compatible endpoint | Provider model ID |
-
-Current LLM-backed business endpoints:
-
-| Endpoint | LLM purpose |
-| --- | --- |
-| `POST /api/product-brief/optimize` | 标准化产品 Brief 和卖点总结 |
-| `POST /api/source-analysis/parse-link` | 生成爆款结构分析草稿和拉片报告 |
-| `POST /api/video/share/url/parse` | 解析分享链接元数据，返回标题、作者、封面、视频地址等 |
-| `POST /api/script-generator/extract-copy` | 解析分享链接并在配置 ASR 后转写视频语音文案 |
-| `POST /api/scripts/generate` | 生成分镜脚本表格 |
-| `POST /api/scripts/compliance-check` | 基于词库命中给出合规修改建议 |
-
-Admin management endpoints:
-
-| Endpoint | Purpose |
-| --- | --- |
-| `GET /api/admin/llm/providers` | 查看数据库中的 LLM Provider 配置，密钥会脱敏 |
-| `POST /api/admin/llm/providers` | 新增 OpenAI-compatible Provider |
-| `POST /api/admin/llm/providers/{id}/disable` | 停用 Provider |
-
-Example create payload:
+- `providerType`: `llm`
+- `providerName`: e.g. `OpenAI Compatible`
+- `platform`: e.g. `openai`, `dashscope`, `deepseek`
+- `endpointUrl`: chat completions URL, e.g. `https://api.example.com/v1/chat/completions`
+- `apiKey`: provider API key
+- `configJson`:
 
 ```json
-{
-  "providerName": "DeepSeek",
-  "platform": "deepseek",
-  "endpointUrl": "https://api.deepseek.com/v1",
-  "apiKeyRef": "env:DEEPSEEK_API_KEY",
-  "model": "deepseek-chat",
-  "priority": 10,
-  "timeoutMs": 60000,
-  "retryCount": 2,
-  "status": "enabled",
-  "temperature": 0.3,
-  "maxTokens": 3000
-}
+{"model":"gpt-4o-mini","temperature":0.7}
 ```
 
-## Video Parser / ASR
+### Aliyun SMS
 
-`POST /api/video/share/url/parse` 接收：
+- `providerType`: `sms`
+- `providerName`: `Aliyun SMS`
+- `platform`: `aliyun`
+- `endpointUrl`: `https://dysmsapi.aliyuncs.com/`
+- `apiKey`: Aliyun `AccessKeySecret`
+- `configJson`:
 
 ```json
-{ "url": "https://v.douyin.com/xxxxxx/" }
+{"accessKeyId":"your-access-key-id","signName":"短信签名","templateCode":"SMS_000000000","regionId":"cn-hangzhou"}
 ```
 
-返回：
+### Aliyun OSS
 
-```json
-{
-  "code": 200,
-  "msg": "success",
-  "data": {
-    "sourceUrl": "https://v.douyin.com/xxxxxx/",
-    "platform": "抖音",
-    "title": "视频标题",
-    "videoUrl": "https://example.com/video.mp4",
-    "coverUrl": "https://example.com/cover.jpg",
-    "author": { "name": "作者昵称" },
-    "images": []
-  }
-}
+Set `app.storage.provider=aliyun-oss`.
+
+For OSS, `app.storage.endpoint` can be either the bucket endpoint or the region endpoint. Bucket endpoint is recommended:
+
+```yaml
+app:
+  storage:
+    provider: aliyun-oss
+    endpoint: https://your-bucket.oss-cn-hangzhou.aliyuncs.com
+    bucket: your-bucket
+    access-key: your-access-key-id
+    secret-key: your-access-key-secret
+    region: cn-hangzhou
+    public-base-url: https://your-cdn-domain.example.com
 ```
 
-`POST /api/script-generator/extract-copy` 会先解析分享链接；如果解析结果里有 `videoUrl` 且已配置 ASR，会下载视频、调用 `ffmpeg` 抽音频、再调用 SiliconFlow 转写文案。
-
-推荐在后台 `API 管理 -> AI 模型 API -> 添加 API` 维护 ASR Provider：
-
-```json
-{
-  "providerName": "SiliconFlow ASR",
-  "providerType": "asr",
-  "platform": "siliconflow",
-  "endpointUrl": "https://api.siliconflow.cn/v1/audio/transcriptions",
-  "apiKeyRef": "env:SILICONFLOW_API_KEY",
-  "model": "FunAudioLLM/SenseVoiceSmall",
-  "priority": 1
-}
-```
-
-如果数据库没有启用的 `asr` Provider，后端才会使用 `.env` 兜底：
+Environment variables example:
 
 ```bash
-SILICONFLOW_API_KEY=your-siliconflow-key
-SILICONFLOW_ASR_MODEL=FunAudioLLM/SenseVoiceSmall
-VIDEO_AUTO_CLEANUP_TEMP_FILES=true
+STORAGE_PROVIDER=aliyun-oss
+STORAGE_ENDPOINT=https://your-bucket.oss-cn-hangzhou.aliyuncs.com
+STORAGE_BUCKET=your-bucket
+STORAGE_ACCESS_KEY=your-access-key-id
+STORAGE_SECRET_KEY=your-access-key-secret
+STORAGE_REGION=cn-hangzhou
+STORAGE_PUBLIC_BASE_URL=
 ```
 
-服务器需要安装 `ffmpeg` 才能做语音转写；只做链接元数据解析不需要 `ffmpeg`。
+The legacy `aliyun.oss.*` configuration is also supported and takes precedence when set:
 
-## Frontend Integration
+```yaml
+aliyun:
+  oss:
+    endpoint: ${ALIYUN_OSS_ENDPOINT:oss-cn-hangzhou.aliyuncs.com}
+    access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID}
+    access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET}
+    bucket-name: ${ALIYUN_OSS_BUCKET_NAME}
+    custom-domain: ${ALIYUN_OSS_CUSTOM_DOMAIN:}
+    dir-prefix: ${ALIYUN_OSS_DIR_PREFIX:dataelf/}
+```
 
-`apps/front-web` and `apps/admin-web` default to `src/services/mock.js`. Set these when integrating the frontends with this backend:
+## Payment Configuration
+
+Real payment uses WeChat Pay Native QR code and Alipay face-to-face QR code. Do not hardcode merchant secrets in code, SQL, or frontend files.
+
+Required environment variables for production:
 
 ```bash
-VITE_USE_MOCK_API=false
-VITE_API_BASE_URL=http://127.0.0.1:8000
+PAYMENT_ENABLED=true
+PAYMENT_DEV_MODE=false
+
+# WeChat Pay Native
+PAYMENT_WECHAT_ENABLED=true
+WECHAT_PAY_APP_ID=your-wechat-app-id
+WECHAT_PAY_MCH_ID=your-merchant-id
+WECHAT_PAY_API_V3_KEY=your-api-v3-key
+WECHAT_PAY_PRIVATE_KEY_PATH=/secure/path/apiclient_key.pem
+WECHAT_PAY_MCH_SERIAL_NO=your-merchant-certificate-serial
+WECHAT_PAY_NOTIFY_URL=https://your-api-domain.com/api/payments/notify/wechat/native
+
+# Alipay QR payment
+PAYMENT_ALIPAY_ENABLED=true
+ALIPAY_APP_ID=your-alipay-app-id
+ALIPAY_MERCHANT_PRIVATE_KEY=your-rsa2-private-key
+ALIPAY_PUBLIC_KEY=alipay-public-key
+ALIPAY_NOTIFY_URL=https://your-api-domain.com/api/payments/notify/alipay/scan
+ALIPAY_SELLER_ID=your-alipay-seller-id
+ALIPAY_SERVER_URL=https://openapi.alipay.com/gateway.do
+ALIPAY_SIGN_TYPE=RSA2
 ```
 
-Login responses return `{ token, user }`. The MVP token is a Bearer token formatted as `front:<userId>` or `admin:<userId>`; it is not a standard JWT yet. Frontend API clients send it as `Authorization: Bearer <token>`.
-
-## API Docs
-
-After starting the server:
+Database migration for existing deployments:
 
 ```text
-http://127.0.0.1:8000/docs
+doc/global-database/mysql/ai_payment_real_pay_migration.sql
 ```
+
+Notes:
+
+- WeChat and Alipay notify URLs must be public HTTPS URLs reachable by the payment platforms.
+- `/api/payments/notify/wechat/native` and `/api/payments/notify/alipay/scan` are the only real payment callback endpoints.
+- The legacy generic payment callback is disabled and must not be used for real payments.
+- `PAYMENT_DEV_MODE=true` enables local mock payment only for development; keep it `false` in production.
+
+`STORAGE_ENDPOINT` should be the bucket endpoint. If the `https://` scheme is omitted, the server will automatically add it.
+Region endpoint such as `https://oss-cn-hangzhou.aliyuncs.com` is also supported; the server will automatically convert it to `https://your-bucket.oss-cn-hangzhou.aliyuncs.com/objectKey`.
+
+File upload endpoint: `/api/files/upload`.
+
+## Operation Logs
+
+Non-GET controller requests are recorded into `sys_operation_log` through an AOP aspect.
+
+Admin query endpoint:
+
+```text
+GET /api/admin/operation-logs?page=1&pageSize=10&moduleCode=projects&resultStatus=success
+```
+
+## Dynamic RBAC
+
+Spring Security loads permissions from `sys_user_role`, `sys_role`, `sys_role_permission`, and `sys_permission` on each JWT request.
+
+- `/api/admin/**` requires an authenticated admin user (`sys_user.user_type = admin`).
+- API permissions are enabled by records in `sys_permission`:
+  - `permission_type`: `api`
+  - `permission_code`: e.g. `system:provider:update`
+  - `path`: Ant-style path, e.g. `/api/admin/providers/**`
+  - `status`: `1`
+- If an API path matches a configured API permission, the current user's roles must include that permission.
+- If no API permission is configured for a path, the request falls back to authenticated access. This keeps rollout incremental while menus and API permissions are being maintained.
+- `/api/admin/auth/admin-info` and `/api/admin/auth/login` return `roles`, `permissions`, and `menus` for dynamic admin navigation and button control.

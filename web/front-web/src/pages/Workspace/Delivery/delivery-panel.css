@@ -1,0 +1,85 @@
+.delivery-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.compliance-card {
+  grid-row: span 2;
+}
+
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.check-results,
+.metric-row,
+.wallet-card {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.check-results {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.check-results article,
+.metric-row,
+.wallet-card {
+  min-height: 68px;
+}
+
+.check-results strong,
+.metric-row strong,
+.wallet-card strong {
+  color: #f6fbfb;
+  font-size: 22px !important;
+}
+
+.check-results span,
+.metric-row span,
+.wallet-card span {
+  color: #aeb9bc;
+}
+
+.simple-list {
+  display: grid;
+  gap: 8px;
+}
+
+.simple-list article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.simple-list strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.simple-list span {
+  color: #aeb9bc;
+}
+
+.notification-list article strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.notification-list article button {
+  height: 28px;
+  padding: 0 10px;
+}

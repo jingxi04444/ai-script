@@ -1,0 +1,31 @@
+.script-format-table .table-head,
+.script-format-table .table-row {
+  grid-template-columns: minmax(180px, 1fr) minmax(130px, 0.7fr) minmax(420px, 2.2fr) 80px 90px 120px;
+  width: 100%;
+}
+
+.script-format-table .table-head > *,
+.script-format-table .table-row > * {
+  min-width: 0;
+}
+
+.script-format-table .table-row > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.script-format-table .table-row > span:nth-of-type(3),
+.script-format-table .table-head > span:nth-child(4),
+.script-format-table .table-head > span:nth-child(5) {
+  text-align: center;
+}
+
+.script-format-table .table-row > span:nth-of-type(3),
+.script-format-table .table-row > span:nth-of-type(4) {
+  text-align: center;
+}
+
+.script-format-table .table-head > span:last-child {
+  text-align: right;
+}

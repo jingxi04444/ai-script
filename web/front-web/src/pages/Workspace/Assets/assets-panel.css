@@ -1,0 +1,167 @@
+.assets-panel,
+.production-panel,
+.delivery-panel {
+  display: grid;
+  gap: 18px;
+  color: #eef6f6;
+}
+
+.workspace-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.workspace-panel-head h2 {
+  margin: 0;
+  color: #f7fbfb;
+  font-size: 24px !important;
+  font-weight: 800;
+}
+
+.workspace-panel-head p {
+  margin: 6px 0 0;
+  color: #9ea9ad;
+}
+
+.workspace-panel-head button,
+.asset-block button,
+.production-card button,
+.delivery-card button {
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid rgba(84, 215, 107, 0.54);
+  border-radius: 7px;
+  background: rgba(24, 42, 32, 0.86);
+  color: #8ff07b;
+  font-weight: 760;
+}
+
+.assets-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.8fr) minmax(280px, 0.8fr);
+  gap: 16px;
+}
+
+.asset-block,
+.production-card,
+.delivery-card {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-height: 180px;
+  padding: 16px;
+  border: 1px solid rgba(136, 160, 147, 0.24);
+  border-radius: 8px;
+  background: rgba(15, 20, 20, 0.72);
+}
+
+.asset-block h3,
+.production-card h3,
+.delivery-card h3 {
+  margin: 0;
+  color: #f1f7f7;
+  font-size: 17px !important;
+}
+
+.asset-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 100px max-content;
+  gap: 10px;
+}
+
+.asset-block input,
+.asset-block textarea,
+.asset-block select,
+.production-card input,
+.production-card textarea,
+.production-card select,
+.delivery-card input,
+.delivery-card textarea,
+.delivery-card select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid rgba(155, 172, 178, 0.22);
+  border-radius: 7px;
+  background: rgba(9, 14, 16, 0.82);
+  color: #f3f8f8;
+  outline: 0;
+}
+
+.asset-block input,
+.asset-block select,
+.production-card input,
+.production-card select,
+.delivery-card input,
+.delivery-card select {
+  height: 36px;
+  padding: 0 10px;
+}
+
+.asset-block textarea,
+.production-card textarea,
+.delivery-card textarea {
+  min-height: 96px;
+  padding: 10px;
+  resize: vertical;
+}
+
+.asset-upload-button {
+  width: 100%;
+}
+
+.asset-list,
+.compact-list {
+  display: grid;
+  gap: 8px;
+}
+
+.asset-list article {
+  display: grid;
+  grid-template-columns: 58px minmax(0, 1fr) 70px 30px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.asset-list strong,
+.compact-list strong {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.asset-list span,
+.asset-list small,
+.compact-list span {
+  color: #aeb9bc;
+}
+
+.asset-list article > button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-color: rgba(255, 116, 116, 0.34);
+  color: #ff8f8f;
+  background: rgba(90, 24, 24, 0.24);
+}
+
+.compact-list article {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.empty-hint {
+  margin: 0;
+  color: #859094;
+}

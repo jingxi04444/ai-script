@@ -1,0 +1,149 @@
+.brief-share-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: start center;
+  padding: 48px 20px;
+  background: #f4f7f7;
+  color: #1c1e20;
+}
+
+.brief-share-card {
+  width: min(100%, 980px);
+  display: grid;
+  gap: 22px;
+  padding: 28px;
+  border: 1px solid #dce4e4;
+  border-radius: 8px;
+  background: #ffffff;
+  box-shadow: 0 18px 52px rgba(28, 30, 32, 0.08);
+}
+
+.brief-share-card header {
+  display: grid;
+  gap: 8px;
+}
+
+.brief-share-card header span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #287a3b;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.brief-share-card h1 {
+  margin: 0;
+  color: #111314;
+  font-size: 30px;
+  line-height: 1.2;
+}
+
+.brief-share-card p {
+  margin: 0;
+  color: #536164;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.brief-share-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.brief-share-grid article,
+.brief-share-content {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #e4ebeb;
+  border-radius: 8px;
+  background: #f8fbfb;
+}
+
+.brief-share-grid strong,
+.brief-share-content strong {
+  color: #111314;
+}
+
+.brief-share-content pre {
+  margin: 0;
+  color: #2f3a3d;
+  font: inherit;
+  line-height: 1.75;
+  white-space: pre-wrap;
+}
+
+.brief-share-edit,
+.brief-share-apply {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #d8e8dc;
+  border-radius: 8px;
+  background: #f2faf4;
+}
+
+.brief-share-edit {
+  border-color: #d8e1e8;
+  background: #f7fafb;
+}
+
+.brief-share-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.brief-share-edit label {
+  display: grid;
+  gap: 6px;
+  color: #283134;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.brief-share-edit input,
+.brief-share-edit textarea,
+.brief-share-apply textarea {
+  min-height: 90px;
+  padding: 10px;
+  border: 1px solid #cfdada;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #1c1e20;
+  resize: vertical;
+}
+
+.brief-share-edit input {
+  min-height: 40px;
+  resize: none;
+}
+
+.brief-share-edit button,
+.brief-share-apply button {
+  width: fit-content;
+  min-height: 38px;
+  padding: 0 18px;
+  border-radius: 8px;
+  background: #2f9d4b;
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.brief-share-edit button {
+  background: #235fa8;
+}
+
+.brief-share-edit button:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+@media (max-width: 720px) {
+  .brief-share-grid,
+  .brief-share-form-grid {
+    grid-template-columns: 1fr;
+  }
+}

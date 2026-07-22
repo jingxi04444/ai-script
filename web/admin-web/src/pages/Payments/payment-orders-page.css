@@ -1,0 +1,92 @@
+.payment-orders-page .payment-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.payment-orders-page .field {
+  display: grid;
+  gap: 8px;
+}
+
+.payment-orders-page .field span {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.payment-orders-page .field input,
+.payment-orders-page .field select {
+  height: 42px;
+}
+
+.payment-orders-page .payments-table .table-head,
+.payment-orders-page .payments-table .table-row {
+  grid-template-columns: inherit;
+}
+
+.payment-detail-stack {
+  display: grid;
+  gap: 16px;
+}
+
+.payment-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.payment-detail-grid article,
+.payment-detail-blocks section {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(9, 16, 20, 0.62);
+}
+
+.payment-detail-grid span,
+.payment-detail-blocks span {
+  display: block;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.payment-detail-grid strong {
+  display: block;
+  margin-top: 8px;
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.payment-detail-blocks {
+  display: grid;
+  gap: 12px;
+}
+
+.payment-detail-blocks p,
+.payment-detail-blocks pre {
+  margin: 8px 0 0;
+  color: var(--text-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.payment-detail-blocks pre {
+  overflow: auto;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+@media (max-width: 1500px) {
+  .payment-orders-page .payment-filter-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 1360px) {
+  .payment-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

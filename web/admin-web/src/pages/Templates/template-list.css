@@ -1,0 +1,137 @@
+.template-list .toolbar-group {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.template-list .toolbar-input {
+  width: 240px;
+  min-width: 200px;
+}
+
+.template-list .admin-table {
+  border-radius: 10px;
+}
+
+.template-list .table-head,
+.template-list .table-row {
+  min-height: 48px;
+  padding: 0 14px;
+  gap: 10px;
+}
+
+.template-list .table-btn {
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.template-list .pagination-bar {
+  padding: 10px 14px;
+}
+
+.template-list .paragraph-structure-editor {
+  gap: 10px;
+}
+
+.template-list .paragraph-structure-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.template-list .paragraph-structure-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.template-list .paragraph-structure-table {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(8, 13, 16, 0.72);
+}
+
+.template-list .paragraph-structure-row {
+  display: grid;
+  gap: 12px;
+  align-items: stretch;
+  min-width: max-content;
+  padding: 12px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.template-list .paragraph-structure-row:first-child {
+  border-top: 0;
+}
+
+.template-list .paragraph-structure-head {
+  align-items: stretch;
+  min-height: 64px;
+  color: var(--text-muted);
+  font-weight: 700;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.template-list .paragraph-structure-column-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 220px;
+  height: 100%;
+}
+
+.template-list .paragraph-structure-column-head input {
+  min-width: 0;
+  height: 44px;
+  flex: 1;
+  color: var(--text);
+  border-color: var(--line);
+  background: rgba(9, 16, 20, 0.78);
+  font-weight: 700;
+}
+
+.template-list .paragraph-structure-column-head .table-btn {
+  width: 34px;
+  padding: 0;
+  flex: 0 0 auto;
+}
+
+.template-list .paragraph-structure-operation-head,
+.template-list .paragraph-structure-row-action {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: rgba(8, 13, 16, 0.96);
+}
+
+.template-list .paragraph-structure-operation-head {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  height: 44px;
+}
+
+.template-list .paragraph-structure-row textarea {
+  min-height: 74px;
+  min-width: 220px;
+  resize: vertical;
+  color: var(--text);
+  border-color: var(--line);
+  background: rgba(9, 16, 20, 0.78);
+}
+
+.template-list .paragraph-structure-row .table-btn {
+  align-self: stretch;
+  justify-content: center;
+}
+
+.template-list .paragraph-structure-row-action {
+  min-height: 74px;
+}

@@ -1,0 +1,41 @@
+.production-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.production-history {
+  grid-column: 1 / -1;
+}
+
+.result-strip {
+  display: grid;
+  grid-template-columns: max-content max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.result-strip span,
+.result-strip small,
+.production-history article span {
+  color: #aab5b8;
+}
+
+.result-strip small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.production-history article {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.04);
+}
