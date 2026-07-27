@@ -5,6 +5,7 @@ export interface Template {
   id: string;
   name: string;
   category?: string;
+  templateSource?: string;
   actor?: string;
   people?: string;
   popularity?: string;
