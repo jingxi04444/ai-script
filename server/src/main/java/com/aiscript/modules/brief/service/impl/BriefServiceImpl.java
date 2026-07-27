@@ -12,10 +12,12 @@ import com.aiscript.modules.brief.dto.BriefSaveDTO;
 import com.aiscript.modules.brief.entity.AiBrief;
 import com.aiscript.modules.brief.entity.AiBriefCollaborator;
 import com.aiscript.modules.brief.entity.AiBriefEditRequest;
+import com.aiscript.modules.brief.entity.AiBriefShareLink;
 import com.aiscript.modules.brief.entity.AiBriefVersion;
 import com.aiscript.modules.brief.mapper.AiBriefCollaboratorMapper;
 import com.aiscript.modules.brief.mapper.AiBriefEditRequestMapper;
 import com.aiscript.modules.brief.mapper.AiBriefMapper;
+import com.aiscript.modules.brief.mapper.AiBriefShareLinkMapper;
 import com.aiscript.modules.brief.mapper.AiBriefVersionMapper;
 import com.aiscript.modules.brief.service.BriefService;
 import com.aiscript.modules.brief.vo.BriefEditRequestVO;
@@ -47,17 +49,20 @@ public class BriefServiceImpl implements BriefService {
     private final AiBriefVersionMapper briefVersionMapper;
     private final AiBriefCollaboratorMapper collaboratorMapper;
     private final AiBriefEditRequestMapper editRequestMapper;
+    private final AiBriefShareLinkMapper shareLinkMapper;
 
     public BriefServiceImpl(
         AiBriefMapper briefMapper,
         AiBriefVersionMapper briefVersionMapper,
         AiBriefCollaboratorMapper collaboratorMapper,
-        AiBriefEditRequestMapper editRequestMapper
+        AiBriefEditRequestMapper editRequestMapper,
+        AiBriefShareLinkMapper shareLinkMapper
     ) {
         this.briefMapper = briefMapper;
         this.briefVersionMapper = briefVersionMapper;
         this.collaboratorMapper = collaboratorMapper;
         this.editRequestMapper = editRequestMapper;
+        this.shareLinkMapper = shareLinkMapper;
     }
 
     @Override
@@ -89,10 +94,23 @@ public class BriefServiceImpl implements BriefService {
 
     @Override
     public List<BriefVO> mineList(String keyword) {
+        Integer userId = requireCurrentUserId();
+        List<Integer> collaboratedBriefIds = collaboratorMapper.selectList(new LambdaQueryWrapper<AiBriefCollaborator>()
+                .eq(AiBriefCollaborator::getUserId, userId)
+                .eq(AiBriefCollaborator::getStatus, 1))
+            .stream()
+            .map(AiBriefCollaborator::getBriefId)
+            .toList();
         LambdaQueryWrapper<AiBrief> wrapper = new LambdaQueryWrapper<AiBrief>()
-                .eq(AiBrief::getTenantId, currentTenantId())
-                .eq(AiBrief::getCreateBy, requireCurrentUserId())
                 .orderByDesc(AiBrief::getUpdateTime);
+        wrapper.and(access -> {
+            access.and(owned -> owned
+                    .eq(AiBrief::getTenantId, currentTenantId())
+                    .eq(AiBrief::getCreateBy, userId));
+            if (!collaboratedBriefIds.isEmpty()) {
+                access.or().in(AiBrief::getId, collaboratedBriefIds);
+            }
+        });
         if (StringUtils.hasText(keyword)) {
             wrapper.and(query -> query
                     .like(AiBrief::getBriefName, keyword)
@@ -124,6 +142,7 @@ public class BriefServiceImpl implements BriefService {
         brief.setStatus("draft");
         brief.setIsShared(value(dto.getIsShared()));
         brief.setShareEnabled(value(dto.getShareEnabled()));
+        brief.setSharePermission("read");
         if (brief.getShareEnabled() == 1) {
             brief.setShareToken(newShareToken());
             brief.setShareTime(LocalDateTime.now());
@@ -171,36 +190,82 @@ public class BriefServiceImpl implements BriefService {
     }
 
     @Override
-    public BriefShareVO enableShare(Integer id) {
+    public BriefShareVO enableShare(Integer id, String permission) {
         AiBrief brief = getBrief(id);
-        ensureOwner(brief);
-        if (!StringUtils.hasText(brief.getShareToken())) {
-            brief.setShareToken(newShareToken());
+        ensureCanManage(brief);
+        String normalizedPermission = normalizeSharePermission(permission);
+        AiBriefShareLink shareLink = shareLinkMapper.selectOne(new LambdaQueryWrapper<AiBriefShareLink>()
+                .eq(AiBriefShareLink::getBriefId, brief.getId())
+                .eq(AiBriefShareLink::getPermission, normalizedPermission)
+                .last("LIMIT 1"));
+        if (shareLink == null) {
+            shareLink = new AiBriefShareLink();
+            shareLink.setTenantId(brief.getTenantId());
+            shareLink.setBriefId(brief.getId());
+            shareLink.setPermission(normalizedPermission);
+            shareLink.setShareToken(
+                normalizedPermission.equals(normalizeSharePermission(brief.getSharePermission()))
+                    && StringUtils.hasText(brief.getShareToken())
+                    ? brief.getShareToken()
+                    : newShareToken()
+            );
+            shareLink.setEnabled(1);
+            shareLinkMapper.insert(shareLink);
+        } else if (!Integer.valueOf(1).equals(shareLink.getEnabled())) {
+            shareLink.setEnabled(1);
+            shareLinkMapper.updateById(shareLink);
         }
         brief.setShareEnabled(1);
         brief.setShareTime(LocalDateTime.now());
         briefMapper.updateById(brief);
-
-        BriefShareVO vo = new BriefShareVO();
-        vo.setBriefId(String.valueOf(brief.getId()));
-        vo.setShareToken(brief.getShareToken());
-        vo.setShareUrl("/brief-share/" + brief.getShareToken());
-        return vo;
+        return toShareVO(shareLink);
     }
 
     @Override
+    public List<BriefShareVO> shareLinks(Integer id) {
+        AiBrief brief = getBrief(id);
+        ensureCanManage(brief);
+        return shareLinkMapper.selectList(new LambdaQueryWrapper<AiBriefShareLink>()
+                .eq(AiBriefShareLink::getBriefId, id)
+                .eq(AiBriefShareLink::getEnabled, 1)
+                .orderByAsc(AiBriefShareLink::getId))
+            .stream()
+            .map(this::toShareVO)
+            .toList();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public BriefVO getByShareToken(String token) {
         if (!StringUtils.hasText(token)) {
             throw new BusinessException("分享链接无效");
         }
-        AiBrief brief = briefMapper.selectOne(new LambdaQueryWrapper<AiBrief>()
-                .eq(AiBrief::getShareToken, token)
-                .eq(AiBrief::getShareEnabled, 1)
-                .last("LIMIT 1"));
-        if (brief == null) {
-            throw new BusinessException("分享链接不存在或已失效");
+        ResolvedShareLink resolved = resolveShareLink(token);
+        AiBrief brief = resolved.brief();
+        Integer viewerId = currentUserIdOrNull();
+        if (viewerId != null && !viewerId.equals(brief.getCreateBy())) {
+            upsertCollaborator(brief, viewerId, resolved.permission(), "link");
         }
-        return toVOWithVersions(brief);
+        return toVOWithVersions(brief, resolved.permission());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public BriefVO updateByShareToken(String token, BriefSaveDTO dto) {
+        ResolvedShareLink resolved = resolveShareLink(token);
+        if ("read".equals(resolved.permission())) {
+            throw new BusinessException("当前分享链接仅可阅读，不能修改 Brief");
+        }
+        Integer userId = requireCurrentUserId();
+        AiBrief brief = resolved.brief();
+        if (!userId.equals(brief.getCreateBy())) {
+            upsertCollaborator(brief, userId, resolved.permission(), "link");
+        }
+        fillPartial(brief, dto);
+        brief.setVersionNo(brief.getVersionNo() == null ? 1 : brief.getVersionNo() + 1);
+        briefMapper.updateById(brief);
+        saveVersion(brief, "share-link-update");
+        return toVOWithVersions(brief, resolved.permission());
     }
 
     @Override
@@ -223,10 +288,12 @@ public class BriefServiceImpl implements BriefService {
         target.setTargetScene(source.getTargetScene());
         target.setOtherRequirements(source.getOtherRequirements());
         target.setBriefContent(source.getBriefContent());
+        target.setRichContent(source.getRichContent());
         target.setVersionNo(1);
         target.setStatus("draft");
         target.setIsShared(0);
         target.setShareEnabled(0);
+        target.setSharePermission("read");
         briefMapper.insert(target);
         saveVersion(target, "copy-from-shared");
         return toVOWithVersions(target);
@@ -235,12 +302,17 @@ public class BriefServiceImpl implements BriefService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BriefEditRequestVO requestEditByShareToken(String token, BriefEditRequestDTO dto) {
-        AiBrief brief = getBriefByShareToken(token);
+        ResolvedShareLink resolved = resolveShareLink(token);
+        AiBrief brief = resolved.brief();
         Integer requesterId = requireCurrentUserId();
         if (requesterId.equals(brief.getCreateBy())) {
             throw new BusinessException("创建人已拥有编辑权限");
         }
-        if (hasCollaboratorPermission(brief.getId(), requesterId)) {
+        if (!"read".equals(resolved.permission())) {
+            upsertCollaborator(brief, requesterId, resolved.permission(), "link");
+            throw new BusinessException("该分享链接已包含编辑权限，无需申请");
+        }
+        if (hasCollaboratorPermission(brief.getId(), requesterId, "edit", "manage")) {
             throw new BusinessException("你已拥有该 Brief 的编辑权限");
         }
         if (brief.getCreateBy() == null) {
@@ -268,7 +340,7 @@ public class BriefServiceImpl implements BriefService {
     @Override
     public List<BriefEditRequestVO> editRequests(Integer briefId) {
         AiBrief brief = getBrief(briefId);
-        ensureOwner(brief);
+        ensureCanManage(brief);
         return editRequestMapper.selectList(new LambdaQueryWrapper<AiBriefEditRequest>()
                 .eq(AiBriefEditRequest::getBriefId, briefId)
                 .orderByDesc(AiBriefEditRequest::getCreateTime))
@@ -282,11 +354,11 @@ public class BriefServiceImpl implements BriefService {
     public BriefEditRequestVO approveEditRequest(Integer requestId) {
         AiBriefEditRequest request = getEditRequest(requestId);
         AiBrief brief = getBrief(request.getBriefId());
-        ensureOwner(brief);
+        ensureCanManage(brief);
         request.setStatus("approved");
         request.setApproveTime(LocalDateTime.now());
         editRequestMapper.updateById(request);
-        upsertCollaborator(brief, request.getRequesterId());
+        upsertCollaborator(brief, request.getRequesterId(), "edit", "approval");
         return toEditRequestVO(request);
     }
 
@@ -294,7 +366,7 @@ public class BriefServiceImpl implements BriefService {
     public BriefEditRequestVO rejectEditRequest(Integer requestId) {
         AiBriefEditRequest request = getEditRequest(requestId);
         AiBrief brief = getBrief(request.getBriefId());
-        ensureOwner(brief);
+        ensureCanManage(brief);
         request.setStatus("rejected");
         request.setApproveTime(LocalDateTime.now());
         editRequestMapper.updateById(request);
@@ -375,6 +447,7 @@ public class BriefServiceImpl implements BriefService {
         brief.setTargetScene(dto.getTargetScene());
         brief.setOtherRequirements(dto.getOtherRequirements());
         brief.setBriefContent(dto.getBriefContent());
+        brief.setRichContent(dto.getRichContent());
     }
 
     private void fillPartial(AiBrief brief, BriefSaveDTO dto) {
@@ -409,6 +482,9 @@ public class BriefServiceImpl implements BriefService {
         if (dto.getBriefContent() != null) {
             brief.setBriefContent(dto.getBriefContent());
         }
+        if (dto.getRichContent() != null) {
+            brief.setRichContent(dto.getRichContent());
+        }
     }
 
     private String resolveProductName(BriefSaveDTO dto) {
@@ -429,20 +505,6 @@ public class BriefServiceImpl implements BriefService {
         return brief;
     }
 
-    private AiBrief getBriefByShareToken(String token) {
-        if (!StringUtils.hasText(token)) {
-            throw new BusinessException("分享链接无效");
-        }
-        AiBrief brief = briefMapper.selectOne(new LambdaQueryWrapper<AiBrief>()
-                .eq(AiBrief::getShareToken, token)
-                .eq(AiBrief::getShareEnabled, 1)
-                .last("LIMIT 1"));
-        if (brief == null) {
-            throw new BusinessException("分享链接不存在或已失效");
-        }
-        return brief;
-    }
-
     private AiBriefEditRequest getEditRequest(Integer requestId) {
         AiBriefEditRequest request = editRequestMapper.selectById(requestId);
         if (request == null) {
@@ -451,7 +513,7 @@ public class BriefServiceImpl implements BriefService {
         return request;
     }
 
-    private void upsertCollaborator(AiBrief brief, Integer userId) {
+    private void upsertCollaborator(AiBrief brief, Integer userId, String permission, String permissionSource) {
         AiBriefCollaborator collaborator = collaboratorMapper.selectOne(new LambdaQueryWrapper<AiBriefCollaborator>()
                 .eq(AiBriefCollaborator::getBriefId, brief.getId())
                 .eq(AiBriefCollaborator::getUserId, userId)
@@ -461,7 +523,11 @@ public class BriefServiceImpl implements BriefService {
             collaborator.setTenantId(brief.getTenantId());
             collaborator.setBriefId(brief.getId());
             collaborator.setUserId(userId);
-            collaborator.setPermission("edit");
+            collaborator.setPermission(permission);
+            collaborator.setPermissionSource(permissionSource);
+        } else if (permissionRank(permission) > permissionRank(collaborator.getPermission())) {
+            collaborator.setPermission(permission);
+            collaborator.setPermissionSource(permissionSource);
         }
         collaborator.setStatus(1);
         if (collaborator.getId() == null) {
@@ -473,10 +539,23 @@ public class BriefServiceImpl implements BriefService {
 
     private void ensureCanEdit(AiBrief brief) {
         Integer userId = requireCurrentUserId();
-        if (userId.equals(brief.getCreateBy()) || hasCollaboratorPermission(brief.getId(), userId)) {
+        if (userId.equals(brief.getCreateBy()) || hasCollaboratorPermission(brief.getId(), userId, "edit", "manage")) {
             return;
         }
         throw new BusinessException("没有该 Brief 的编辑权限，请先申请编辑权限");
+    }
+
+    private void ensureCanManage(AiBrief brief) {
+        Integer userId = requireCurrentUserId();
+        if (brief.getCreateBy() == null) {
+            brief.setCreateBy(userId);
+            briefMapper.updateById(brief);
+            return;
+        }
+        if (userId.equals(brief.getCreateBy()) || hasCollaboratorPermission(brief.getId(), userId, "manage")) {
+            return;
+        }
+        throw new BusinessException("没有该 Brief 的管理权限");
     }
 
     private void ensureOwner(AiBrief brief) {
@@ -491,12 +570,35 @@ public class BriefServiceImpl implements BriefService {
         }
     }
 
-    private boolean hasCollaboratorPermission(Integer briefId, Integer userId) {
+    private boolean hasCollaboratorPermission(Integer briefId, Integer userId, String... permissions) {
         return collaboratorMapper.selectCount(new LambdaQueryWrapper<AiBriefCollaborator>()
                 .eq(AiBriefCollaborator::getBriefId, briefId)
                 .eq(AiBriefCollaborator::getUserId, userId)
-                .eq(AiBriefCollaborator::getPermission, "edit")
+                .in(AiBriefCollaborator::getPermission, List.of(permissions))
                 .eq(AiBriefCollaborator::getStatus, 1)) > 0;
+    }
+
+    private String normalizeSharePermission(String permission) {
+        if ("edit".equals(permission) || "manage".equals(permission)) {
+            return permission;
+        }
+        return "read";
+    }
+
+    private int permissionRank(String permission) {
+        return switch (normalizeSharePermission(permission)) {
+            case "manage" -> 3;
+            case "edit" -> 2;
+            default -> 1;
+        };
+    }
+
+    private Integer currentUserIdOrNull() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof LoginUser loginUser)) {
+            return null;
+        }
+        return loginUser.getUserId();
     }
 
     private BriefEditRequestVO toEditRequestVO(AiBriefEditRequest request) {
@@ -608,7 +710,8 @@ public class BriefServiceImpl implements BriefService {
             Map.entry("targetAudience", empty(brief.getTargetAudience())),
             Map.entry("targetScene", empty(brief.getTargetScene())),
             Map.entry("otherRequirements", empty(brief.getOtherRequirements())),
-            Map.entry("briefContent", empty(brief.getBriefContent()))
+            Map.entry("briefContent", empty(brief.getBriefContent())),
+            Map.entry("richContent", empty(brief.getRichContent()))
         )));
         version.setChangeNote(changeNote);
         version.setCreateTime(LocalDateTime.now());
@@ -620,7 +723,68 @@ public class BriefServiceImpl implements BriefService {
                 .eq(AiBriefVersion::getBriefId, brief.getId())
                 .orderByDesc(AiBriefVersion::getVersionNo)
                 .orderByDesc(AiBriefVersion::getCreateTime));
-        return BriefConvert.toVO(brief, versions);
+        BriefVO vo = BriefConvert.toVO(brief, versions);
+        vo.setAccessPermission(resolveAccessPermission(brief));
+        return vo;
+    }
+
+    private BriefVO toVOWithVersions(AiBrief brief, String accessPermission) {
+        BriefVO vo = toVOWithVersions(brief);
+        vo.setAccessPermission(normalizeSharePermission(accessPermission));
+        vo.setSharePermission(normalizeSharePermission(accessPermission));
+        return vo;
+    }
+
+    private BriefShareVO toShareVO(AiBriefShareLink shareLink) {
+        BriefShareVO vo = new BriefShareVO();
+        vo.setBriefId(String.valueOf(shareLink.getBriefId()));
+        vo.setShareToken(shareLink.getShareToken());
+        vo.setShareUrl("/brief-share/" + shareLink.getShareToken());
+        vo.setPermission(normalizeSharePermission(shareLink.getPermission()));
+        return vo;
+    }
+
+    private ResolvedShareLink resolveShareLink(String token) {
+        if (!StringUtils.hasText(token)) {
+            throw new BusinessException("分享链接无效");
+        }
+        AiBriefShareLink shareLink = shareLinkMapper.selectOne(new LambdaQueryWrapper<AiBriefShareLink>()
+                .eq(AiBriefShareLink::getShareToken, token)
+                .eq(AiBriefShareLink::getEnabled, 1)
+                .last("LIMIT 1"));
+        if (shareLink != null) {
+            AiBrief brief = briefMapper.selectById(shareLink.getBriefId());
+            if (brief != null && Integer.valueOf(1).equals(brief.getShareEnabled())) {
+                return new ResolvedShareLink(brief, normalizeSharePermission(shareLink.getPermission()));
+            }
+        }
+        AiBrief legacyBrief = briefMapper.selectOne(new LambdaQueryWrapper<AiBrief>()
+                .eq(AiBrief::getShareToken, token)
+                .eq(AiBrief::getShareEnabled, 1)
+                .last("LIMIT 1"));
+        if (legacyBrief == null) {
+            throw new BusinessException("分享链接不存在或已失效");
+        }
+        return new ResolvedShareLink(legacyBrief, normalizeSharePermission(legacyBrief.getSharePermission()));
+    }
+
+    private record ResolvedShareLink(AiBrief brief, String permission) {
+    }
+
+    private String resolveAccessPermission(AiBrief brief) {
+        Integer userId = currentUserIdOrNull();
+        if (userId == null) {
+            return "read";
+        }
+        if (userId.equals(brief.getCreateBy())) {
+            return "manage";
+        }
+        AiBriefCollaborator collaborator = collaboratorMapper.selectOne(new LambdaQueryWrapper<AiBriefCollaborator>()
+                .eq(AiBriefCollaborator::getBriefId, brief.getId())
+                .eq(AiBriefCollaborator::getUserId, userId)
+                .eq(AiBriefCollaborator::getStatus, 1)
+                .last("LIMIT 1"));
+        return collaborator == null ? "read" : normalizeSharePermission(collaborator.getPermission());
     }
 
     private Integer currentTenantId() {

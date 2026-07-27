@@ -3,6 +3,7 @@ import { Edit2, FileText, Plus, RefreshCcw, Save, Trash2 } from 'lucide-react';
 import { systemApi, type PromptTemplate } from '../../api/system';
 import { DEFAULT_PAGE_SIZE, EmptyState, Modal, PageHeader, Pagination, StatusBadge } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
+import { optionalNumberFromInput } from '../../utils/form';
 
 type PromptForm = Partial<PromptTemplate>;
 
@@ -143,7 +144,7 @@ const PromptTemplatesPage = () => {
           <label className="field"><span>模板名称</span><input value={form.templateName || ''} onChange={(e) => setForm({ ...form, templateName: e.target.value })} placeholder="例如：Brief检测与重构Prompt" /></label>
           <label className="field"><span>场景编码</span><input value={form.sceneCode || ''} onChange={(e) => setForm({ ...form, sceneCode: e.target.value })} placeholder="brief_detect" /></label>
           <label className="field"><span>版本</span><input value={form.versionNo || ''} onChange={(e) => setForm({ ...form, versionNo: e.target.value })} placeholder="v1" /></label>
-          <label className="field"><span>状态</span><input type="number" value={form.status ?? 1} onChange={(e) => setForm({ ...form, status: Number(e.target.value) })} placeholder="1启用 / 0禁用" /></label>
+          <label className="field"><span>状态</span><input type="number" value={form.status ?? ''} onChange={(e) => setForm({ ...form, status: optionalNumberFromInput(e.target.value) })} placeholder="1启用 / 0禁用" /></label>
           <label className="field"><span>Provider ID</span><input value={form.providerId || ''} onChange={(e) => setForm({ ...form, providerId: e.target.value })} placeholder="可选" /></label>
         </div>
         <label className="field" style={{ marginTop: 14 }}>

@@ -12,6 +12,7 @@ import lombok.EqualsAndHashCode;
 public class AiScriptTemplate extends TenantBaseEntity {
     private String templateName;
     private String category;
+    private String templateSource;
     private String actor;
     private String people;
     private String popularity;

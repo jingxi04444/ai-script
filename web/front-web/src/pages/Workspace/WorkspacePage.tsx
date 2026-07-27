@@ -70,6 +70,7 @@ const WorkspacePage = () => {
   const activeStepInfo = steps[activeIndex];
   const scriptModeParam = searchParams.get('scriptMode');
   const activeScriptMode = isScriptMode(scriptModeParam) ? scriptModeParam : null;
+  const requestedBriefId = searchParams.get('briefId');
   const workspaceMainClass = [
     'workspace-main',
     activeStep === 'script-generator' ? 'script-workspace-main' : '',
@@ -156,6 +157,12 @@ const WorkspacePage = () => {
       setActiveStep(step);
     }
   }, [activeStep, searchParams, setActiveStep]);
+
+  useEffect(() => {
+    if (searchParams.get('briefDialog') === '1' && searchParams.get('step') === 'selling-points') {
+      setBriefDialog(true);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!activeScriptMode) return;
@@ -358,12 +365,25 @@ const WorkspacePage = () => {
         <BriefDialog
           projectId={projectId}
           ensureProjectId={ensureProjectId}
+          initialBriefId={requestedBriefId}
           onNewProductDraft={() => {
             sellingPointsRef.current?.resetDraft();
             setProductName('');
           }}
+          onApplyBrief={(brief) => {
+            sellingPointsRef.current?.loadBrief(brief);
+            setProductName(brief.productName || brief.name || '');
+          }}
           refreshKey={briefRefreshKey}
-          onClose={() => setBriefDialog(false)}
+          onClose={() => {
+            setBriefDialog(false);
+            if (searchParams.has('briefDialog') || searchParams.has('briefId')) {
+              const nextParams = new URLSearchParams(searchParams);
+              nextParams.delete('briefDialog');
+              nextParams.delete('briefId');
+              setSearchParams(nextParams, { replace: true });
+            }
+          }}
         />
       )}
       {briefDetectionBrief && (

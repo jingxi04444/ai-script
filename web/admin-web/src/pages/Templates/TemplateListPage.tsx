@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Plus, RefreshCcw, Save, Trash2 } from 'lucide-react';
 import { templateApi, type Template } from '../../api/template';
-import { DEFAULT_PAGE_SIZE, EmptyState, Modal, Pagination, StatusBadge } from '../../components/common/AdminUI';
+import { DEFAULT_PAGE_SIZE, EmptyState, Modal, Pagination } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
+import { optionalNumberFromInput } from '../../utils/form';
 import './template-list.css';
 
 type TemplateForm = Partial<Template>;
 
 type ParagraphStructureState = { columns: string[]; rows: string[][] };
+
+const templateCategories = ['全部', '产品介绍', '创意剧情', '活动福利', '测评', '教程'] as const;
 
 const defaultParagraphColumns = ['段落原文', '核心概括', '功能定位'];
 
@@ -56,19 +59,19 @@ const parseParagraphStructure = (value?: string): ParagraphStructureState => {
 
 const serializeParagraphStructure = ({ columns, rows }: ParagraphStructureState) => {
   const safeColumns = columns.length ? columns.map((column, index) => column.trim() || `自定义列${index + 1}`) : ['段落原文'];
-  const validRows = normalizeRows(rows, safeColumns.length).filter((row) => row.some((cell) => cell.trim()));
-  if (!validRows.length) return '';
+  const serializedRows = normalizeRows(rows.length ? rows : [createEmptyParagraphRow(safeColumns.length)], safeColumns.length);
 
   return [
     `| ${safeColumns.map(escapeMarkdownCell).join(' | ')} |`,
     `| ${safeColumns.map(() => '---').join(' | ')} |`,
-    ...validRows.map((row) => `| ${row.map(escapeMarkdownCell).join(' | ')} |`),
+    ...serializedRows.map((row) => `| ${row.map(escapeMarkdownCell).join(' | ')} |`),
   ].join('\n');
 };
 
 const emptyForm: TemplateForm = {
   name: '',
-  category: '',
+  category: '产品介绍',
+  templateSource: '平台模板',
   actor: '',
   people: '',
   popularity: '',
@@ -87,6 +90,7 @@ const emptyForm: TemplateForm = {
 const TemplateListPage = () => {
   const { notify } = useAdminShell();
   const [keyword, setKeyword] = useState('');
+  const [activeCategory, setActiveCategory] = useState<(typeof templateCategories)[number]>('产品介绍');
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -101,7 +105,12 @@ const TemplateListPage = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const data = await templateApi.getList({ page, pageSize, keyword: keyword || undefined });
+      const data = await templateApi.getList({
+        page,
+        pageSize,
+        keyword: keyword || undefined,
+        category: activeCategory === '全部' ? undefined : activeCategory,
+      });
       setTemplates(data.list || []);
       setTotal(data.total || 0);
     } catch {
@@ -115,11 +124,15 @@ const TemplateListPage = () => {
 
   useEffect(() => {
     load();
-  }, [page, pageSize]);
+  }, [page, pageSize, activeCategory]);
 
   const openCreate = () => {
     setEditing(null);
-    setForm({ ...emptyForm, sortOrder: total + 1 });
+    setForm({
+      ...emptyForm,
+      category: activeCategory === '全部' ? '产品介绍' : activeCategory,
+      sortOrder: total + 1,
+    });
     setParagraphStructure(defaultParagraphState());
     setEditorOpen(true);
   };
@@ -203,27 +216,58 @@ const TemplateListPage = () => {
   return (
     <div className="page-stack template-list">
       <div className="toolbar-group">
-        <input className="toolbar-input" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="搜索模板名称 / 分类" />
+        <input
+          className="toolbar-input"
+          value={keyword}
+          onChange={(e) => setKeyword(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return;
+            setPage(1);
+            if (page === 1) load();
+          }}
+          placeholder="搜索模板名称 / 来源 / 标签"
+        />
         <button className="toolbar-btn" type="button" onClick={() => { setPage(1); if (page === 1) load(); }}><RefreshCcw size={16} />刷新</button>
         <button className="toolbar-btn primary" type="button" onClick={openCreate}><Plus size={16} />新增模板</button>
+      </div>
+
+      <div className="template-category-tabs" role="tablist" aria-label="脚本模板分类">
+        {templateCategories.map((category) => (
+          <button
+            className={`template-category-tab${activeCategory === category ? ' active' : ''}`}
+            type="button"
+            role="tab"
+            aria-selected={activeCategory === category}
+            key={category}
+            onClick={() => {
+              setActiveCategory(category);
+              setPage(1);
+            }}
+          >
+            {category}
+          </button>
+        ))}
       </div>
 
       {rows.length ? (
         <>
         <div className="admin-table">
-          <div className="table-head" style={{ gridTemplateColumns: '1.2fr 0.8fr 0.7fr 0.55fr 0.7fr 0.8fr' }}>
-            <span>模板名称</span><span>分类</span><span>演员</span><span>排序序号</span><span>状态</span><span>操作</span>
+          <div className="table-head template-table-grid">
+            <span>序号</span><span>模板来源</span><span>模板名称</span><span>参考链接</span><span>人数</span><span>标签</span><span>操作</span>
           </div>
-          {rows.map((template) => (
-            <div className="table-row" style={{ gridTemplateColumns: '1.2fr 0.8fr 0.7fr 0.55fr 0.7fr 0.8fr' }} key={template.id}>
+          {rows.map((template, index) => (
+            <div className="table-row template-table-grid" key={template.id}>
+              <span>{(page - 1) * pageSize + index + 1}</span>
+              <span>{template.templateSource || '平台模板'}</span>
               <strong>{template.name || '-'}</strong>
-              <span>{template.category || '-'}</span>
-              <span>{template.actor || '-'}</span>
-              <strong>{template.sortOrder ?? 0}</strong>
-              <StatusBadge tone={template.status === 'disabled' ? 'gray' : 'green'}>{template.status || '-'}</StatusBadge>
+              {template.referenceUrl ? (
+                <a className="template-reference-link" href={template.referenceUrl} target="_blank" rel="noreferrer">查看链接</a>
+              ) : <span>-</span>}
+              <span>{template.people || '-'}</span>
+              <span className="template-tag">{template.difficulty || '-'}</span>
               <div className="table-actions">
                 <button className="table-btn" type="button" onClick={() => openEdit(template)}>编辑</button>
-                <button className="table-btn danger" type="button" onClick={() => setDeleteId(template.id)}><Trash2 size={16} /></button>
+                <button className="table-btn danger" type="button" onClick={() => setDeleteId(template.id)}><Trash2 size={15} />删除</button>
               </div>
             </div>
           ))}
@@ -244,12 +288,13 @@ const TemplateListPage = () => {
       >
         <div className="field-grid">
           <label className="field"><span>模板名称</span><input value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
-          <label className="field"><span>分类</span><input value={form.category || ''} onChange={(e) => setForm({ ...form, category: e.target.value })} /></label>
+          <label className="field"><span>分类</span><select value={form.category || '产品介绍'} onChange={(e) => setForm({ ...form, category: e.target.value })}>{templateCategories.filter((category) => category !== '全部').map((category) => <option value={category} key={category}>{category}</option>)}</select></label>
+          <label className="field"><span>模板来源</span><input value={form.templateSource || ''} onChange={(e) => setForm({ ...form, templateSource: e.target.value })} placeholder="例如：平台模板、用户上传、飞书" /></label>
           <label className="field"><span>演员</span><input value={form.actor || ''} onChange={(e) => setForm({ ...form, actor: e.target.value })} /></label>
           <label className="field"><span>人数</span><input value={form.people || ''} onChange={(e) => setForm({ ...form, people: e.target.value })} /></label>
           <label className="field"><span>难度</span><input value={form.popularity || ''} onChange={(e) => setForm({ ...form, popularity: e.target.value })} /></label>
           <label className="field"><span>标签</span><input value={form.difficulty || ''} onChange={(e) => setForm({ ...form, difficulty: e.target.value })} /></label>
-          <label className="field"><span>排序序号</span><input type="number" min="1" value={form.sortOrder ?? 0} onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })} /><small>数字越小越靠前；相同序号按修改时间倒序。</small></label>
+          <label className="field"><span>排序序号</span><input type="number" min="1" value={form.sortOrder ?? ''} onChange={(e) => setForm({ ...form, sortOrder: optionalNumberFromInput(e.target.value) })} /><small>数字越小越靠前；相同序号按修改时间倒序。</small></label>
           <label className="field"><span>URL 链接</span><input value={form.referenceUrl || ''} onChange={(e) => setForm({ ...form, referenceUrl: e.target.value })} placeholder="https://" /></label>
         </div>
         <label className="field" style={{ marginTop: 14 }}>

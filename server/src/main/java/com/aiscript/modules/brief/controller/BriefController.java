@@ -4,6 +4,7 @@ import com.aiscript.common.api.R;
 import com.aiscript.framework.storage.StorageClient;
 import com.aiscript.modules.brief.dto.BriefEditRequestDTO;
 import com.aiscript.modules.brief.dto.BriefSaveDTO;
+import com.aiscript.modules.brief.dto.BriefShareDTO;
 import com.aiscript.modules.brief.service.BriefService;
 import com.aiscript.modules.brief.vo.BriefEditRequestVO;
 import com.aiscript.modules.brief.vo.BriefShareVO;
@@ -80,6 +81,11 @@ public class BriefController {
         return R.ok(briefService.getByShareToken(token));
     }
 
+    @PutMapping("/share/{token}")
+    public R<BriefVO> updateByShareToken(@PathVariable String token, @RequestBody BriefSaveDTO payload) {
+        return R.ok(briefService.updateByShareToken(token, payload));
+    }
+
     @GetMapping("/{id}")
     public R<BriefVO> getById(@PathVariable Integer id) {
         return R.ok(briefService.getById(id));
@@ -96,8 +102,13 @@ public class BriefController {
     }
 
     @PostMapping("/{id}/share")
-    public R<BriefShareVO> enableShare(@PathVariable Integer id) {
-        return R.ok(briefService.enableShare(id));
+    public R<BriefShareVO> enableShare(@PathVariable Integer id, @RequestBody(required = false) BriefShareDTO payload) {
+        return R.ok(briefService.enableShare(id, payload == null ? null : payload.getPermission()));
+    }
+
+    @GetMapping("/{id}/share-links")
+    public R<List<BriefShareVO>> shareLinks(@PathVariable Integer id) {
+        return R.ok(briefService.shareLinks(id));
     }
 
     @PostMapping("/share/{token}/edit-requests")

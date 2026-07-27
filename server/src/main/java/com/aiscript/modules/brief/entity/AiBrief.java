@@ -20,10 +20,12 @@ public class AiBrief extends TenantBaseEntity {
     private String targetScene;
     private String otherRequirements;
     private String briefContent;
+    private String richContent;
     private Integer versionNo;
     private String status;
     private Integer isShared;
     private Integer shareEnabled;
     private String shareToken;
+    private String sharePermission;
     private java.time.LocalDateTime shareTime;
 }

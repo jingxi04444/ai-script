@@ -3,6 +3,7 @@ import { Bot, Plus, RefreshCcw, Trash2 } from 'lucide-react';
 import { providerApi, type Provider } from '../../api/provider';
 import { DEFAULT_PAGE_SIZE, EmptyState, Modal, PageHeader, Pagination, SectionCard, StatusBadge } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
+import { optionalNumberFromInput } from '../../utils/form';
 
 type ThinkingMode = 'default' | 'enabled' | 'disabled';
 type ReasoningEffort = 'default' | 'high' | 'max';
@@ -211,8 +212,8 @@ const ModelsPage = () => {
           <label className="field"><span>类型</span><input value={form.providerType || ''} onChange={(e) => setForm({ ...form, providerType: e.target.value })} placeholder="llm / vision / tts" /></label>
           <label className="field"><span>接口地址</span><input value={form.endpointUrl || ''} onChange={(e) => setForm({ ...form, endpointUrl: e.target.value })} /></label>
           <label className="field"><span>API Key</span><input type="password" value={form.apiKey || ''} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} placeholder={editing?.apiKeyConfigured ? '留空则不更新现有 Key' : '请输入 Provider API Key'} /></label>
-          <label className="field"><span>优先级</span><input type="number" value={form.priority ?? 1} onChange={(e) => setForm({ ...form, priority: Number(e.target.value) })} /></label>
-          <label className="field"><span>状态</span><input type="number" value={form.status ?? 1} onChange={(e) => setForm({ ...form, status: Number(e.target.value) })} placeholder="1 / 0" /></label>
+          <label className="field"><span>优先级</span><input type="number" value={form.priority ?? ''} onChange={(e) => setForm({ ...form, priority: optionalNumberFromInput(e.target.value) })} /></label>
+          <label className="field"><span>状态</span><input type="number" value={form.status ?? ''} onChange={(e) => setForm({ ...form, status: optionalNumberFromInput(e.target.value) })} placeholder="1 / 0" /></label>
           <label className="field"><span>思考模式</span><select value={form.thinkingMode || 'default'} onChange={(e) => setForm({ ...form, thinkingMode: e.target.value as ThinkingMode })}><option value="default">跟随模型默认</option><option value="enabled">开启深度思考</option><option value="disabled">关闭深度思考</option></select></label>
           <label className="field"><span>思考强度</span><select value={form.reasoningEffort || 'default'} onChange={(e) => setForm({ ...form, reasoningEffort: e.target.value as ReasoningEffort })}><option value="default">默认</option><option value="high">High</option><option value="max">Max</option></select></label>
         </div>

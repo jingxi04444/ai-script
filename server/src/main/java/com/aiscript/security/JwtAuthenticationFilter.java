@@ -21,15 +21,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final JwtTokenProvider jwtTokenProvider;
     private final PermissionService permissionService;
     private final TokenBlacklistService tokenBlacklistService;
+    private final SecurityResponseWriter securityResponseWriter;
 
     public JwtAuthenticationFilter(
         JwtTokenProvider jwtTokenProvider,
         PermissionService permissionService,
-        TokenBlacklistService tokenBlacklistService
+        TokenBlacklistService tokenBlacklistService,
+        SecurityResponseWriter securityResponseWriter
     ) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.permissionService = permissionService;
         this.tokenBlacklistService = tokenBlacklistService;
+        this.securityResponseWriter = securityResponseWriter;
     }
 
     @Override
@@ -42,7 +45,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         if (StringUtils.hasText(header) && header.startsWith(SecurityConstants.TOKEN_PREFIX)) {
             String token = header.substring(SecurityConstants.TOKEN_PREFIX.length());
             if (tokenBlacklistService.isRevoked(token)) {
-                filterChain.doFilter(request, response);
+                if (isPublicRequest(request)) {
+                    filterChain.doFilter(request, response);
+                } else {
+                    securityResponseWriter.writeUnauthorized(response, "登录已过期，请重新登录");
+                }
                 return;
             }
             Claims claims;
@@ -51,9 +58,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             } catch (RuntimeException ex) {
                 if (isPublicRequest(request)) {
                     filterChain.doFilter(request, response);
-                    return;
+                } else {
+                    securityResponseWriter.writeUnauthorized(response, "登录已过期，请重新登录");
                 }
-                throw ex;
+                return;
             }
             Integer userId = Integer.valueOf(claims.getSubject());
             Integer tenantId = claims.get("tenantId", Integer.class);

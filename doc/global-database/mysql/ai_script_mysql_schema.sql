@@ -371,11 +371,13 @@ CREATE TABLE ai_brief (
   target_scene TEXT DEFAULT NULL COMMENT '目标场景',
   other_requirements TEXT DEFAULT NULL COMMENT '其他要求',
   brief_content TEXT DEFAULT NULL COMMENT '完整Brief内容',
+  rich_content JSON DEFAULT NULL COMMENT 'Brief各内容区域的富文本显示格式',
   version_no INT NOT NULL DEFAULT 1 COMMENT '当前版本号',
   status VARCHAR(32) NOT NULL DEFAULT 'draft' COMMENT '状态：draft/confirmed',
   is_shared TINYINT NOT NULL DEFAULT 0 COMMENT '是否加入租户共享Brief库',
   share_enabled TINYINT NOT NULL DEFAULT 0 COMMENT '是否开启外部分享',
   share_token VARCHAR(120) DEFAULT NULL COMMENT '外部分享token',
+  share_permission VARCHAR(16) NOT NULL DEFAULT 'read' COMMENT '分享权限：read/edit/manage',
   share_time DATETIME DEFAULT NULL COMMENT '最近开启分享时间',
   create_by INT DEFAULT NULL COMMENT '创建人',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -389,6 +391,25 @@ CREATE TABLE ai_brief (
   KEY idx_ai_brief_tenant_product (tenant_id, product_name),
   KEY idx_ai_brief_tenant_creator (tenant_id, create_by, update_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='产品Brief表';
+
+DROP TABLE IF EXISTS ai_brief_share_link;
+CREATE TABLE ai_brief_share_link (
+  id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  brief_id INT NOT NULL COMMENT 'Brief ID',
+  share_token VARCHAR(120) NOT NULL COMMENT '分享token',
+  permission VARCHAR(16) NOT NULL COMMENT '链接权限：read/edit/manage',
+  enabled TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1有效/0禁用',
+  create_by INT DEFAULT NULL COMMENT '创建人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_ai_brief_share_link_token (share_token),
+  UNIQUE KEY uk_ai_brief_share_link_permission (brief_id, permission),
+  KEY idx_ai_brief_share_link_tenant (tenant_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Brief分权限分享链接表';
 
 DROP TABLE IF EXISTS ai_brief_version;
 CREATE TABLE ai_brief_version (
@@ -413,7 +434,8 @@ CREATE TABLE ai_brief_collaborator (
   tenant_id INT NOT NULL COMMENT '租户ID',
   brief_id INT NOT NULL COMMENT 'Brief ID',
   user_id INT NOT NULL COMMENT '协作者用户ID',
-  permission VARCHAR(32) NOT NULL DEFAULT 'edit' COMMENT '权限：edit',
+  permission VARCHAR(32) NOT NULL DEFAULT 'read' COMMENT '权限：read/edit/manage',
+  permission_source VARCHAR(16) NOT NULL DEFAULT 'link' COMMENT '权限来源：link/approval',
   status TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1有效/0禁用',
   create_by INT DEFAULT NULL COMMENT '创建人',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -609,6 +631,7 @@ CREATE TABLE ai_script_template (
   tenant_id INT DEFAULT NULL COMMENT '租户ID，NULL表示平台模板',
   template_name VARCHAR(160) NOT NULL COMMENT '模板名称',
   category VARCHAR(80) DEFAULT NULL COMMENT '分类',
+  template_source VARCHAR(120) DEFAULT '平台模板' COMMENT '模板来源',
   actor VARCHAR(80) DEFAULT NULL COMMENT '演员',
   people VARCHAR(80) DEFAULT NULL COMMENT '人数',
   popularity VARCHAR(40) DEFAULT NULL COMMENT '人气',

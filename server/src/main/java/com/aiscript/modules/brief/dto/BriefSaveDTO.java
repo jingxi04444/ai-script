@@ -15,6 +15,7 @@ public class BriefSaveDTO {
     private String targetScene;
     private String otherRequirements;
     private String briefContent;
+    private String richContent;
     private Integer isShared;
     private Integer shareEnabled;
     private Boolean forceNewVersion;

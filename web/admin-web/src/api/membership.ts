@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ApiResponse } from './index';
+import { handleAdminAuthFailure, type ApiResponse } from './index';
 
 export interface MembershipPlan {
   id: string;
@@ -24,15 +24,22 @@ membershipHttp.interceptors.request.use((config) => {
   return config;
 });
 
-membershipHttp.interceptors.response.use((response) => {
-  const payload = response.data;
-  if (payload && typeof payload === 'object' && 'code' in payload) {
-    const apiResponse = payload as ApiResponse<unknown>;
-    if (apiResponse.code === 0) return apiResponse.data;
-    return Promise.reject(apiResponse);
+membershipHttp.interceptors.response.use(
+  (response) => {
+    const payload = response.data;
+    if (payload && typeof payload === 'object' && 'code' in payload) {
+      const apiResponse = payload as ApiResponse<unknown>;
+      if (apiResponse.code === 0) return apiResponse.data;
+      handleAdminAuthFailure(apiResponse, response.config.url);
+      return Promise.reject(apiResponse);
+    }
+    return payload;
+  },
+  (error) => {
+    handleAdminAuthFailure(error, error.config?.url);
+    return Promise.reject(error.response?.data || error);
   }
-  return payload;
-});
+);
 
 export const membershipApi = {
   getPlans: (): Promise<MembershipPlan[]> => membershipHttp.get('/membership/plans'),

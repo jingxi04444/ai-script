@@ -330,6 +330,61 @@
   font-size: 20px;
 }
 
+.storyboard-script-name-button {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #f4f7f7;
+  font-size: 15px;
+  font-weight: 850;
+  text-align: left;
+}
+
+.storyboard-script-name-button span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.storyboard-script-name-button .anticon:first-child {
+  flex: 0 0 auto;
+  color: #48e873;
+  font-size: 20px;
+}
+
+.storyboard-script-name-button .anticon:last-child {
+  flex: 0 0 auto;
+  color: #8f9a9f;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity 0.18s ease, color 0.18s ease;
+}
+
+.storyboard-script-name-button:hover .anticon:last-child {
+  color: #89ef6e;
+  opacity: 1;
+}
+
+.storyboard-script-name-input {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid rgba(116, 255, 120, 0.48);
+  border-radius: 8px;
+  outline: none;
+  background: #111516;
+  color: #f4f7f7;
+  font-size: 15px;
+  font-weight: 800;
+}
+
 .script-type,
 .script-status {
   width: fit-content;
@@ -1017,6 +1072,50 @@
 .storyboard-preview-table col.storyboard-column-action { width: 160px; }
 .storyboard-preview-table col.storyboard-column-dialogue { width: 300px; }
 .storyboard-preview-table col.storyboard-column-audio { width: 150px; }
+
+.storyboard-preview-table.is-five-column {
+  min-width: 0;
+}
+
+.storyboard-preview-table.is-five-column col.storyboard-column-dialogue { width: 20%; }
+.storyboard-preview-table.is-five-column col.storyboard-column-visual { width: 30%; }
+.storyboard-preview-table.is-five-column col.storyboard-column-duration { width: 72px; }
+.storyboard-preview-table.is-five-column col.storyboard-column-selling-point { width: 20%; }
+.storyboard-preview-table.is-five-column col.storyboard-column-note { width: calc(30% - 72px); }
+
+.storyboard-preview-title-control {
+  min-width: 0;
+  max-width: min(42vw, 620px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.storyboard-preview-title-control h2 {
+  max-width: none;
+}
+
+.storyboard-preview-title-control input {
+  width: min(42vw, 620px);
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(116, 255, 120, 0.48);
+  border-radius: 8px;
+  outline: none;
+  background: #111516;
+  color: #f4f7f7;
+  font-size: 18px;
+  font-weight: 850;
+}
+
+.script-output-head .storyboard-preview-title-control button {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+}
 
 .script-storyboard-table.storyboard-preview-table th.storyboard-column-duration {
   text-align: left;

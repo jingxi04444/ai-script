@@ -57,6 +57,7 @@ export interface GenerateScriptParams {
   productFrame?: string;
   productImage?: string;
   productFrameFileName?: string;
+  productFrameContent?: string;
 }
 
 export type ScriptPolishRole = 'user' | 'assistant';

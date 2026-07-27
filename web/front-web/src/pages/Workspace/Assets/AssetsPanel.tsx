@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { message, Upload } from 'antd';
-import { DeleteOutlined, PlusOutlined, ReloadOutlined, UploadOutlined } from '@ant-design/icons';
+import { DeleteOutlined, FileTextOutlined, FormOutlined, PlusOutlined, ReloadOutlined, RightOutlined, UploadOutlined } from '@ant-design/icons';
+import { useNavigate } from 'react-router-dom';
 import { assetApi, fileApi } from '../../../api/asset';
+import { briefApi } from '../../../api/brief';
+import { scriptApi } from '../../../api/script';
 import type { Asset, SellingPointAsset, ViralAsset } from '../../../types/asset';
+import type { Brief } from '../../../types/brief';
+import type { Script } from '../../../types/script';
+import { formatDateTime } from '../../../utils/format';
 import './assets-panel.css';
 
 interface AssetsPanelProps {
@@ -11,9 +17,12 @@ interface AssetsPanelProps {
 }
 
 const AssetsPanel = ({ projectId, ensureProjectId }: AssetsPanelProps) => {
+  const navigate = useNavigate();
   const [assets, setAssets] = useState<Asset[]>([]);
   const [sellingPoints, setSellingPoints] = useState<SellingPointAsset[]>([]);
   const [viralAssets, setViralAssets] = useState<ViralAsset[]>([]);
+  const [briefs, setBriefs] = useState<Brief[]>([]);
+  const [scripts, setScripts] = useState<Script[]>([]);
   const [assetName, setAssetName] = useState('');
   const [assetCategory, setAssetCategory] = useState('image');
   const [sellingPointName, setSellingPointName] = useState('');
@@ -25,14 +34,18 @@ const AssetsPanel = ({ projectId, ensureProjectId }: AssetsPanelProps) => {
   const loadAssets = useCallback(async () => {
     setLoading(true);
     try {
-      const [assetPage, pointPage, viralPage] = await Promise.all([
+      const [assetPage, pointPage, viralPage, briefList, scriptList] = await Promise.all([
         assetApi.list({ projectId: projectId || undefined, page: 1, pageSize: 20 }),
         assetApi.sellingPoints({ page: 1, pageSize: 8 }),
         assetApi.viralAssets({ page: 1, pageSize: 8 }),
+        briefApi.mineList(),
+        scriptApi.mineList(),
       ]);
       setAssets(assetPage.list || []);
       setSellingPoints(pointPage.list || []);
       setViralAssets(viralPage.list || []);
+      setBriefs(briefList || []);
+      setScripts(scriptList || []);
     } catch {
       message.error('资产数据加载失败');
     } finally {
@@ -107,17 +120,79 @@ const AssetsPanel = ({ projectId, ensureProjectId }: AssetsPanelProps) => {
     }
   };
 
+  const openBrief = (briefId: string) => {
+    const params = new URLSearchParams({
+      step: 'selling-points',
+      briefId,
+      briefDialog: '1',
+    });
+    if (projectId) params.set('projectId', projectId);
+    navigate(`/workspace?${params.toString()}`);
+  };
+
+  const openScript = (script: Script) => {
+    const params = new URLSearchParams({
+      projectId: script.projectId,
+      step: 'script-generator',
+      scriptMode: script.type,
+      editScriptId: script.id,
+    });
+    navigate(`/workspace?${params.toString()}`);
+  };
+
   return (
     <section className="assets-panel">
       <header className="workspace-panel-head">
         <div>
           <h2>资产管理</h2>
-          <p>管理项目素材、卖点资产和爆款脚本资产。</p>
+          <p>统一查看并调用账号下全部 Brief、脚本及其他创作资产。</p>
         </div>
         <button onClick={loadAssets} disabled={loading}><ReloadOutlined />刷新</button>
       </header>
 
       <div className="assets-grid">
+        <section className="asset-block asset-library-block">
+          <div className="asset-block-title">
+            <h3><FormOutlined />Brief 资产库</h3>
+            <span>{briefs.length} 份</span>
+          </div>
+          <p className="asset-block-description">包含我创建和别人共享给我的 Brief，内容更新会同步显示。</p>
+          <div className="asset-library-list">
+            {briefs.map((brief) => (
+              <button className="asset-library-link" type="button" key={brief.id} onClick={() => openBrief(brief.id)}>
+                <span className="asset-library-icon"><FormOutlined /></span>
+                <span className="asset-library-content">
+                  <strong>{brief.productName || brief.name || '未命名 Brief'}</strong>
+                  <small>{brief.productModel || `更新于 ${formatDateTime(brief.updatedAt)}`}</small>
+                </span>
+                <RightOutlined />
+              </button>
+            ))}
+            {!briefs.length && <p className="empty-hint">暂无 Brief</p>}
+          </div>
+        </section>
+
+        <section className="asset-block asset-library-block">
+          <div className="asset-block-title">
+            <h3><FileTextOutlined />脚本资产库</h3>
+            <span>{scripts.length} 篇</span>
+          </div>
+          <p className="asset-block-description">汇总账号下全部脚本，点击即可打开预览并继续处理。</p>
+          <div className="asset-library-list">
+            {scripts.map((script) => (
+              <button className="asset-library-link" type="button" key={script.id} onClick={() => openScript(script)}>
+                <span className="asset-library-icon"><FileTextOutlined /></span>
+                <span className="asset-library-content">
+                  <strong>{script.name || '未命名脚本'}</strong>
+                  <small>{script.type} · {formatDateTime(script.updatedAt)}</small>
+                </span>
+                <RightOutlined />
+              </button>
+            ))}
+            {!scripts.length && <p className="empty-hint">暂无脚本</p>}
+          </div>
+        </section>
+
         <section className="asset-block asset-upload-block">
           <h3>项目素材</h3>
           <div className="asset-form-row">

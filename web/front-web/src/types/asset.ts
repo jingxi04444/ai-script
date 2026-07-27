@@ -64,6 +64,7 @@ export interface FileUploadResult {
   fileName?: string;
   contentType?: string;
   size?: number;
+  extractedText?: string;
 }
 
 export type AssetPage = PaginatedResponse<Asset>;

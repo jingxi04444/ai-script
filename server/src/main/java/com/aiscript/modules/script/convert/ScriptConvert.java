@@ -27,6 +27,7 @@ public final class ScriptConvert {
         vo.setId(String.valueOf(template.getId()));
         vo.setName(template.getTemplateName());
         vo.setCategory(template.getCategory());
+        vo.setTemplateSource(template.getTemplateSource());
         vo.setActor(template.getActor());
         vo.setPeople(template.getPeople());
         vo.setPopularity(template.getPopularity());

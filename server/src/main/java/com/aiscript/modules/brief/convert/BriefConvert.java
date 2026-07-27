@@ -25,7 +25,11 @@ public final class BriefConvert {
         vo.setName(productName);
         vo.setProjectId(String.valueOf(brief.getProjectId()));
         vo.setVersions(versionVOs);
-        vo.setUpdatedAt(brief.getUpdateTime() == null ? null : brief.getUpdateTime().toString());
+        vo.setUpdatedAt(
+            versionVOs.isEmpty() || versionVOs.get(0).getCreatedAt() == null
+                ? (brief.getUpdateTime() == null ? null : brief.getUpdateTime().toString())
+                : versionVOs.get(0).getCreatedAt()
+        );
         vo.setProductName(productName);
         vo.setProductModel(brief.getProductModel());
         vo.setPrice(brief.getPrice());
@@ -35,9 +39,11 @@ public final class BriefConvert {
         vo.setTargetScene(brief.getTargetScene());
         vo.setOtherRequirements(brief.getOtherRequirements());
         vo.setBriefContent(brief.getBriefContent());
+        vo.setRichContent(brief.getRichContent());
         vo.setIsShared(brief.getIsShared());
         vo.setShareEnabled(brief.getShareEnabled());
         vo.setShareToken(brief.getShareToken());
+        vo.setSharePermission(brief.getSharePermission() == null ? "read" : brief.getSharePermission());
         if (brief.getShareToken() != null) {
             vo.setShareUrl("/brief-share/" + brief.getShareToken());
         }
@@ -49,7 +55,11 @@ public final class BriefConvert {
         version.setId(String.valueOf(brief.getId()) + "-v" + brief.getVersionNo());
         version.setLabel("v" + (brief.getVersionNo() == null ? 1 : brief.getVersionNo()) + ".0");
         version.setContent(brief.getBriefContent());
-        version.setCreatedAt(brief.getCreateTime() == null ? null : brief.getCreateTime().toString());
+        version.setCreatedAt(
+            brief.getUpdateTime() != null
+                ? brief.getUpdateTime().toString()
+                : (brief.getCreateTime() == null ? null : brief.getCreateTime().toString())
+        );
         return version;
     }
 

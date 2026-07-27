@@ -48,6 +48,8 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [preview, setPreview] = useState<Script | null>(null);
+  const [renamingScriptId, setRenamingScriptId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
   const pageSize = viewMode === 'card' ? 6 : 10;
 
   useEffect(() => {
@@ -122,6 +124,30 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
     message.success('脚本内容已复制');
   };
 
+  const startRenameScript = (id: string, name: string) => {
+    setRenamingScriptId(id);
+    setRenameDraft(name);
+  };
+
+  const saveRenamedScript = async (id: string, previousName: string) => {
+    if (renamingScriptId !== id) return;
+    const nextName = renameDraft.trim();
+    if (!nextName) {
+      message.warning('脚本名称不能为空');
+      return;
+    }
+    setRenamingScriptId(null);
+    if (nextName === previousName) return;
+    try {
+      const updated = await scriptApi.update(id, { name: nextName });
+      setScripts((items) => items.map((item) => item.id === id ? { ...item, ...updated, name: nextName } : item));
+      setPreview((item) => item?.id === id ? { ...item, ...updated, name: nextName } : item);
+      message.success('脚本名称已修改');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '脚本名称修改失败');
+    }
+  };
+
   const previewText = preview?.content?.trim() || '';
   const previewTableLines = previewText.split('\n').map((line) => line.trim()).filter((line) => line.startsWith('|') && line.endsWith('|'));
   const previewHasStoryboardTable = previewTableLines.length >= 3 && /镜头|画面|口播|字幕|运镜|时长/.test(previewTableLines[0]);
@@ -156,7 +182,10 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
       ? Number.parseFloat(previewSummaryRow.cells[previewDurationIndex]) || 0
       : previewRows.reduce((total, row) => total + (Number.parseFloat(row.cells[previewDurationIndex]) || 0), 0)
     : 0;
-  const previewCellText = (value = '') => value.replace(/<br\s*\/?>/gi, '\n').replace(/^\*\*(.*?)\*\*$/, '$1').trim() || '-';
+  const previewCellText = (value = '', isDuration = false) => {
+    const normalized = value.replace(/<br\s*\/?>/gi, '\n').replace(/^\*\*(.*?)\*\*$/, '$1').trim() || '-';
+    return isDuration ? normalized.replace(/\s*(?:s|秒)\s*$/i, '').trim() : normalized;
+  };
   const previewColumnClass = (header: string) => {
     if (/画面|场景描述/.test(header)) return 'storyboard-column-visual';
     if (/镜号|镜头编号|^镜头$/.test(header)) return 'storyboard-column-shot';
@@ -243,7 +272,30 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
             </div>
             {paginatedItems.length ? paginatedItems.map((item) => (
               <article className="storyboard-table-row" key={item.id}>
-                <strong><FileTextOutlined />{item.name}</strong>
+                {renamingScriptId === item.id ? (
+                  <input
+                    autoFocus
+                    className="storyboard-script-name-input"
+                    value={renameDraft}
+                    maxLength={100}
+                    onChange={(event) => setRenameDraft(event.target.value)}
+                    onBlur={() => saveRenamedScript(item.id, item.name)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        event.currentTarget.blur();
+                      }
+                      if (event.key === 'Escape') {
+                        setRenamingScriptId(null);
+                        setRenameDraft(item.name);
+                      }
+                    }}
+                  />
+                ) : (
+                  <button type="button" className="storyboard-script-name-button" title="点击修改脚本名称" onClick={() => startRenameScript(item.id, item.name)}>
+                    <FileTextOutlined /><span>{item.name}</span><EditOutlined />
+                  </button>
+                )}
                 <em className={`script-type ${item.typeTone}`}>{item.type}</em>
                 <time>{formatDateTime(item.updatedAt)}</time>
                 <i className={`script-status ${item.statusTone}`}>{item.status}</i>
@@ -308,7 +360,33 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
             <header className="script-output-head">
               <div className="script-output-heading">
                 <span>{preview.type === 'viral' ? '爆款复刻' : preview.type === 'template' ? '模板脚本' : '原创脚本'}</span>
-                <h2 id="storyboard-preview-title">{preview.name}</h2>
+                <div className="storyboard-preview-title-control">
+                  {renamingScriptId === preview.id ? (
+                    <input
+                      autoFocus
+                      value={renameDraft}
+                      maxLength={100}
+                      aria-label="修改脚本名称"
+                      onChange={(event) => setRenameDraft(event.target.value)}
+                      onBlur={() => saveRenamedScript(preview.id, preview.name)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          event.currentTarget.blur();
+                        }
+                        if (event.key === 'Escape') {
+                          setRenamingScriptId(null);
+                          setRenameDraft(preview.name);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <>
+                      <h2 id="storyboard-preview-title">{preview.name}</h2>
+                      <button type="button" aria-label="修改脚本名称" onClick={() => startRenameScript(preview.id, preview.name)}><EditOutlined /></button>
+                    </>
+                  )}
+                </div>
                 <div className="script-output-meta">
                   {previewDuration > 0 && <em>{previewDuration} 秒</em>}
                   <em>分镜脚本表</em>
@@ -329,12 +407,12 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
                   {previewRows.length ? (
                     <section className="script-output-block script-storyboard-block">
                       <div className="script-storyboard-table-wrap">
-                        <table className="script-storyboard-table storyboard-preview-table">
+                        <table className={`script-storyboard-table storyboard-preview-table ${previewHeaders.length === 5 ? 'is-five-column' : ''}`}>
                           <colgroup>{previewHeaders.map((header) => <col key={header} className={previewColumnClass(header)} />)}</colgroup>
                           <thead><tr>{previewHeaders.map((header) => <th key={header} className={previewColumnClass(header)}>{/时长/.test(header) ? '时长(s)' : header}</th>)}</tr></thead>
                           <tbody>{previewRows.map((row) => (
                             <tr key={row.key}>{previewHeaders.map((header, index) => (
-                              <td key={`${row.key}-${header}`} className={previewColumnClass(header)}><span className="storyboard-cell-content">{previewCellText(row.cells[index])}</span></td>
+                              <td key={`${row.key}-${header}`} className={previewColumnClass(header)}><span className="storyboard-cell-content">{previewCellText(row.cells[index], /时长/.test(header))}</span></td>
                             ))}</tr>
                           ))}</tbody>
                         </table>

@@ -1518,6 +1518,40 @@
   white-space: nowrap;
 }
 
+.script-output-title-control {
+  min-width: 0;
+  max-width: min(42vw, 620px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.script-output-title-control h2 {
+  max-width: none;
+}
+
+.script-output-title-control input {
+  width: min(42vw, 620px);
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(116, 255, 120, 0.48);
+  border-radius: 8px;
+  outline: none;
+  background: #111516;
+  color: #f4f7f7;
+  font-size: 18px;
+  font-weight: 850;
+}
+
+.script-output-head .script-output-title-control .script-output-title-edit {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+}
+
 .script-output-meta {
   flex: 0 0 auto;
   display: flex;
@@ -1779,6 +1813,11 @@
 }
 
 .script-storyboard-table td:first-child {
+  color: #cbd5d8;
+  font-weight: 400;
+}
+
+.script-storyboard-table td.storyboard-column-shot {
   color: #89ef6e;
   font-weight: 950;
 }
@@ -1797,6 +1836,12 @@
 .script-storyboard-table.is-four-column col.storyboard-column-visual { width: calc(44% - 77px); }
 .script-storyboard-table.is-four-column col.storyboard-column-duration { width: 82px; }
 .script-storyboard-table.is-four-column col.storyboard-column-note { width: 72px; }
+
+.script-storyboard-table.is-five-column col.storyboard-column-dialogue { width: 23%; }
+.script-storyboard-table.is-five-column col.storyboard-column-visual { width: 30%; }
+.script-storyboard-table.is-five-column col.storyboard-column-duration { width: 72px; }
+.script-storyboard-table.is-five-column col.storyboard-column-selling-point { width: 20%; }
+.script-storyboard-table.is-five-column col.storyboard-column-note { width: calc(27% - 72px); }
 
 .storyboard-cell-content {
   display: block;
@@ -1817,11 +1862,17 @@
 }
 
 .script-storyboard-table th.storyboard-column-duration {
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
   text-align: center;
   white-space: nowrap;
 }
 
 .script-storyboard-table td.storyboard-column-duration {
+  width: 72px;
+  min-width: 72px;
+  max-width: 72px;
   text-align: center;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;

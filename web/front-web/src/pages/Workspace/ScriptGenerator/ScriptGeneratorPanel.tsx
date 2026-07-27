@@ -45,6 +45,7 @@ interface ProductFrameUploadState {
   url?: string;
   fileName?: string;
   objectKey?: string;
+  extractedText?: string;
 }
 
 type TemplateCategory = '产品介绍' | '创意剧情' | '活动福利' | '测评' | '教程';
@@ -56,6 +57,14 @@ interface OriginalScenarioPrompt {
   prompt: string;
   subtitle?: string;
   tag?: string;
+}
+
+interface OriginalScenarioCategory {
+  id: string;
+  title: string;
+  subtitle?: string;
+  prompt: string;
+  children: OriginalScenarioPrompt[];
 }
 
 const fallbackFormatOptions: ScriptFormatOption[] = [
@@ -146,21 +155,61 @@ const fallbackOriginalScenarioPrompts: OriginalScenarioPrompt[] = [
   },
 ];
 
-const parseOriginalScenarioPrompts = (value?: string): OriginalScenarioPrompt[] => {
-  if (!value?.trim()) return fallbackOriginalScenarioPrompts;
+const fallbackOriginalScenarioCategories: OriginalScenarioCategory[] = [
+  {
+    id: 'ecommerce',
+    title: '电商',
+    subtitle: '突出首屏卖点与转化钩子',
+    prompt: '请创作以电商转化为目标的短视频脚本，突出产品核心价值、视觉吸引力、使用场景和清晰的下单理由。',
+    children: fallbackOriginalScenarioPrompts.filter((item) => ['main-image', 'product-overview', 'product-intro', 'guide'].includes(item.id)),
+  },
+  {
+    id: 'unboxing-category',
+    title: '产品开箱',
+    subtitle: '开箱细节、上手体验和惊喜感',
+    prompt: '请从真实开箱和首次体验出发创作脚本，呈现拆封过程、产品细节、上手感受和逐步揭晓的惊喜。',
+    children: fallbackOriginalScenarioPrompts.filter((item) => ['unboxing', 'unboxing-oral', 'review'].includes(item.id)),
+  },
+  {
+    id: 'pain-point-category',
+    title: '人群痛点产品介绍',
+    subtitle: '先讲真实困扰，再给解决方案',
+    prompt: '请围绕目标人群的真实困扰创作产品介绍脚本，先建立痛点共鸣，再自然说明产品如何解决问题并带来改变。',
+    children: fallbackOriginalScenarioPrompts.filter((item) => ['pain-point', 'vlog', 'desire'].includes(item.id)),
+  },
+];
+
+const combineOriginalPrompts = (category?: OriginalScenarioCategory, child?: OriginalScenarioPrompt) =>
+  [category?.prompt.trim(), child?.prompt.trim()].filter(Boolean).join('\n\n');
+
+const parseOriginalScenarioPrompts = (value?: string): OriginalScenarioCategory[] => {
+  if (!value?.trim()) return fallbackOriginalScenarioCategories;
   try {
-    const parsed = JSON.parse(value) as OriginalScenarioPrompt[];
-    const list = Array.isArray(parsed)
-      ? parsed.filter((item) => item?.id && item?.title && item?.prompt)
-        .map((item) => {
-          const fallbackItem = fallbackOriginalScenarioPrompts.find((fallback) => fallback.id === item.id);
-          return { ...item, subtitle: item.subtitle ?? fallbackItem?.subtitle, tag: item.tag ?? fallbackItem?.tag };
-        })
-      : [];
-    if (!list.length) return fallbackOriginalScenarioPrompts;
-    return list;
+    const parsed = JSON.parse(value) as Array<OriginalScenarioCategory | OriginalScenarioPrompt>;
+    if (!Array.isArray(parsed) || !parsed.length) return fallbackOriginalScenarioCategories;
+    if ('children' in parsed[0]) {
+      const categories = (parsed as OriginalScenarioCategory[])
+        .filter((item) => item?.id && item?.title && item?.prompt && Array.isArray(item.children))
+        .map((item) => ({
+          ...item,
+          children: item.children.filter((child) => child?.id && child?.title && child?.prompt),
+        }))
+        .filter((item) => item.children.length);
+      return categories.length ? categories : fallbackOriginalScenarioCategories;
+    }
+
+    const legacyItems = (parsed as OriginalScenarioPrompt[]).filter((item) => item?.id && item?.title && item?.prompt);
+    const legacyById = new Map(legacyItems.map((item) => [item.id, item]));
+    const knownIds = new Set(fallbackOriginalScenarioPrompts.map((item) => item.id));
+    return fallbackOriginalScenarioCategories.map((category, index) => ({
+      ...category,
+      children: [
+        ...category.children.map((child) => legacyById.get(child.id) || child),
+        ...(index === 0 ? legacyItems.filter((item) => !knownIds.has(item.id)) : []),
+      ],
+    }));
   } catch {
-    return fallbackOriginalScenarioPrompts;
+    return fallbackOriginalScenarioCategories;
   }
 };
 
@@ -328,6 +377,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   const activeModeParam = searchParams.get('scriptMode');
   const activeMode = isScriptMode(activeModeParam) ? activeModeParam : null;
   const editScriptId = searchParams.get('editScriptId');
+  const briefIdParam = searchParams.get('briefId');
   const [analysisMode, setAnalysisMode] = useState<'simple' | 'deep'>('simple');
   const [selectedTemplate, setSelectedTemplate] = useState(templateCards[0].id);
   const [category, setCategory] = useState('全部');
@@ -335,7 +385,8 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   const [templateSearch, setTemplateSearch] = useState('');
   const [templatePage, setTemplatePage] = useState(1);
   const [prompt, setPrompt] = useState('');
-  const [selectedOriginalScenario, setSelectedOriginalScenario] = useState<string>(fallbackOriginalScenarioPrompts[0].id);
+  const [selectedOriginalCategory, setSelectedOriginalCategory] = useState<string>(fallbackOriginalScenarioCategories[0].id);
+  const [selectedOriginalScenario, setSelectedOriginalScenario] = useState<string>(fallbackOriginalScenarioCategories[0].children[0].id);
   const [referenceUrl, setReferenceUrl] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [isAnalyzingCopy, setIsAnalyzingCopy] = useState(false);
@@ -346,6 +397,8 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   const [isAnalysisEditing, setIsAnalysisEditing] = useState(false);
   const [isStructureEditing, setIsStructureEditing] = useState(false);
   const [currentScript, setCurrentScript] = useState<Script | null>(null);
+  const [isEditingScriptName, setIsEditingScriptName] = useState(false);
+  const [scriptNameDraft, setScriptNameDraft] = useState('');
   const [resultDialogOpen, setResultDialogOpen] = useState(false);
   const [originalScriptContent, setOriginalScriptContent] = useState('');
   const [polishInput, setPolishInput] = useState('');
@@ -439,12 +492,14 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   }, []);
 
   useEffect(() => {
-    if (!projectId) return;
-    briefApi.getList(projectId).then((list) => {
+    briefApi.mineList().then((list) => {
       setBriefs(list);
-      setSelectedBriefId((current) => current || list[0]?.id);
+      setSelectedBriefId((current) => {
+        if (briefIdParam && list.some((brief) => brief.id === briefIdParam)) return briefIdParam;
+        return current && list.some((brief) => brief.id === current) ? current : list[0]?.id;
+      });
     }).catch(() => message.warning('Brief 列表加载失败'));
-  }, [projectId]);
+  }, [briefIdParam]);
 
   useEffect(() => {
     if (!editScriptId) return;
@@ -462,14 +517,15 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
 
   useEffect(() => {
     if (activeMode !== 'original') return;
-    const scenario = originalScenarioOptions.find((item) => item.id === selectedOriginalScenario) || originalScenarioOptions[0];
+    const category = originalScenarioCategories.find((item) => item.id === selectedOriginalCategory)
+      || originalScenarioCategories[0];
+    if (!category) return;
+    const scenario = category.children.find((item) => item.id === selectedOriginalScenario)
+      || category.children[0];
     if (!scenario) return;
-    if (scenario.id !== selectedOriginalScenario) {
-      setSelectedOriginalScenario(scenario.id);
-      setPrompt(scenario.prompt);
-    } else if (!prompt.trim()) {
-      setPrompt(scenario.prompt);
-    }
+    if (category.id !== selectedOriginalCategory) setSelectedOriginalCategory(category.id);
+    if (scenario.id !== selectedOriginalScenario) setSelectedOriginalScenario(scenario.id);
+    setPrompt(combineOriginalPrompts(category, scenario));
   }, [activeMode, siteConfig.originalScenarioPrompts]);
 
   const handleModeSelect = (nextMode: ScriptMode) => {
@@ -518,9 +574,12 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     label: `${brief.productName || brief.name}${brief.versions?.[0]?.label ? ` ${brief.versions[0].label}` : ''}`,
   }));
   const formatOptions = scriptFormats.map((item) => ({ value: item.code, label: item.name }));
-  const originalScenarioOptions = parseOriginalScenarioPrompts(siteConfig.originalScenarioPrompts);
-  const visibleOriginalScenarioCards = originalScenarioOptions.slice(0, 3);
-  const originalScenarioSelectOptions = originalScenarioOptions.map((item) => ({ value: item.id, label: item.title }));
+  const originalScenarioCategories = parseOriginalScenarioPrompts(siteConfig.originalScenarioPrompts);
+  const visibleOriginalScenarioCards = originalScenarioCategories.slice(0, 3);
+  const currentOriginalCategory = originalScenarioCategories.find((item) => item.id === selectedOriginalCategory)
+    || originalScenarioCategories[0];
+  const originalScenarioSelectOptions = (currentOriginalCategory?.children || [])
+    .map((item) => ({ value: item.id, label: item.title }));
   const generationStage = generationElapsed < 10
     ? '正在整理产品 Brief、模板和创作要求'
     : generationElapsed < 30
@@ -653,22 +712,33 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     );
   };
 
-  const renderProductFrameUpload = (className: string, label: string) => (
+  const renderProductFrameUpload = (className: string, label: string, allowTable = true) => (
     <label className={className}>
       <span>{label}</span>
-      <Upload accept="image/*" beforeUpload={handleProductFrameUpload} showUploadList={false} disabled={isProductFrameUploading}>
+      <Upload
+        accept={allowTable ? 'image/*,.xls,.xlsx,.csv' : 'image/*'}
+        beforeUpload={(file) => handleProductFrameUpload(file, allowTable)}
+        showUploadList={false}
+        disabled={isProductFrameUploading}
+      >
         <button type="button" disabled={isProductFrameUploading}>
           <UploadOutlined />
           <strong>{isProductFrameUploading ? '上传中...' : productFrame?.fileName || '上传画面'}</strong>
-          <small>{productFrame?.url ? '已上传，可用于脚本生成' : '支持 JPG / PNG'}</small>
+          <small>
+            {productFrame?.url
+              ? productFrame.extractedText ? '表格已解析，可用于脚本生成' : '已上传，可用于脚本生成'
+              : allowTable ? '支持 JPG / PNG / XLS / XLSX / CSV' : '支持 JPG / PNG'}
+          </small>
         </button>
       </Upload>
     </label>
   );
 
-  const handleProductFrameUpload = async (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      message.warning('请上传 JPG / PNG 等图片文件');
+  const handleProductFrameUpload = async (file: File, allowTable = false) => {
+    const isImage = file.type.startsWith('image/');
+    const isTable = /\.(xls|xlsx|csv)$/i.test(file.name);
+    if (!isImage && !(allowTable && isTable)) {
+      message.warning(allowTable ? '请上传 JPG、PNG、XLS、XLSX 或 CSV 文件' : '请上传 JPG / PNG 等图片文件');
       return Upload.LIST_IGNORE;
     }
     setIsProductFrameUploading(true);
@@ -678,8 +748,9 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
         url: result.url,
         fileName: result.fileName || file.name,
         objectKey: result.objectKey,
+        extractedText: result.extractedText,
       });
-      message.success('产品画面上传成功');
+      message.success(isTable ? '画面表格上传并解析成功' : '产品画面上传成功');
     } catch (error) {
       setProductFrame({ fileName: file.name });
       message.error(error instanceof Error ? error.message : '产品画面上传失败，已保留文件名');
@@ -814,6 +885,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
         productFrame: productFrame?.url || productFrame?.fileName,
         productImage: productFrame?.url,
         productFrameFileName: productFrame?.fileName,
+        productFrameContent: productFrame?.extractedText,
         referenceCopy: type === 'viral' ? analysisText.trim() : '',
         structureAnalysis: type === 'viral' ? resolvedStructureText : '',
         prompt,
@@ -833,6 +905,32 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     if (!currentScript) return message.warning('请先生成脚本');
     await scriptApi.update(currentScript.id, currentScript);
     message.success('脚本已保存');
+  };
+
+  const startEditingScriptName = () => {
+    if (!currentScript) return;
+    setScriptNameDraft(currentScript.name);
+    setIsEditingScriptName(true);
+  };
+
+  const saveScriptName = async () => {
+    if (!currentScript || !isEditingScriptName) return;
+    const nextName = scriptNameDraft.trim();
+    if (!nextName) {
+      message.warning('脚本名称不能为空');
+      return;
+    }
+    setIsEditingScriptName(false);
+    if (nextName === currentScript.name) return;
+    const previousName = currentScript.name;
+    setCurrentScript({ ...currentScript, name: nextName });
+    try {
+      await scriptApi.update(currentScript.id, { name: nextName });
+      message.success('脚本名称已修改');
+    } catch (error) {
+      setCurrentScript({ ...currentScript, name: previousName });
+      message.error(error instanceof Error ? error.message : '脚本名称修改失败');
+    }
   };
 
   const createScriptExport = async () => {
@@ -868,11 +966,22 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     />
   );
 
+  const applyOriginalCategory = (categoryId: string) => {
+    const category = originalScenarioCategories.find((item) => item.id === categoryId)
+      || fallbackOriginalScenarioCategories[0];
+    const scenario = category?.children[0];
+    if (!category || !scenario) return;
+    setSelectedOriginalCategory(category.id);
+    setSelectedOriginalScenario(scenario.id);
+    setPrompt(combineOriginalPrompts(category, scenario));
+  };
+
   const applyPromptPreset = (scenarioId: string) => {
-    const scenario = originalScenarioOptions.find((item) => item.id === scenarioId) || fallbackOriginalScenarioPrompts[0];
-    if (!scenario) return;
-    setSelectedOriginalScenario(scenarioId);
-    setPrompt(scenario.prompt);
+    const category = currentOriginalCategory || fallbackOriginalScenarioCategories[0];
+    const scenario = category?.children.find((item) => item.id === scenarioId) || category?.children[0];
+    if (!category || !scenario) return;
+    setSelectedOriginalScenario(scenario.id);
+    setPrompt(combineOriginalPrompts(category, scenario));
   };
 
   const renderAnalysisExample = (content: string | undefined, title: string) => (
@@ -1098,7 +1207,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
               <label><span>脚本格式</span><Select value={scriptFormat} onChange={setScriptFormat} suffixIcon={<DownOutlined />} options={formatOptions} /></label>
               <label><span>脚本时长</span><Select value={scriptDuration} onChange={setScriptDuration} suffixIcon={<DownOutlined />} options={durationOptions} /></label>
               <label><span>产品选择</span>{renderBriefSelect()}</label>
-              {renderProductFrameUpload('product-frame-upload', '产品画面（非必填）')}
+              {renderProductFrameUpload('product-frame-upload', '产品画面（非必填）', true)}
             </div>
           </section>
 
@@ -1221,7 +1330,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
               <label><span>脚本格式</span><Select value={scriptFormat} onChange={setScriptFormat} suffixIcon={<DownOutlined />} options={formatOptions} /></label>
               <label><span>脚本时长</span><Select value={scriptDuration} onChange={setScriptDuration} suffixIcon={<DownOutlined />} options={durationOptions} /></label>
               <label><span>产品选择</span>{renderBriefSelect()}</label>
-              {renderProductFrameUpload('template-upload-field', '产品画面')}
+              {renderProductFrameUpload('template-upload-field', '产品画面', true)}
             </div>
           </section>
 
@@ -1248,8 +1357,8 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                 <button
                   key={item.id}
                   type="button"
-                  className={`original-scenario-item ${selectedOriginalScenario === item.id ? 'active' : ''}`}
-                  onClick={() => applyPromptPreset(item.id)}
+                  className={`original-scenario-item ${selectedOriginalCategory === item.id ? 'active' : ''}`}
+                  onClick={() => applyOriginalCategory(item.id)}
                 >
                   <div className="original-scenario-copy">
                     <strong>{item.title}</strong>
@@ -1263,6 +1372,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
               <textarea
                 value={prompt}
                 maxLength={500}
+                aria-label="AI 原创提示词"
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="以宝妈人设，去写一篇电商种草的脚本。文风要轻松有趣。卖点选择必须包含什么什么。"
               />
@@ -1290,7 +1400,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                 <label><span>脚本格式</span><Select value={scriptFormat} onChange={setScriptFormat} suffixIcon={<DownOutlined />} options={formatOptions} /></label>
                 <label><span>脚本时长</span><Select value={scriptDuration} onChange={setScriptDuration} suffixIcon={<DownOutlined />} options={durationOptions} /></label>
                 <label><span>选择产品</span>{renderBriefSelect()}</label>
-                {renderProductFrameUpload('original-upload-field', '上传通用画面')}
+                {renderProductFrameUpload('original-upload-field', '上传通用画面', true)}
               </div>
             </section>
 
@@ -1341,7 +1451,33 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
             <header className="script-output-head">
               <div className="script-output-heading">
                 <span>{currentScript.type === 'viral' ? '爆款复刻' : currentScript.type === 'template' ? '模板脚本' : '原创脚本'}</span>
-                <h2 id="script-output-title">{currentScript.name}</h2>
+                <div className="script-output-title-control">
+                  {isEditingScriptName ? (
+                    <input
+                      autoFocus
+                      value={scriptNameDraft}
+                      maxLength={100}
+                      aria-label="修改脚本名称"
+                      onChange={(event) => setScriptNameDraft(event.target.value)}
+                      onBlur={saveScriptName}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          event.currentTarget.blur();
+                        }
+                        if (event.key === 'Escape') {
+                          setIsEditingScriptName(false);
+                          setScriptNameDraft(currentScript.name);
+                        }
+                      }}
+                    />
+                  ) : (
+                    <>
+                      <h2 id="script-output-title">{currentScript.name}</h2>
+                      <button type="button" className="script-output-title-edit" aria-label="修改脚本名称" onClick={startEditingScriptName}><EditOutlined /></button>
+                    </>
+                  )}
+                </div>
                 <div className="script-output-meta">
                   <em>{scriptDuration}</em>
                   <em>{selectedScriptFormat?.name || '分镜脚本表'}</em>
@@ -1362,7 +1498,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                 <div className="polish-preview-scroll">
                   <section className="script-output-block script-storyboard-block">
                     <div className="script-storyboard-table-wrap">
-                      <table className={`script-storyboard-table ${visibleStoryboardHeaders.length === 4 ? 'is-four-column' : ''}`}>
+                      <table className={`script-storyboard-table ${visibleStoryboardHeaders.length === 4 ? 'is-four-column' : ''} ${visibleStoryboardHeaders.length === 5 ? 'is-five-column' : ''}`}>
                         <colgroup>
                           {visibleStoryboardHeaders.map((header) => <col key={header} className={storyboardColumnClass(header)} />)}
                         </colgroup>

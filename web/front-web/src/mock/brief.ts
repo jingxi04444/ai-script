@@ -1,4 +1,4 @@
-import type { Brief, BriefDetectionReport } from '../types/brief';
+import type { Brief, BriefDetectionReport, BriefSharePermission, BriefShareResult } from '../types/brief';
 import { createSuccessResponse, unwrapApiResponse } from '../types/api';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -35,6 +35,7 @@ const mockBriefs: Brief[] = [
 ];
 
 const mockDetectionState = new Map<string, boolean>();
+const mockShareLinks = new Map<string, BriefShareResult>();
 
 const formatNow = () => new Intl.DateTimeFormat('zh-CN', {
   year: 'numeric',
@@ -116,6 +117,7 @@ export const mockBriefApi = {
   create: async (data: Partial<Brief>) => {
     await delay(300);
     const brief: Brief = {
+      ...data,
       id: `brief-${Date.now()}`,
       name: data.productName || data.name || '未命名产品',
       productName: data.productName || data.name || '未命名产品',
@@ -134,6 +136,61 @@ export const mockBriefApi = {
     const nextBrief = { ...brief, ...data, updatedAt: new Date().toISOString() };
     Object.assign(brief, nextBrief);
     return unwrapApiResponse(createSuccessResponse(nextBrief));
+  },
+
+  enableShare: async (id: string, permission: BriefSharePermission) => {
+    await delay(180);
+    const brief = mockBriefs.find((item) => item.id === id);
+    if (!brief) throw new Error('Brief not found');
+    const key = `${id}:${permission}`;
+    const existing = mockShareLinks.get(key);
+    const shareToken = existing?.shareToken || `mock-share-${id}-${permission}`;
+    const result = {
+      briefId: id,
+      shareToken,
+      shareUrl: `/brief-share/${shareToken}`,
+      permission,
+    };
+    mockShareLinks.set(key, result);
+    Object.assign(brief, {
+      shareEnabled: 1,
+    });
+    return unwrapApiResponse(createSuccessResponse(result));
+  },
+
+  shareLinks: async (id: string) => {
+    await delay(120);
+    return unwrapApiResponse(createSuccessResponse(
+      Array.from(mockShareLinks.entries())
+        .filter(([key]) => key.startsWith(`${id}:`))
+        .map(([, link]) => link),
+    ));
+  },
+
+  getByShareToken: async (token: string) => {
+    await delay(180);
+    const link = Array.from(mockShareLinks.values()).find((item) => item.shareToken === token);
+    const brief = link ? mockBriefs.find((item) => item.id === link.briefId) : undefined;
+    if (!brief) throw new Error('分享链接不存在或已失效');
+    return unwrapApiResponse(createSuccessResponse({
+      ...brief,
+      accessPermission: link?.permission || 'read',
+      sharePermission: link?.permission || 'read',
+    }));
+  },
+
+  updateByShareToken: async (token: string, data: Partial<Brief>) => {
+    await delay(220);
+    const link = Array.from(mockShareLinks.values()).find((item) => item.shareToken === token);
+    if (!link || link.permission === 'read') throw new Error('当前分享链接不可编辑');
+    const brief = mockBriefs.find((item) => item.id === link.briefId);
+    if (!brief) throw new Error('Brief not found');
+    Object.assign(brief, data, { updatedAt: new Date().toISOString() });
+    return unwrapApiResponse(createSuccessResponse({
+      ...brief,
+      accessPermission: link.permission,
+      sharePermission: link.permission,
+    }));
   },
 
   copyToProject: async (briefId: string, projectId: string) => {

@@ -7,11 +7,10 @@ import lombok.EqualsAndHashCode;
 
 @EqualsAndHashCode(callSuper = true)
 @Data
-@TableName("ai_brief_collaborator")
-public class AiBriefCollaborator extends TenantBaseEntity {
+@TableName("ai_brief_share_link")
+public class AiBriefShareLink extends TenantBaseEntity {
     private Integer briefId;
-    private Integer userId;
+    private String shareToken;
     private String permission;
-    private String permissionSource;
-    private Integer status;
+    private Integer enabled;
 }

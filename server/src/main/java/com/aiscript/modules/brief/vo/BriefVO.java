@@ -20,8 +20,11 @@ public class BriefVO {
     private String targetScene;
     private String otherRequirements;
     private String briefContent;
+    private String richContent;
     private Integer isShared;
     private Integer shareEnabled;
     private String shareToken;
     private String shareUrl;
+    private String sharePermission;
+    private String accessPermission;
 }

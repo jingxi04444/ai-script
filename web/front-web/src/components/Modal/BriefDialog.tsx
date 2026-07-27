@@ -1,245 +1,379 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckOutlined, CloseOutlined, FileAddOutlined, LinkOutlined, PlusCircleOutlined, SearchOutlined, ShareAltOutlined, TeamOutlined } from '@ant-design/icons';
+import {
+  CheckOutlined,
+  CloseOutlined,
+  DownloadOutlined,
+  EditOutlined,
+  FileWordOutlined,
+  FolderOpenOutlined,
+  ImportOutlined,
+  LeftOutlined,
+  LinkOutlined,
+  PlusOutlined,
+  PlusCircleOutlined,
+  SaveOutlined,
+  ShareAltOutlined,
+  TeamOutlined,
+} from '@ant-design/icons';
 import { message } from 'antd';
 import { briefApi } from '../../api/brief';
-import type { Brief, BriefEditRequest } from '../../types/brief';
+import BriefContentLayout from '../Brief/BriefContentLayout';
+import RichTextField from '../../pages/Workspace/SellingPoints/RichTextField';
+import type { Brief, BriefEditRequest, BriefSharePermission, BriefShareResult } from '../../types/brief';
 import { formatDateTime } from '../../utils/format';
 import './modal-dialogs.css';
 
 interface BriefDialogProps {
   projectId: string | null;
   ensureProjectId: () => Promise<string>;
+  initialBriefId?: string | null;
   onNewProductDraft?: () => void;
+  onApplyBrief?: (brief: Brief) => void;
   refreshKey?: number;
   onClose: () => void;
 }
 
-interface BriefVersion {
-  id: string;
+type BriefManagerView = 'folders' | 'detail';
+type BriefSideTab = 'info' | 'collaboration';
+type BriefRichFieldKey = 'audience' | 'features' | 'mainPoints' | 'secondaryPoints';
+type BriefRichValues = Record<BriefRichFieldKey, string>;
+
+const sharePermissionOptions: Array<{
+  value: BriefSharePermission;
   label: string;
-  updatedAt: string;
-}
+  description: string;
+}> = [
+  { value: 'read', label: '可阅读', description: '适合博主、兼职文案，仅查看和调用，不能修改。' },
+  { value: 'edit', label: '可编辑', description: '适合内部协作，可修改 Brief 内容，不能管理权限。' },
+  { value: 'manage', label: '可管理', description: '可编辑内容、调整分享权限并处理协作申请。' },
+];
 
-interface BriefItem {
-  id: string;
-  name: string;
-  updatedAt: string;
-  versions: BriefVersion[];
-  productName?: string;
-  productModel?: string;
-  isShared?: number;
-  shareEnabled?: number;
-  shareToken?: string;
-  shareUrl?: string;
-}
-
-const getNextVersionLabel = (versions: BriefVersion[]) => {
-  const latest = versions[0]?.label.match(/^v(\d+)(?:\.(\d+))?$/);
-  if (!latest) return 'v1.0';
-
-  const major = Number(latest[1]);
-  return `v${major + 1}.0`;
+const getNextVersionLabel = (brief: Brief) => {
+  const latest = brief.versions?.[0]?.label.match(/^v(\d+)(?:\.(\d+))?$/);
+  return latest ? `v${Number(latest[1]) + 1}.0` : 'v1.0';
 };
 
-const toBriefItem = (brief: Brief): BriefItem => ({
-  id: brief.id,
-  name: brief.productName || brief.name || '未命名产品',
-  updatedAt: brief.updatedAt,
-  versions: (brief.versions || []).map((version) => ({
-    id: version.id,
-    label: version.label,
-    updatedAt: version.createdAt,
-  })),
-  productName: brief.productName || brief.name,
-  productModel: brief.productModel,
-  isShared: brief.isShared,
-  shareEnabled: brief.shareEnabled,
-  shareToken: brief.shareToken,
-  shareUrl: brief.shareUrl,
-});
+const escapeHtml = (value?: string) => (value || '')
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/\n/g, '<br />');
 
-const BriefDialog = ({ projectId, ensureProjectId, onNewProductDraft, refreshKey, onClose }: BriefDialogProps) => {
-  const [briefs, setBriefs] = useState<BriefItem[]>([]);
-  const [sharedBriefs, setSharedBriefs] = useState<BriefItem[]>([]);
-  const [selectedBrief, setSelectedBrief] = useState('');
-  const [selectedVersion, setSelectedVersion] = useState('');
+const richValuesFromBrief = (brief: Brief): BriefRichValues => {
+  let stored: Partial<BriefRichValues> = {};
+  if (brief.richContent) {
+    try {
+      const parsed = JSON.parse(brief.richContent) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) stored = parsed as Partial<BriefRichValues>;
+    } catch {
+      stored = {};
+    }
+  }
+  return {
+    audience: stored.audience || escapeHtml(brief.targetAudience),
+    features: stored.features || escapeHtml(brief.targetScene),
+    mainPoints: stored.mainPoints || escapeHtml(brief.primarySellingPoint),
+    secondaryPoints: stored.secondaryPoints || escapeHtml(brief.otherRequirements),
+  };
+};
+
+const emptyBriefRichValues: BriefRichValues = {
+  audience: '',
+  features: '',
+  mainPoints: '',
+  secondaryPoints: '',
+};
+
+const buildStructuredBriefHtml = (brief: Brief) => {
+  const sections = [
+    ['核心卖点', brief.primarySellingPoint],
+    ['目标人群', brief.targetAudience],
+    ['使用场景', brief.targetScene],
+    ['其他要求', brief.otherRequirements],
+  ].filter(([, value]) => Boolean(value?.trim()));
+  if (!sections.length) return '<p>暂无完整 Brief 内容</p>';
+  return sections.map(([label, value]) => `<h3>${label}</h3><p>${escapeHtml(value)}</p>`).join('');
+};
+
+const sanitizeBriefHtml = (html: string) => {
+  if (typeof document === 'undefined') return html;
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  const allowedTags = new Set(['P', 'DIV', 'BR', 'STRONG', 'B', 'SPAN', 'FONT', 'H2', 'H3', 'UL', 'OL', 'LI']);
+  template.content.querySelectorAll('*').forEach((element) => {
+    if (!allowedTags.has(element.tagName)) {
+      element.replaceWith(document.createTextNode(element.textContent || ''));
+      return;
+    }
+    Array.from(element.attributes).forEach((attribute) => {
+      const isFontAttribute = element.tagName === 'FONT' && ['color', 'size'].includes(attribute.name);
+      const isSafeStyle = attribute.name === 'style'
+        && /^(?:\s*(?:color|font-size|font-weight)\s*:\s*[^;]+;?\s*)+$/i.test(attribute.value);
+      if (!isFontAttribute && !isSafeStyle) element.removeAttribute(attribute.name);
+    });
+  });
+  return template.innerHTML;
+};
+
+const getRichBriefContent = (brief: Brief, versionContent?: string) => {
+  const content = brief.briefContent || versionContent || '';
+  if (!content.trim()) return buildStructuredBriefHtml(brief);
+  try {
+    JSON.parse(content);
+    return buildStructuredBriefHtml(brief);
+  } catch {
+    const html = /<\/?[a-z][\s\S]*>/i.test(content)
+      ? content
+      : `<p>${escapeHtml(content)}</p>`;
+    return sanitizeBriefHtml(html);
+  }
+};
+
+const BriefDialog = ({
+  projectId,
+  initialBriefId,
+  onNewProductDraft,
+  onApplyBrief,
+  refreshKey,
+  onClose,
+}: BriefDialogProps) => {
+  const [briefs, setBriefs] = useState<Brief[]>([]);
+  const [selectedBriefId, setSelectedBriefId] = useState('');
+  const [selectedVersionId, setSelectedVersionId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const [sharedSearchTerm, setSharedSearchTerm] = useState('');
+  const [view, setView] = useState<BriefManagerView>(initialBriefId ? 'detail' : 'folders');
+  const [sideTab, setSideTab] = useState<BriefSideTab>('info');
   const [editRequests, setEditRequests] = useState<BriefEditRequest[]>([]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editDraft, setEditDraft] = useState<Partial<Brief>>({});
+  const [editRichValues, setEditRichValues] = useState<BriefRichValues>(emptyBriefRichValues);
+  const [saving, setSaving] = useState(false);
+  const [shareLinks, setShareLinks] = useState<Partial<Record<BriefSharePermission, BriefShareResult>>>({});
+  const [sharing, setSharing] = useState(false);
 
-  const loadProjectBriefs = useCallback(() => {
-    if (!projectId) return;
-    briefApi.getList(projectId).then((list) => {
-      const next = list.map(toBriefItem);
-      setBriefs(next);
-      if (next[0]) {
-        setSelectedBrief(next[0].id);
-        setSelectedVersion(next[0].versions[0]?.id || '');
+  const loadBriefs = useCallback(() => {
+    briefApi.mineList().then((list) => {
+      setBriefs(list);
+      const target = list.find((brief) => brief.id === initialBriefId)
+        || list.find((brief) => brief.id === selectedBriefId)
+        || list[0];
+      if (target) {
+        setSelectedBriefId(target.id);
+        setSelectedVersionId((current) => target.versions?.some((version) => version.id === current)
+          ? current
+          : target.versions?.[0]?.id || '');
       }
     }).catch(() => message.warning('Brief 列表加载失败'));
-  }, [projectId]);
-
-  const loadSharedBriefs = useCallback((keyword = '') => {
-    briefApi.sharedList(keyword).then((list) => {
-      setSharedBriefs(list.map(toBriefItem));
-    }).catch(() => message.warning('共享 Brief 库加载失败'));
-  }, []);
-
-  const loadEditRequests = useCallback((briefId: string) => {
-    briefApi.editRequests(briefId)
-      .then(setEditRequests)
-      .catch(() => setEditRequests([]));
-  }, []);
+  }, [initialBriefId, selectedBriefId]);
 
   useEffect(() => {
-    loadProjectBriefs();
-    loadSharedBriefs();
-  }, [loadProjectBriefs, loadSharedBriefs, refreshKey]);
+    loadBriefs();
+  }, [loadBriefs, refreshKey]);
+
+  useEffect(() => {
+    if (initialBriefId) setView('detail');
+  }, [initialBriefId]);
 
   const currentBrief = useMemo(
-    () => briefs.find((brief) => brief.id === selectedBrief) || briefs[0] || null,
-    [briefs, selectedBrief],
+    () => briefs.find((brief) => brief.id === selectedBriefId) || null,
+    [briefs, selectedBriefId],
   );
 
   const currentVersion = useMemo(
-    () => currentBrief?.versions.find((version) => version.id === selectedVersion) || currentBrief?.versions[0] || null,
-    [currentBrief, selectedVersion],
+    () => currentBrief?.versions?.find((version) => version.id === selectedVersionId)
+      || currentBrief?.versions?.[0]
+      || null,
+    [currentBrief, selectedVersionId],
   );
+  const currentAccessPermission = currentBrief?.accessPermission || 'manage';
+  const canEditCurrentBrief = currentAccessPermission === 'edit' || currentAccessPermission === 'manage';
+  const canManageCurrentBrief = currentAccessPermission === 'manage';
+
+  const visibleBriefs = useMemo(() => {
+    const keyword = searchTerm.trim().toLowerCase();
+    return briefs.filter((brief) => !keyword || [
+      brief.name,
+      brief.productName,
+      brief.productModel,
+    ].some((value) => (value || '').toLowerCase().includes(keyword)));
+  }, [briefs, searchTerm]);
+
+  const loadEditRequests = useCallback((briefId: string) => {
+    briefApi.editRequests(briefId).then(setEditRequests).catch(() => setEditRequests([]));
+  }, []);
 
   useEffect(() => {
-    if (currentBrief?.id) {
-      loadEditRequests(currentBrief.id);
-    } else {
-      setEditRequests([]);
-    }
+    if (currentBrief?.id) loadEditRequests(currentBrief.id);
+    else setEditRequests([]);
   }, [currentBrief?.id, loadEditRequests]);
 
-  const visibleBriefs = useMemo(
-    () => briefs.filter((brief) => brief.name.toLowerCase().includes(searchTerm.trim().toLowerCase())),
-    [briefs, searchTerm],
-  );
+  const loadShareLinks = useCallback((briefId: string) => {
+    briefApi.shareLinks(briefId).then((links) => {
+      setShareLinks(links.reduce<Partial<Record<BriefSharePermission, BriefShareResult>>>((result, link) => {
+        result[link.permission] = link;
+        return result;
+      }, {}));
+    }).catch(() => setShareLinks({}));
+  }, []);
 
-  const visibleSharedBriefs = useMemo(() => {
-    const keyword = sharedSearchTerm.trim().toLowerCase();
-    return sharedBriefs.filter((brief) => !keyword || [brief.name, brief.productName, brief.productModel]
-      .some((value) => (value || '').toLowerCase().includes(keyword)));
-  }, [sharedBriefs, sharedSearchTerm]);
+  useEffect(() => {
+    if (currentBrief?.id && canManageCurrentBrief) loadShareLinks(currentBrief.id);
+    else setShareLinks({});
+  }, [currentBrief?.id, canManageCurrentBrief, loadShareLinks]);
 
-  const selectedSharedBriefCount = visibleSharedBriefs.length;
-  const compactBriefs = visibleBriefs.slice(0, 6);
-  const hasMoreBriefs = visibleBriefs.length > compactBriefs.length;
-  const compactRequests = editRequests.slice(0, 2);
-  const hasMoreRequests = editRequests.length > compactRequests.length;
-  const compactSharedBriefs = visibleSharedBriefs.slice(0, 3);
-  const hasMoreSharedBriefs = visibleSharedBriefs.length > compactSharedBriefs.length;
-
-  const handleSelectBrief = (brief: BriefItem) => {
-    setSelectedBrief(brief.id);
-    setSelectedVersion(brief.versions[0]?.id || '');
-    loadEditRequests(brief.id);
+  const openBrief = (brief: Brief) => {
+    setSelectedBriefId(brief.id);
+    setSelectedVersionId(brief.versions?.[0]?.id || '');
+    setSideTab('info');
+    setIsEditing(false);
+    setView('detail');
   };
 
-  const handleSearchSharedBriefs = () => {
-    loadSharedBriefs(sharedSearchTerm.trim());
-  };
-
-  const handleAddBrief = async () => {
+  const handleAddBrief = () => {
     onNewProductDraft?.();
-    message.success('已清空卖点表单，请填写新产品信息');
+    message.success('已进入新建 Brief，请填写产品信息');
     onClose();
   };
 
-  const handleUseSharedBrief = async (brief: BriefItem) => {
-    try {
-      const currentProjectId = await ensureProjectId();
-      const saved = await briefApi.copyToProject(brief.id, currentProjectId);
-      const newBrief = toBriefItem(saved);
-      setBriefs((prev) => [newBrief, ...prev.filter((item) => item.id !== newBrief.id)]);
-      setSelectedBrief(newBrief.id);
-      setSelectedVersion(newBrief.versions[0]?.id || '');
-      loadEditRequests(newBrief.id);
-      message.success('已导入到当前项目');
-    } catch {
-      message.error('导入失败');
-    }
-  };
-
-  const handleAddVersion = () => {
+  const handleApplyBrief = () => {
     if (!currentBrief) return;
-
-    const createdAt = new Date();
-    const timestamp = formatDateTime(createdAt);
-    const nextVersion = {
-      id: `version-${createdAt.getTime()}`,
-      label: getNextVersionLabel(currentBrief.versions),
-      updatedAt: timestamp,
-    };
-
-    briefApi.update(currentBrief.id, {
-      name: currentBrief.name,
-      productName: currentBrief.productName || currentBrief.name,
-      projectId: projectId || undefined,
-      briefContent: `新增版本 ${nextVersion.label}`,
-      forceNewVersion: true,
-    }).then((saved) => {
-      const nextBrief = toBriefItem(saved);
-      setBriefs((prev) => prev.map((brief) => (brief.id === nextBrief.id ? nextBrief : brief)));
-      setSelectedVersion(nextBrief.versions[0]?.id || nextVersion.id);
-      message.success(`已新增版本 ${nextVersion.label}`);
-    }).catch(() => message.error('新增版本失败'));
+    onApplyBrief?.(currentBrief);
+    message.success('Brief 内容已重新填充到当前项目');
+    onClose();
   };
 
   const copyToClipboard = async (text: string) => {
-    if (navigator.clipboard) {
-      await navigator.clipboard.writeText(text);
-    }
+    if (!navigator.clipboard) throw new Error('当前浏览器不支持复制');
+    await navigator.clipboard.writeText(text);
   };
 
-  const handleShareBrief = async () => {
-    if (!currentBrief?.id) return message.warning('请先新增或选择 Brief');
+  const buildShareUrl = (result: BriefShareResult) => {
+    return new URL(result.shareUrl, window.location.origin).toString();
+  };
+
+  const handleShareBrief = async (permission: BriefSharePermission) => {
+    if (!currentBrief) return;
+    setSharing(true);
     try {
-      const result = await briefApi.enableShare(currentBrief.id);
-      const shareUrl = new URL(result.shareUrl, window.location.origin);
-      if (selectedVersion) shareUrl.searchParams.set('versionId', selectedVersion);
-      await copyToClipboard(shareUrl.toString());
-      setBriefs((prev) => prev.map((brief) => brief.id === currentBrief.id ? {
+      const result = shareLinks[permission] || await briefApi.enableShare(currentBrief.id, permission);
+      await copyToClipboard(buildShareUrl(result));
+      setShareLinks((current) => ({ ...current, [permission]: result }));
+      setBriefs((current) => current.map((brief) => brief.id === currentBrief.id ? {
         ...brief,
         shareEnabled: 1,
-        shareUrl: result.shareUrl,
       } : brief));
-      message.success('分享链接已复制');
+      message.success(`${sharePermissionOptions.find((option) => option.value === permission)?.label || ''}链接已复制`);
     } catch {
       message.error('分享链接生成失败');
+    } finally {
+      setSharing(false);
     }
   };
 
-  const handleToggleShared = async () => {
-    if (!currentBrief?.id) return message.warning('请先新增或选择 Brief');
+  const openSharePanel = () => {
+    setSideTab('collaboration');
+  };
+
+  const handleAddVersion = async () => {
+    if (!currentBrief) return;
+    const nextLabel = getNextVersionLabel(currentBrief);
     try {
-      const enabled = currentBrief.isShared === 1 ? 0 : 1;
-      const saved = await briefApi.update(currentBrief.id, { isShared: enabled });
-      const nextBrief = toBriefItem(saved);
-      setBriefs((prev) => prev.map((brief) => brief.id === nextBrief.id ? nextBrief : brief));
-      loadSharedBriefs(sharedSearchTerm);
-      message.success(enabled ? '已加入共享 Brief 库' : '已移出共享 Brief 库');
+      const saved = await briefApi.update(currentBrief.id, {
+        name: currentBrief.name,
+        productName: currentBrief.productName || currentBrief.name,
+        projectId: projectId || currentBrief.projectId,
+        briefContent: currentBrief.briefContent || '',
+        forceNewVersion: true,
+      });
+      setBriefs((current) => current.map((brief) => brief.id === saved.id ? saved : brief));
+      setSelectedVersionId(saved.versions?.[0]?.id || '');
+      message.success(`已新增版本 ${nextLabel}`);
     } catch {
-      message.error('共享状态更新失败');
+      message.error('新增版本失败');
     }
   };
 
-  const handleCopySharedLink = async (brief: BriefItem) => {
+  const startEditing = () => {
+    if (!currentBrief) return;
+    setEditDraft({
+      name: currentBrief.name,
+      productName: currentBrief.productName,
+      productModel: currentBrief.productModel,
+      price: currentBrief.price,
+      slogan: currentBrief.slogan,
+      primarySellingPoint: currentBrief.primarySellingPoint,
+      targetAudience: currentBrief.targetAudience,
+      targetScene: currentBrief.targetScene,
+      otherRequirements: currentBrief.otherRequirements,
+      briefContent: currentBrief.briefContent,
+    });
+    setEditRichValues(richValuesFromBrief(currentBrief));
+    setIsEditing(true);
+  };
+
+  const updateEditRichField = (key: BriefRichFieldKey, html: string, plainText: string) => {
+    const briefFieldByRichKey: Record<BriefRichFieldKey, keyof Brief> = {
+      audience: 'targetAudience',
+      features: 'targetScene',
+      mainPoints: 'primarySellingPoint',
+      secondaryPoints: 'otherRequirements',
+    };
+    setEditRichValues((current) => ({ ...current, [key]: html }));
+    setEditDraft((current) => ({ ...current, [briefFieldByRichKey[key]]: plainText }));
+  };
+
+  const saveEditing = async () => {
+    if (!currentBrief) return;
+    setSaving(true);
     try {
-      const sharePath = brief.shareUrl || (brief.shareEnabled === 1 && brief.shareToken ? `/brief-share/${brief.shareToken}` : '');
-      if (!sharePath) {
-        message.warning('这份 Brief 还没有开启协作链接，请让分享人复制分享链接');
-        return;
-      }
-      const shareUrl = new URL(sharePath, window.location.origin).toString();
-      await copyToClipboard(shareUrl);
-      message.success('协作链接已复制');
+      const saved = await briefApi.update(currentBrief.id, {
+        ...editDraft,
+        richContent: JSON.stringify(editRichValues),
+        name: editDraft.productName || editDraft.name || currentBrief.name,
+        projectId: currentBrief.projectId,
+      });
+      setBriefs((current) => current.map((brief) => brief.id === saved.id ? saved : brief));
+      setIsEditing(false);
+      message.success('Brief 已保存');
     } catch {
-      message.error('复制协作链接失败');
+      message.error('Brief 保存失败，请确认是否有编辑权限');
+    } finally {
+      setSaving(false);
     }
+  };
+
+  const handleDownload = () => {
+    if (!currentBrief) return;
+    const rows = [
+      ['产品名称', currentBrief.productName || currentBrief.name],
+      ['产品型号', currentBrief.productModel],
+      ['价格', currentBrief.price],
+      ['Slogan', currentBrief.slogan],
+      ['核心卖点', currentBrief.primarySellingPoint],
+      ['目标人群', currentBrief.targetAudience],
+      ['使用场景', currentBrief.targetScene],
+      ['其他要求', currentBrief.otherRequirements],
+    ];
+    const richBriefHtml = getRichBriefContent(currentBrief, currentVersion?.content);
+    const html = `<!doctype html><html><head><meta charset="utf-8"><style>
+      body{font-family:"Microsoft YaHei",sans-serif;padding:36px;color:#222}h1{font-size:24px}h2{margin-top:28px;font-size:18px}
+      table{width:100%;border-collapse:collapse;margin-top:24px}td{border:1px solid #bbb;padding:10px;vertical-align:top}
+      td:first-child{width:120px;font-weight:700;background:#f3f3f3}
+    </style></head><body><h1>${escapeHtml(currentBrief.productName || currentBrief.name)}</h1>
+      <p>${escapeHtml(currentVersion?.label || '')} · ${escapeHtml(formatDateTime(currentBrief.updatedAt))}</p>
+      <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${escapeHtml(value)}</td></tr>`).join('')}</table>
+      <h2>完整 Brief</h2><div>${richBriefHtml}</div>
+    </body></html>`;
+    const blob = new Blob(['\ufeff', html], { type: 'application/msword;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${currentBrief.productName || currentBrief.name || 'Brief'}.doc`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    message.success('Brief Word 文档已下载');
   };
 
   const handleApproveRequest = async (requestId: string) => {
@@ -263,212 +397,271 @@ const BriefDialog = ({ projectId, ensureProjectId, onNewProductDraft, refreshKey
   };
 
   return (
-    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="brief-title">
-      <section className="modal-card brief-modal">
-        <header className="modal-head">
-          <div className="brief-modal-head-copy">
-            <span>Brief 管理</span>
-            <h2 id="brief-title">先选产品，再选版本，然后共享或协作</h2>
-            <p>左侧选择或新建产品，右侧快速处理版本、共享、编辑申请和共享库。</p>
-          </div>
-          <button type="button" aria-label="关闭" className="modal-close-button" onClick={onClose}>
-            <CloseOutlined />
-          </button>
-        </header>
-
-        <div className="brief-manager-shell">
-          <aside className="manager-panel brief-picker-panel">
-            <div className="panel-title panel-title-stacked compact-title">
+    <div className="modal-backdrop brief-studio-backdrop" role="dialog" aria-modal="true" aria-labelledby="brief-title">
+      <section className={`modal-card brief-studio-modal ${view === 'detail' ? 'is-detail' : 'is-folders'}`}>
+        {view === 'folders' ? (
+          <>
+            <header className="brief-folder-head">
               <div>
-                <strong>产品列表</strong>
-                <small>先选一个产品，再去右边处理版本和协作</small>
+                <span>Brief 管理</span>
+                <h2 id="brief-title">我的 Brief 文档</h2>
               </div>
-            </div>
-            <label className="search-box brief-search-box">
-              <span>搜索当前项目产品</span>
-              <input
-                value={searchTerm}
-                onChange={(event) => setSearchTerm(event.target.value)}
-                placeholder="按产品名称搜索，例如：JRFH-2026"
-              />
-            </label>
-            <button type="button" className="secondary-action brief-add-button brief-add-compact" onClick={handleAddBrief}>
-              <FileAddOutlined />新建产品
-            </button>
-            <div className="brief-list brief-picker-list">
-              {compactBriefs.length > 0 ? (
-                compactBriefs.map((brief) => (
-                  <button
-                    type="button"
-                    key={brief.id}
-                    className={brief.id === selectedBrief ? 'brief-row active' : 'brief-row'}
-                    onClick={() => handleSelectBrief(brief)}
-                  >
-                    <span className="brief-row-name">{brief.name}</span>
-                    {brief.id === selectedBrief ? <CheckOutlined /> : <span className="brief-row-dot" />}
-                  </button>
-                ))
-              ) : (
-                <div className="empty-brief-state">当前项目还没有产品。先点「新建产品」，或者用下面的共享库导入。</div>
-              )}
-              {hasMoreBriefs ? <div className="brief-more-note">还有 {visibleBriefs.length - compactBriefs.length} 条，请继续搜索。</div> : null}
-            </div>
-          </aside>
+              <div className="brief-folder-head-actions">
+                <button type="button" className="brief-folder-create" onClick={handleAddBrief}>
+                  <PlusOutlined />
+                  <span>新建 Brief</span>
+                </button>
+                <button type="button" aria-label="关闭" className="brief-folder-close" onClick={onClose}><CloseOutlined /></button>
+              </div>
+            </header>
 
-          <section className="manager-panel brief-detail-panel">
-            <div className="brief-detail-stack">
-              <section className="brief-detail-card brief-selected-card brief-summary-card">
-                <div className="panel-title panel-title-stacked">
-                  <div>
-                    <strong>当前产品</strong>
-                    <small>确认你现在操作的是哪个产品</small>
-                  </div>
-                  <span className={currentBrief?.isShared === 1 ? 'status-pill shared' : 'status-pill'}>{currentBrief?.isShared === 1 ? '已共享' : '未共享'}</span>
+            <div className="brief-folder-toolbar">
+              <label>
+                <FileWordOutlined />
+                <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="搜索 Brief 文档名称或产品型号" />
+              </label>
+              <span>共 {visibleBriefs.length} 份文档</span>
+            </div>
+
+            <div className="brief-folder-grid">
+              {visibleBriefs.map((brief) => (
+                <button type="button" className="brief-folder-card" key={brief.id} onClick={() => openBrief(brief)}>
+                  <span className="brief-folder-shape"><FolderOpenOutlined /></span>
+                  <span className="brief-folder-copy">
+                    <strong>{brief.productName || brief.name || '未命名 Brief'}</strong>
+                    <small>{brief.productModel || 'Word Brief 文档'}</small>
+                    <em>{brief.versions?.[0]?.label || 'v1.0'} · {formatDateTime(brief.versions?.[0]?.createdAt || brief.updatedAt)}</em>
+                  </span>
+                  {brief.shareEnabled === 1 ? <span className="brief-folder-shared"><TeamOutlined />已分享</span> : null}
+                </button>
+              ))}
+              {!visibleBriefs.length ? (
+                <div className="brief-folder-empty">
+                  <FileWordOutlined />
+                  <strong>还没有 Brief 文档</strong>
+                  <span>新建或导入产品 Brief 后会显示在这里。</span>
                 </div>
-                {currentBrief ? (
-                  <div className="brief-summary-grid">
-                    <div>
-                      <label>产品名称</label>
-                      <strong>{currentBrief.name}</strong>
-                    </div>
-                    <div>
-                      <label>更新时间</label>
-                      <strong>{formatDateTime(currentBrief.updatedAt)}</strong>
-                    </div>
-                    <div>
-                      <label>当前版本</label>
-                      <strong>{currentVersion?.label || '暂无版本'}</strong>
-                    </div>
+              ) : null}
+            </div>
+          </>
+        ) : (
+          <>
+            <header className="brief-studio-topbar">
+              <div className="brief-studio-title">
+                <button type="button" aria-label="返回 Brief 文件夹" onClick={() => setView('folders')}><LeftOutlined /></button>
+                <FileWordOutlined />
+                <div>
+                  <h2 id="brief-title">{currentBrief?.productName || currentBrief?.name || 'Brief'}</h2>
+                  <span>Brief 文档</span>
+                </div>
+                <select value={selectedVersionId} onChange={(event) => setSelectedVersionId(event.target.value)}>
+                  {currentBrief?.versions?.length ? currentBrief.versions.map((version) => (
+                    <option key={version.id} value={version.id}>{version.label}</option>
+                  )) : <option value="">v1.0</option>}
+                </select>
+              </div>
+              <div className="brief-studio-actions">
+                <button type="button" className="brief-apply-action" onClick={handleApplyBrief}><ImportOutlined />填充到项目</button>
+                {canManageCurrentBrief ? (
+                  <button type="button" className={sideTab === 'collaboration' ? 'active' : ''} onClick={openSharePanel}><ShareAltOutlined />分享</button>
+                ) : null}
+                <button type="button" onClick={handleDownload}><DownloadOutlined />下载</button>
+                {canEditCurrentBrief ? (
+                  <button type="button" className={isEditing ? 'active' : ''} onClick={isEditing ? saveEditing : startEditing} disabled={saving}>
+                    {isEditing ? <SaveOutlined /> : <EditOutlined />}{saving ? '保存中' : isEditing ? '保存' : '编辑'}
+                  </button>
+                ) : null}
+                <button type="button" aria-label="关闭" className="brief-studio-close" onClick={onClose}><CloseOutlined /></button>
+              </div>
+            </header>
+
+            <div className="brief-studio-body">
+              <main className="brief-document-stage">
+                <article className={`brief-document-sheet ${isEditing ? 'is-editing' : ''}`}>
+                  <header>
+                    <span>PRODUCT BRIEF</span>
+                    {isEditing ? (
+                      <input
+                        className="brief-document-title-input"
+                        aria-label="产品名称"
+                        value={String(editDraft.productName || '')}
+                        placeholder="请输入产品名称"
+                        onChange={(event) => setEditDraft((current) => ({
+                          ...current,
+                          productName: event.target.value,
+                        }))}
+                      />
+                    ) : (
+                      <h1>{currentBrief?.productName || currentBrief?.name || '未命名 Brief'}</h1>
+                    )}
+                    <p>{isEditing ? editDraft.slogan || '产品 Brief 信息' : currentBrief?.slogan || '产品 Brief 信息'}</p>
+                  </header>
+
+                  {currentBrief ? (
+                    isEditing ? (
+                      <div className="brief-selling-edit-layout">
+                        <section className="brief-selling-edit-overview">
+                          <div className="brief-selling-edit-small-fields">
+                            <label className="brief-selling-edit-plain-field">
+                              <span>产品价格</span>
+                              <input
+                                value={String(editDraft.price || '')}
+                                onChange={(event) => setEditDraft((current) => ({
+                                  ...current,
+                                  price: event.target.value,
+                                }))}
+                              />
+                            </label>
+                            <label className="brief-selling-edit-plain-field">
+                              <span>产品 slogan</span>
+                              <input
+                                value={String(editDraft.slogan || '')}
+                                onChange={(event) => setEditDraft((current) => ({
+                                  ...current,
+                                  slogan: event.target.value,
+                                }))}
+                              />
+                            </label>
+                          </div>
+                          <RichTextField
+                            className="brief-selling-edit-rich brief-selling-edit-audience"
+                            label="目标人群"
+                            value={editRichValues.audience}
+                            placeholder="请输入目标人群"
+                            maxLength={500}
+                            onChange={(html, plainText) => updateEditRichField('audience', html, plainText)}
+                          />
+                        </section>
+
+                        <section className="brief-selling-edit-grid">
+                          <RichTextField
+                            className="brief-selling-edit-rich"
+                            label="产品特色卖点"
+                            value={editRichValues.features}
+                            placeholder="请输入产品特色卖点"
+                            maxLength={10000}
+                            onChange={(html, plainText) => updateEditRichField('features', html, plainText)}
+                          />
+                          <RichTextField
+                            className="brief-selling-edit-rich"
+                            label="产品主要卖点"
+                            value={editRichValues.mainPoints}
+                            placeholder="请输入产品主要卖点"
+                            maxLength={10000}
+                            onChange={(html, plainText) => updateEditRichField('mainPoints', html, plainText)}
+                          />
+                          <RichTextField
+                            className="brief-selling-edit-rich"
+                            label="产品次要卖点"
+                            value={editRichValues.secondaryPoints}
+                            placeholder="请输入产品次要卖点"
+                            maxLength={10000}
+                            onChange={(html, plainText) => updateEditRichField('secondaryPoints', html, plainText)}
+                          />
+                        </section>
+                      </div>
+                    ) : (
+                      <BriefContentLayout brief={currentBrief} className="brief-document-content-layout" />
+                    )
+                  ) : <div className="brief-folder-empty">Brief 不存在或已被删除。</div>}
+                </article>
+              </main>
+
+              <aside className="brief-studio-sidebar">
+                <div className="brief-side-tabs">
+                  <button type="button" className={sideTab === 'info' ? 'active' : ''} onClick={() => setSideTab('info')}>文件信息</button>
+                  {canManageCurrentBrief ? (
+                    <button type="button" className={sideTab === 'collaboration' ? 'active' : ''} onClick={() => setSideTab('collaboration')}>
+                      分享{editRequests.length ? ` ${editRequests.length}` : ''}
+                    </button>
+                  ) : null}
+                </div>
+
+                {sideTab === 'info' ? (
+                  <div className="brief-side-content">
+                    <section className="brief-side-section">
+                      <h3>文档信息</h3>
+                      <dl>
+                        <div><dt>文件名</dt><dd>{currentBrief?.productName || currentBrief?.name}</dd></div>
+                        <div><dt>当前版本</dt><dd>{currentVersion?.label || 'v1.0'}</dd></div>
+                        <div><dt>更新时间</dt><dd>{formatDateTime(currentBrief?.updatedAt)}</dd></div>
+                        <div>
+                          <dt>分享状态</dt>
+                          <dd className={currentBrief?.shareEnabled === 1 ? 'shared' : ''}>
+                            {currentBrief?.shareEnabled === 1 ? `已分享 · ${Object.keys(shareLinks).length} 条权限链接` : '仅自己可见'}
+                          </dd>
+                        </div>
+                      </dl>
+                    </section>
+                    <section className="brief-side-section">
+                      <div className="brief-side-section-head">
+                        <h3>版本记录</h3>
+                        {canEditCurrentBrief ? <button type="button" onClick={handleAddVersion}><PlusCircleOutlined />新增</button> : null}
+                      </div>
+                      <div className="brief-side-version-list">
+                        {currentBrief?.versions?.map((version) => (
+                          <button
+                            type="button"
+                            className={version.id === selectedVersionId ? 'active' : ''}
+                            key={version.id}
+                            onClick={() => setSelectedVersionId(version.id)}
+                          >
+                            <span>{version.label}</span>
+                            <small>{formatDateTime(version.createdAt)}</small>
+                            {version.id === selectedVersionId ? <CheckOutlined /> : null}
+                          </button>
+                        ))}
+                      </div>
+                    </section>
                   </div>
                 ) : (
-                  <div className="empty-brief-state">还没选中任何产品，左侧先点一条，右侧才会显示版本和协作操作。</div>
-                )}
-              </section>
-
-              <section className="brief-detail-card brief-version-card">
-                <div className="panel-title panel-title-inline">
-                  <div>
-                    <strong>版本</strong>
-                    <small>选一个版本，或直接新增</small>
-                  </div>
-                  <button type="button" className="secondary-action brief-version-button" onClick={handleAddVersion} disabled={!currentBrief}>
-                    <PlusCircleOutlined />新增版本
-                  </button>
-                </div>
-                {currentBrief ? (
-                  <label className="brief-version-select-wrap">
-                    <span>选择版本</span>
-                    <select value={selectedVersion} onChange={(event) => setSelectedVersion(event.target.value)}>
-                      {currentBrief.versions.length ? currentBrief.versions.map((version) => (
-                        <option key={version.id} value={version.id}>{version.label} · {formatDateTime(version.updatedAt)}</option>
-                      )) : <option value="">暂无版本</option>}
-                    </select>
-                  </label>
-                ) : <div className="empty-brief-state">选择 Brief 后，这里会出现版本列表。</div>}
-              </section>
-
-              <section className="brief-detail-card collaboration-card">
-                <div className="panel-title panel-title-inline">
-                  <div>
-                    <strong>共享 / 协作</strong>
-                    <small>设为共享后会生成协作链接</small>
-                  </div>
-                  <button type="button" className="secondary-action brief-version-button" onClick={handleToggleShared} disabled={!currentBrief}>
-                    <TeamOutlined />{currentBrief?.isShared === 1 ? '取消共享' : '设为共享'}
-                  </button>
-                </div>
-                <div className="brief-share-note brief-share-callout">
-                  <LinkOutlined />
-                  <span>{currentBrief?.shareEnabled === 1 ? '已开启协作链接。点击“复制分享链接”可发给同事或博主。' : '开启后会生成协作分享链接，别人才能通过链接查看或申请编辑。'}</span>
-                </div>
-                <div className="brief-action-row">
-                  <button type="button" className="secondary-action brief-copy-button" onClick={handleShareBrief} disabled={!currentBrief}>
-                    <ShareAltOutlined />复制分享链接
-                  </button>
-                </div>
-              </section>
-
-              <section className="brief-detail-card request-panel">
-                <div className="panel-title panel-title-inline compact">
-                  <div>
-                    <strong>编辑申请</strong>
-                    <small>谁在申请编辑，一眼就能看到</small>
-                  </div>
-                  <span className="status-pill">{editRequests.length} 条</span>
-                </div>
-                <div className="brief-edit-requests compact-list">
-                  {compactRequests.length ? compactRequests.map((request) => (
-                    <article key={request.id} className="brief-request-card">
-                      <div className="brief-request-main">
-                        <strong>用户 {request.requesterId}</strong>
-                        <small>{request.requestMessage || '申请编辑这份 Brief'}</small>
-                        <em className={request.status === 'pending' ? 'pending' : request.status}>{request.status}</em>
+                  <div className="brief-side-content">
+                    <section className="brief-side-section brief-share-settings">
+                      <div>
+                        <h3>分享权限</h3>
+                        <span>{Object.keys(shareLinks).length ? `已生成 ${Object.keys(shareLinks).length} 条链接` : '按权限分别生成'}</span>
                       </div>
-                      {request.status === 'pending' && (
-                        <p>
-                          <button type="button" onClick={() => handleApproveRequest(request.id)}>同意</button>
-                          <button type="button" onClick={() => handleRejectRequest(request.id)}>拒绝</button>
-                        </p>
-                      )}
-                    </article>
-                  )) : <div className="empty-brief-state compact-empty">暂无编辑申请。</div>}
-                  {hasMoreRequests ? <div className="brief-more-note">还有 {editRequests.length - compactRequests.length} 条，请打开共享库继续查看。</div> : null}
-                </div>
-              </section>
-
-              <section className="brief-detail-card shared-library-card">
-                <div className="panel-title panel-title-inline">
-                  <div>
-                    <strong>共享产品库</strong>
-                    <small>搜索后可直接使用到当前项目</small>
+                      <p className="brief-side-hint">
+                        <LinkOutlined />
+                        对方登录并打开链接后，这份 Brief 会自动出现在对方的“我的 Brief”，后续始终同步最新内容。
+                      </p>
+                      <div className="brief-share-permissions" aria-label="分享权限链接">
+                        {sharePermissionOptions.map((option) => (
+                          <article className={shareLinks[option.value] ? 'active' : ''} key={option.value}>
+                            <div>
+                              <span><i />{option.label}</span>
+                              <small>{option.description}</small>
+                              {shareLinks[option.value] ? <code>{buildShareUrl(shareLinks[option.value]!)}</code> : null}
+                            </div>
+                            <button type="button" onClick={() => handleShareBrief(option.value)} disabled={sharing}>
+                              <ShareAltOutlined />{shareLinks[option.value] ? '复制链接' : '生成链接'}
+                            </button>
+                          </article>
+                        ))}
+                      </div>
+                    </section>
+                    <section className="brief-side-section brief-side-requests">
+                      <h3>编辑申请</h3>
+                      {editRequests.length ? editRequests.map((request) => (
+                        <article key={request.id}>
+                          <strong>用户 {request.requesterId}</strong>
+                          <p>{request.requestMessage || '申请编辑这份 Brief'}</p>
+                          <span>{request.status}</span>
+                          {request.status === 'pending' ? (
+                            <div>
+                              <button type="button" onClick={() => handleApproveRequest(request.id)}>同意</button>
+                              <button type="button" onClick={() => handleRejectRequest(request.id)}>拒绝</button>
+                            </div>
+                          ) : null}
+                        </article>
+                      )) : <p className="brief-side-empty">暂无编辑申请</p>}
+                    </section>
                   </div>
-                  <span className="status-pill">{selectedSharedBriefCount} 条结果</span>
-                </div>
-                <div className="shared-library-search-row">
-                  <label className="search-box brief-search-box shared-library-search-box">
-                    <span>搜索共享产品</span>
-                    <input
-                      value={sharedSearchTerm}
-                      onChange={(event) => setSharedSearchTerm(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') handleSearchSharedBriefs();
-                      }}
-                      placeholder="输入产品名称 / 型号"
-                    />
-                  </label>
-                  <button type="button" className="secondary-action shared-library-search-button" onClick={handleSearchSharedBriefs}>
-                    <SearchOutlined />搜索
-                  </button>
-                </div>
-                <div className="brief-list shared-brief-list">
-                  {compactSharedBriefs.length > 0 ? (
-                    compactSharedBriefs.map((brief) => (
-                      <article key={brief.id} className="shared-brief-row">
-                        <div className="shared-brief-main">
-                          <strong>{brief.name}</strong>
-                        </div>
-                        <div className="shared-brief-actions">
-                          <button type="button" onClick={() => handleUseSharedBrief(brief)}>使用到当前项目</button>
-                          <button type="button" className="ghost" onClick={() => handleCopySharedLink(brief)}>
-                            <LinkOutlined />协作链接
-                          </button>
-                        </div>
-                      </article>
-                    ))
-                  ) : (
-                    <div className="empty-brief-state">暂无共享产品。把当前产品设为共享后，其他账号就能在这里搜索并使用。</div>
-                  )}
-                  {hasMoreSharedBriefs ? <div className="brief-more-note">还有 {visibleSharedBriefs.length - compactSharedBriefs.length} 条，请继续搜索。</div> : null}
-                </div>
-              </section>
+                )}
+              </aside>
             </div>
-
-            <footer className="modal-actions brief-modal-actions">
-              <button type="button" onClick={onClose}>取消</button>
-              <button type="button" className="primary" onClick={onClose}>使用当前 Brief</button>
-            </footer>
-          </section>
-        </div>
+          </>
+        )}
       </section>
     </div>
   );

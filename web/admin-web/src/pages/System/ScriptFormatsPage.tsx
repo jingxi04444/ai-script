@@ -3,6 +3,7 @@ import { Edit3, Plus, RefreshCcw, Trash2 } from 'lucide-react';
 import { systemApi, type ScriptFormat } from '../../api/system';
 import { DEFAULT_PAGE_SIZE, EmptyState, Modal, PageHeader, Pagination, SectionCard } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
+import { optionalNumberFromInput } from '../../utils/form';
 import './script-formats-page.css';
 
 const emptyForm: Partial<ScriptFormat> = { name: '', code: '', formatRequirement: '', sortOrder: 0, status: 1 };
@@ -93,8 +94,8 @@ const ScriptFormatsPage = () => {
         <div className="field-grid">
           <label className="field"><span>名称</span><input value={editing?.name || ''} onChange={(e) => setEditing((v) => ({ ...v, name: e.target.value }))} /></label>
           <label className="field"><span>编码</span><input value={editing?.code || ''} onChange={(e) => setEditing((v) => ({ ...v, code: e.target.value }))} /></label>
-          <label className="field"><span>排序</span><input type="number" value={editing?.sortOrder ?? 0} onChange={(e) => setEditing((v) => ({ ...v, sortOrder: Number(e.target.value) }))} /></label>
-          <label className="field"><span>状态</span><input type="number" value={editing?.status ?? 1} onChange={(e) => setEditing((v) => ({ ...v, status: Number(e.target.value) }))} placeholder="1启用 / 0禁用" /></label>
+          <label className="field"><span>排序</span><input type="number" value={editing?.sortOrder ?? ''} onChange={(e) => setEditing((v) => ({ ...v, sortOrder: optionalNumberFromInput(e.target.value) }))} /></label>
+          <label className="field"><span>状态</span><input type="number" value={editing?.status ?? ''} onChange={(e) => setEditing((v) => ({ ...v, status: optionalNumberFromInput(e.target.value) }))} placeholder="1启用 / 0禁用" /></label>
         </div>
         <label className="field" style={{ marginTop: 14 }}><span>格式要求</span><textarea rows={6} value={editing?.formatRequirement || ''} onChange={(e) => setEditing((v) => ({ ...v, formatRequirement: e.target.value }))} /></label>
       </Modal>

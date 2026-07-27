@@ -15,4 +15,8 @@ public class GenerateScriptDTO {
     private String duration;
     private String format;
     private String formatRequirement;
+    private String productFrame;
+    private String productImage;
+    private String productFrameFileName;
+    private String productFrameContent;
 }

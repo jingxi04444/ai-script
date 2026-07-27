@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -25,8 +26,11 @@ public class AdminTemplateController {
     }
 
     @GetMapping
-    public R<PageResult<ScriptTemplateVO>> list(PageQuery query) {
-        return R.ok(scriptService.templatePage(query));
+    public R<PageResult<ScriptTemplateVO>> list(
+        PageQuery query,
+        @RequestParam(required = false) String category
+    ) {
+        return R.ok(scriptService.templatePage(query, category));
     }
 
     @GetMapping("/{id}")

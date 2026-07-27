@@ -1,7 +1,7 @@
 import { config } from '../config';
 import { mockBriefApi } from '../mock/brief';
 import api from './request';
-import type { Brief, BriefDetectionReport, BriefEditRequest, BriefShareResult } from '../types/brief';
+import type { Brief, BriefDetectionReport, BriefEditRequest, BriefSharePermission, BriefShareResult } from '../types/brief';
 
 export const briefApi = {
   getList: (projectId: string): Promise<Brief[]> => {
@@ -62,9 +62,17 @@ export const briefApi = {
     URL.revokeObjectURL(url);
   },
 
-  enableShare: (briefId: string): Promise<BriefShareResult> => api.post(`/briefs/${briefId}/share`),
+  enableShare: (briefId: string, permission: BriefSharePermission): Promise<BriefShareResult> =>
+    config.useMock ? mockBriefApi.enableShare(briefId, permission) : api.post(`/briefs/${briefId}/share`, { permission }),
 
-  getByShareToken: (token: string): Promise<Brief> => api.get(`/briefs/share/${token}`),
+  shareLinks: (briefId: string): Promise<BriefShareResult[]> =>
+    config.useMock ? mockBriefApi.shareLinks(briefId) : api.get(`/briefs/${briefId}/share-links`),
+
+  getByShareToken: (token: string): Promise<Brief> =>
+    config.useMock ? mockBriefApi.getByShareToken(token) : api.get(`/briefs/share/${token}`),
+
+  updateByShareToken: (token: string, data: Partial<Brief>): Promise<Brief> =>
+    config.useMock ? mockBriefApi.updateByShareToken(token, data) : api.put(`/briefs/share/${token}`, data),
 
   requestEditByShareToken: (token: string, message?: string): Promise<BriefEditRequest> =>
     api.post(`/briefs/share/${token}/edit-requests`, { message }),

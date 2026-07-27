@@ -55,6 +55,9 @@ api.interceptors.request.use(
     if (token) {
       apiConfig.headers.Authorization = `Bearer ${token}`;
     }
+    if (typeof FormData !== 'undefined' && apiConfig.data instanceof FormData) {
+      apiConfig.headers.delete('Content-Type');
+    }
     return apiConfig;
   },
   (error) => {

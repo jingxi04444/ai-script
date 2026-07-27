@@ -7,4 +7,5 @@ public class BriefShareVO {
     private String briefId;
     private String shareToken;
     private String shareUrl;
+    private String permission;
 }

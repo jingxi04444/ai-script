@@ -4,6 +4,7 @@ import { quotaApi } from '../../api/quota';
 import { membershipApi, type MembershipPlan } from '../../api/membership';
 import { EmptyState, PageHeader, SectionCard, StatusBadge } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
+import { optionalNumberFromInput } from '../../utils/form';
 
 const BillingPage = () => {
   const { notify } = useAdminShell();
@@ -62,7 +63,7 @@ const BillingPage = () => {
                 <label className="field"><span>套餐名称</span><input value={plan.name || ''} onChange={(e) => setPlans((items) => items.map((item, i) => i === index ? { ...item, name: e.target.value } : item))} /></label>
                 <label className="field"><span>套餐编码</span><input value={plan.code || ''} onChange={(e) => setPlans((items) => items.map((item, i) => i === index ? { ...item, code: e.target.value } : item))} /></label>
                 <label className="field"><span>价格</span><input value={String(plan.price ?? '')} onChange={(e) => setPlans((items) => items.map((item, i) => i === index ? { ...item, price: e.target.value } : item))} /></label>
-                <label className="field"><span>周期天数</span><input value={String(plan.periodDays ?? '')} onChange={(e) => setPlans((items) => items.map((item, i) => i === index ? { ...item, periodDays: Number(e.target.value) } : item))} /></label>
+                <label className="field"><span>周期天数</span><input type="number" value={plan.periodDays ?? ''} onChange={(e) => setPlans((items) => items.map((item, i) => i === index ? { ...item, periodDays: optionalNumberFromInput(e.target.value) } : item))} /></label>
                 <StatusBadge tone="blue">{plan.code || 'plan'}</StatusBadge>
               </article>
             ))}

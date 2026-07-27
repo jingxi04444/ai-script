@@ -9,4 +9,5 @@ public class FileUploadVO {
     private String fileName;
     private String contentType;
     private Long size;
+    private String extractedText;
 }

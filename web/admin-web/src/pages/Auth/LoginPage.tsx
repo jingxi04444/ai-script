@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { ClipboardCheck, Database, Lock, ShieldCheck, Sparkles } from 'lucide-react';
 import { authApi } from '../../api/auth';
+import { takeAdminAuthNotice } from '../../api';
 
 const LoginPage = () => {
   const [username, setUsername] = useState('admin@ai-script.local');
@@ -11,12 +12,17 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [hint, setHint] = useState('');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const loginReason = searchParams.get('reason');
 
   useEffect(() => {
+    const authNotice = takeAdminAuthNotice()
+      || (loginReason === 'expired' ? '登录已过期，请重新登录' : '');
+    if (authNotice) setError(authNotice);
     if (localStorage.getItem('admin_token')) {
       navigate('/dashboard', { replace: true });
     }
-  }, [navigate]);
+  }, [loginReason, navigate]);
 
   const requestCaptcha = () => {
     setCaptcha('4829');

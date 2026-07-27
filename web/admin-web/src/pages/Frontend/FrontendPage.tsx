@@ -3,6 +3,7 @@ import { Database, Plus, RefreshCcw, Settings2, Trash2 } from 'lucide-react';
 import { tenantApi, type Tenant } from '../../api/tenant';
 import { DEFAULT_PAGE_SIZE, EmptyState, Modal, PageHeader, Pagination, SectionCard, StatusBadge } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
+import { optionalNumberFromInput } from '../../utils/form';
 
 type TenantForm = Partial<Tenant>;
 
@@ -160,7 +161,7 @@ const FrontendPage = () => {
           <label className="field"><span>租户名称</span><input value={form.tenantName || ''} onChange={(e) => setForm({ ...form, tenantName: e.target.value })} placeholder="例如：品牌 A" /></label>
           <label className="field"><span>租户编码</span><input value={form.tenantCode || ''} onChange={(e) => setForm({ ...form, tenantCode: e.target.value })} placeholder="tenant-a" /></label>
           <label className="field"><span>域名</span><input value={form.domain || ''} onChange={(e) => setForm({ ...form, domain: e.target.value })} placeholder="https://example.com" /></label>
-          <label className="field"><span>状态</span><input type="number" value={form.status ?? 1} onChange={(e) => setForm({ ...form, status: Number(e.target.value) })} placeholder="1 / 0" /></label>
+          <label className="field"><span>状态</span><input type="number" value={form.status ?? ''} onChange={(e) => setForm({ ...form, status: optionalNumberFromInput(e.target.value) })} placeholder="1 / 0" /></label>
           <label className="field"><span>联系人</span><input value={form.contactName || ''} onChange={(e) => setForm({ ...form, contactName: e.target.value })} /></label>
           <label className="field"><span>联系电话</span><input value={form.contactPhone || ''} onChange={(e) => setForm({ ...form, contactPhone: e.target.value })} /></label>
         </div>

@@ -3,6 +3,7 @@ import { ListChecks, RefreshCcw, Save, Trash2 } from 'lucide-react';
 import { systemApi, type Permission } from '../../api/system';
 import { DEFAULT_PAGE_SIZE, EmptyState, Modal, PageHeader, Pagination, SectionCard } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
+import { optionalNumberFromInput } from '../../utils/form';
 
 type PermissionForm = Partial<Permission>;
 
@@ -115,7 +116,7 @@ const PermissionsPage = () => {
           <label className="field"><span>模块</span><input value={form.moduleCode || ''} onChange={(e) => setForm({ ...form, moduleCode: e.target.value })} /></label>
           <label className="field"><span>类型</span><input value={form.permissionType || ''} onChange={(e) => setForm({ ...form, permissionType: e.target.value })} /></label>
         </div>
-        <label className="field" style={{ marginTop: 14 }}><span>状态</span><input type="number" value={form.status ?? 1} onChange={(e) => setForm({ ...form, status: Number(e.target.value) })} /></label>
+        <label className="field" style={{ marginTop: 14 }}><span>状态</span><input type="number" value={form.status ?? ''} onChange={(e) => setForm({ ...form, status: optionalNumberFromInput(e.target.value) })} /></label>
       </Modal>
 
       <Modal open={Boolean(deleteId)} title="删除权限" description="确认删除该权限？" onClose={() => setDeleteId(null)} footer={<><button className="modal-btn" type="button" onClick={() => setDeleteId(null)}>取消</button><button className="modal-btn danger" type="button" onClick={remove}>删除</button></>}>

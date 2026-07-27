@@ -4,6 +4,7 @@ import { systemApi, type HomeBanner } from '../../api/system';
 import { uploadApi } from '../../api/upload';
 import { EmptyState, Modal, PageHeader, SectionCard, StatusBadge } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
+import { optionalNumberFromInput } from '../../utils/form';
 import './home-banners-page.css';
 
 const createEmptyBanner = (sortOrder: number): HomeBanner => ({
@@ -230,7 +231,7 @@ const HomeBannersPage = () => {
             </label>
             <label className="field">
               <span>排序值</span>
-              <input type="number" value={draft?.sortOrder ?? 0} onChange={(event) => updateDraft({ sortOrder: Number(event.target.value) })} />
+              <input type="number" value={draft?.sortOrder ?? ''} onChange={(event) => updateDraft({ sortOrder: optionalNumberFromInput(event.target.value) })} />
             </label>
             <label className="field">
               <span>状态</span>

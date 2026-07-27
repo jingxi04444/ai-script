@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { message } from 'antd';
 import { briefApi } from '../../../api/brief';
 import type { Brief } from '../../../types/brief';
+import RichTextField from './RichTextField';
 import './selling-points-panel.css';
 
 interface SellingPointValues {
@@ -12,6 +13,9 @@ interface SellingPointValues {
   mainPoints: string;
   secondaryPoints: string;
 }
+
+type RichFieldKey = 'audience' | 'features' | 'mainPoints' | 'secondaryPoints';
+type SellingPointRichValues = Record<RichFieldKey, string>;
 
 export interface SellingPointsPanelRef {
   save: () => Promise<void>;
@@ -30,6 +34,33 @@ interface SellingPointsPanelProps {
 }
 
 const initialValues: SellingPointValues = { price: '', slogan: '', audience: '', features: '', mainPoints: '', secondaryPoints: '' };
+const richFieldKeys: RichFieldKey[] = ['audience', 'features', 'mainPoints', 'secondaryPoints'];
+
+const plainTextToRichHtml = (value: string) => value
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/\n/g, '<br>');
+
+const richValuesFromBrief = (current: Brief, plainValues: SellingPointValues): SellingPointRichValues => {
+  let stored: Partial<SellingPointRichValues> = {};
+  if (current.richContent) {
+    try {
+      const parsed = JSON.parse(current.richContent) as Partial<SellingPointRichValues>;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) stored = parsed;
+    } catch {
+      stored = {};
+    }
+  }
+  return {
+    audience: stored.audience || plainTextToRichHtml(plainValues.audience),
+    features: stored.features || plainTextToRichHtml(plainValues.features),
+    mainPoints: stored.mainPoints || plainTextToRichHtml(plainValues.mainPoints),
+    secondaryPoints: stored.secondaryPoints || plainTextToRichHtml(plainValues.secondaryPoints),
+  };
+};
+
+const initialRichValues = richValuesFromBrief({ richContent: '' } as Brief, initialValues);
 
 const valuesFromBrief = (current: Brief, previous: SellingPointValues = initialValues): SellingPointValues => {
   let parsedValues: Partial<SellingPointValues> = {};
@@ -39,7 +70,7 @@ const valuesFromBrief = (current: Brief, previous: SellingPointValues = initialV
       const parsed = JSON.parse(content) as Partial<SellingPointValues>;
       parsedValues = parsed;
     } catch {
-      parsedValues = { features: content };
+      parsedValues = /<\/?[a-z][\s\S]*>/i.test(content) ? {} : { features: content };
     }
   }
   return {
@@ -55,25 +86,36 @@ const valuesFromBrief = (current: Brief, previous: SellingPointValues = initialV
 
 const SellingPointsPanel = forwardRef<SellingPointsPanelRef, SellingPointsPanelProps>(({ projectId, productName, ensureProjectId, onBriefDetect, onProductNameLoaded }, ref) => {
   const [values, setValues] = useState(initialValues);
+  const [richValues, setRichValues] = useState(initialRichValues);
   const [brief, setBrief] = useState<Brief | null>(null);
+  const [preservedBriefContent, setPreservedBriefContent] = useState('');
 
   useEffect(() => {
     if (!projectId) {
       setBrief(null);
       setValues(initialValues);
+      setRichValues(initialRichValues);
+      setPreservedBriefContent('');
       return;
     }
     briefApi.getList(projectId).then((list) => {
       const current = list[0];
       if (!current) return;
       setBrief(current);
+      setPreservedBriefContent(current.briefContent || '');
       const loadedProductName = (current.productName || current.name || '').trim();
       if (loadedProductName) onProductNameLoaded?.(loadedProductName);
-      setValues((prev) => valuesFromBrief(current, prev));
+      const loadedValues = valuesFromBrief(current);
+      setValues(loadedValues);
+      setRichValues(richValuesFromBrief(current, loadedValues));
     }).catch(() => message.warning('Brief 数据加载失败'));
   }, [onProductNameLoaded, projectId]);
 
   const updateValue = (key: keyof SellingPointValues, value: string) => setValues((prev) => ({ ...prev, [key]: value }));
+  const updateRichValue = (key: RichFieldKey, html: string, plainText: string) => {
+    setRichValues((previous) => ({ ...previous, [key]: html }));
+    updateValue(key, plainText);
+  };
 
   const save = async () => {
     const nextProductName = productName?.trim();
@@ -98,13 +140,18 @@ const SellingPointsPanel = forwardRef<SellingPointsPanelRef, SellingPointsPanelP
       targetAudience: values.audience,
       targetScene: values.features,
       otherRequirements: values.secondaryPoints,
-      briefContent: JSON.stringify(values),
+      briefContent: brief?.briefContent || preservedBriefContent || JSON.stringify(values),
+      richContent: JSON.stringify(richValues),
+      forceNewVersion: Boolean(brief),
     };
     try {
       const saved = brief ? await briefApi.update(brief.id, payload) : await briefApi.create(payload);
-      setBrief(saved);
-      setValues((prev) => valuesFromBrief(saved, prev));
-      message.success('卖点数据已保存');
+      const completeSaved = { ...payload, ...saved } as Brief;
+      setBrief(completeSaved);
+      setPreservedBriefContent(completeSaved.briefContent || '');
+      setValues((prev) => valuesFromBrief(completeSaved, prev));
+      const savedVersionLabel = completeSaved.versions?.[0]?.label || (brief ? '新版本' : 'v1.0');
+      message.success(brief ? `卖点数据已保存为 ${savedVersionLabel}` : `卖点数据已保存，已创建 ${savedVersionLabel}`);
     } catch {
       message.error('保存失败，请稍后重试');
     }
@@ -119,7 +166,18 @@ const SellingPointsPanel = forwardRef<SellingPointsPanelRef, SellingPointsPanelP
       mainPoints: patch.primarySellingPoint ?? values.mainPoints,
       secondaryPoints: patch.otherRequirements ?? values.secondaryPoints,
     };
+    const changedRichValues = { ...richValues };
+    richFieldKeys.forEach((key) => {
+      const patchKey: Record<RichFieldKey, keyof Brief> = {
+        audience: 'targetAudience',
+        features: 'targetScene',
+        mainPoints: 'primarySellingPoint',
+        secondaryPoints: 'otherRequirements',
+      };
+      if (patch[patchKey[key]] !== undefined) changedRichValues[key] = plainTextToRichHtml(nextValues[key]);
+    });
     setValues(nextValues);
+    setRichValues(changedRichValues);
     if (patch.productName?.trim()) onProductNameLoaded?.(patch.productName.trim());
 
     const currentProjectId = await ensureProjectId();
@@ -135,22 +193,30 @@ const SellingPointsPanel = forwardRef<SellingPointsPanelRef, SellingPointsPanelP
       targetScene: nextValues.features,
       primarySellingPoint: nextValues.mainPoints,
       otherRequirements: nextValues.secondaryPoints,
-      briefContent: JSON.stringify(nextValues),
+      briefContent: brief?.briefContent || preservedBriefContent || JSON.stringify(nextValues),
+      richContent: JSON.stringify(changedRichValues),
     };
     const saved = brief ? await briefApi.update(brief.id, payload) : await briefApi.create(payload);
-    setBrief(saved);
+    const completeSaved = { ...payload, ...saved } as Brief;
+    setBrief(completeSaved);
+    setPreservedBriefContent(completeSaved.briefContent || '');
   };
 
   const loadBrief = (nextBrief: Brief) => {
-    setBrief(nextBrief);
+    setBrief(projectId && nextBrief.projectId === projectId ? nextBrief : null);
+    setPreservedBriefContent(nextBrief.briefContent || '');
     const loadedProductName = (nextBrief.productName || nextBrief.name || '').trim();
     if (loadedProductName) onProductNameLoaded?.(loadedProductName);
-    setValues(valuesFromBrief(nextBrief, initialValues));
+    const loadedValues = valuesFromBrief(nextBrief, initialValues);
+    setValues(loadedValues);
+    setRichValues(richValuesFromBrief(nextBrief, loadedValues));
   };
 
   const resetDraft = () => {
     setBrief(null);
     setValues(initialValues);
+    setRichValues(initialRichValues);
+    setPreservedBriefContent('');
   };
 
   useImperativeHandle(ref, () => ({ save, applyBriefPatch, loadBrief, resetDraft }));
@@ -168,30 +234,42 @@ const SellingPointsPanel = forwardRef<SellingPointsPanelRef, SellingPointsPanelP
             <input value={values.slogan} onChange={(e) => updateValue('slogan', e.target.value)} placeholder="一句话描述产品的定位" />
           </label>
         </div>
-        <label className="audience-field">
-          <span>目标人群</span>
-          <textarea value={values.audience} onChange={(e) => updateValue('audience', e.target.value)} placeholder="可以按照1，2，3，4分点去写目标人群。写的越准确，创作的越精准" maxLength={500} />
-          <em>{values.audience.length}/500</em>
-        </label>
+        <RichTextField
+          className="audience-field"
+          label="目标人群"
+          value={richValues.audience}
+          placeholder="可以按照1，2，3，4分点去写目标人群。写的越准确，创作的越精准"
+          maxLength={500}
+          onChange={(html, plainText) => updateRichValue('audience', html, plainText)}
+        />
       </section>
 
       <section className="selling-paste-card">
         <div className="selling-grid">
-          <label className="selling-textarea">
-            <span>产品特色卖点</span>
-            <textarea value={values.features} onChange={(e) => updateValue('features', e.target.value)} placeholder="请粘贴产品与竞品有区别的点，必提的特色点" maxLength={10000} />
-            <em>{values.features.length}/10000</em>
-          </label>
-          <label className="selling-textarea">
-            <span>产品主要卖点</span>
-            <textarea value={values.mainPoints} onChange={(e) => updateValue('mainPoints', e.target.value)} placeholder="请粘贴产品的主要卖点，按照1.2.3.4等分点去写" maxLength={10000} />
-            <em>{values.mainPoints.length}/10000</em>
-          </label>
-          <label className="selling-textarea">
-            <span>产品次要卖点</span>
-            <textarea value={values.secondaryPoints} onChange={(e) => updateValue('secondaryPoints', e.target.value)} placeholder="请粘贴产品的次要卖点，按照1.2.3.4等分点去写" maxLength={10000} />
-            <em>{values.secondaryPoints.length}/10000</em>
-          </label>
+          <RichTextField
+            className="selling-textarea"
+            label="产品特色卖点"
+            value={richValues.features}
+            placeholder="请粘贴产品与竞品有区别的点，必提的特色点"
+            maxLength={10000}
+            onChange={(html, plainText) => updateRichValue('features', html, plainText)}
+          />
+          <RichTextField
+            className="selling-textarea"
+            label="产品主要卖点"
+            value={richValues.mainPoints}
+            placeholder="请粘贴产品的主要卖点，按照1.2.3.4等分点去写"
+            maxLength={10000}
+            onChange={(html, plainText) => updateRichValue('mainPoints', html, plainText)}
+          />
+          <RichTextField
+            className="selling-textarea"
+            label="产品次要卖点"
+            value={richValues.secondaryPoints}
+            placeholder="请粘贴产品的次要卖点，按照1.2.3.4等分点去写"
+            maxLength={10000}
+            onChange={(html, plainText) => updateRichValue('secondaryPoints', html, plainText)}
+          />
         </div>
         <button
           type="button"

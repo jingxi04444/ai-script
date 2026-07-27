@@ -3,6 +3,7 @@ import { KeyRound, RefreshCcw, Save, Trash2 } from 'lucide-react';
 import { systemApi, type Role } from '../../api/system';
 import { DEFAULT_PAGE_SIZE, EmptyState, Modal, PageHeader, Pagination, SectionCard, StatusBadge } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
+import { optionalNumberFromInput } from '../../utils/form';
 
 type RoleForm = Partial<Role>;
 
@@ -111,7 +112,7 @@ const RolesPage = () => {
         <div className="field-grid">
           <label className="field"><span>名称</span><input value={form.roleName || ''} onChange={(e) => setForm({ ...form, roleName: e.target.value })} /></label>
           <label className="field"><span>编码</span><input value={form.roleCode || ''} onChange={(e) => setForm({ ...form, roleCode: e.target.value })} /></label>
-          <label className="field"><span>状态</span><input type="number" value={form.status ?? 1} onChange={(e) => setForm({ ...form, status: Number(e.target.value) })} /></label>
+          <label className="field"><span>状态</span><input type="number" value={form.status ?? ''} onChange={(e) => setForm({ ...form, status: optionalNumberFromInput(e.target.value) })} /></label>
         </div>
         <label className="field" style={{ marginTop: 14 }}><span>描述</span><textarea value={form.description || ''} onChange={(e) => setForm({ ...form, description: e.target.value })} /></label>
       </Modal>

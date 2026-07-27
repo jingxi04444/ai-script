@@ -17,16 +17,28 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final DynamicAuthorizationManager dynamicAuthorizationManager;
+    private final SecurityResponseWriter securityResponseWriter;
 
-    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter, DynamicAuthorizationManager dynamicAuthorizationManager) {
+    public SecurityConfig(
+        JwtAuthenticationFilter jwtAuthenticationFilter,
+        DynamicAuthorizationManager dynamicAuthorizationManager,
+        SecurityResponseWriter securityResponseWriter
+    ) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.dynamicAuthorizationManager = dynamicAuthorizationManager;
+        this.securityResponseWriter = securityResponseWriter;
     }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http.csrf(AbstractHttpConfigurer::disable)
             .sessionManagement(config -> config.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .exceptionHandling(config -> config
+                .authenticationEntryPoint((request, response, exception) ->
+                    securityResponseWriter.writeUnauthorized(response, "登录已过期，请重新登录"))
+                .accessDeniedHandler((request, response, exception) ->
+                    securityResponseWriter.writeForbidden(response, "没有权限执行该操作"))
+            )
             .authorizeHttpRequests(registry -> registry
                 .requestMatchers(
                     "/api/auth/**",

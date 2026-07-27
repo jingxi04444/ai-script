@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ApiResponse } from './index';
+import { handleAdminAuthFailure, type ApiResponse } from './index';
 
 export interface UploadFileResult {
   objectKey: string;
@@ -16,16 +16,22 @@ export const uploadApi = {
     formData.append('folder', 'site-config');
 
     const token = localStorage.getItem('admin_token');
-    const response = await axios.post<ApiResponse<UploadFileResult>>('/api/files/upload', formData, {
-      headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      },
-    });
+    try {
+      const response = await axios.post<ApiResponse<UploadFileResult>>('/api/files/upload', formData, {
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
 
-    const payload = response.data;
-    if (payload.code !== 0) {
-      return Promise.reject(payload);
+      const payload = response.data;
+      if (payload.code !== 0) {
+        handleAdminAuthFailure(payload, '/api/files/upload');
+        return Promise.reject(payload);
+      }
+      return payload.data;
+    } catch (error) {
+      handleAdminAuthFailure(error, '/api/files/upload');
+      throw error;
     }
-    return payload.data;
   },
 };

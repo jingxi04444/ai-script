@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Image, Plus, RefreshCcw, Save, Trash2, UploadCloud } from 'lucide-react';
+import { ChevronRight, FileText, FolderTree, Image, Plus, RefreshCcw, Save, Trash2, UploadCloud } from 'lucide-react';
 import { systemApi, type SiteConfig } from '../../api/system';
 import { uploadApi } from '../../api/upload';
 import { PageHeader, SectionCard } from '../../components/common/AdminUI';
@@ -14,7 +14,16 @@ interface OriginalScenarioPrompt {
   prompt: string;
 }
 
+interface OriginalScenarioCategory {
+  id: string;
+  title: string;
+  subtitle?: string;
+  prompt: string;
+  children: OriginalScenarioPrompt[];
+}
+
 type SiteConfigTab = 'logo' | 'analysis' | 'prompt';
+type PromptTreeSelection = { kind: 'category'; categoryId: string } | { kind: 'child'; categoryId: string; childId: string };
 
 const defaultOriginalScenarioPrompts: OriginalScenarioPrompt[] = [
   { id: 'main-image', title: '电商主图', subtitle: '突出首屏卖点与转化钩子', tag: '主图转化', prompt: '请生成电商主图短视频脚本，重点突出产品第一卖点、视觉冲击、使用场景和下单理由，开头3秒必须快速抓住注意力。' },
@@ -29,33 +38,84 @@ const defaultOriginalScenarioPrompts: OriginalScenarioPrompt[] = [
   { id: 'desire', title: '氛围欲望激发', subtitle: '营造拥有后的理想状态和情绪价值', tag: '氛围种草', prompt: '请生成氛围感和欲望激发型脚本，重点营造画面、情绪、身份感和拥有后的理想状态，弱化硬广感。' },
 ];
 
-const getDefaultOriginalScenarioPrompt = (id: string) => defaultOriginalScenarioPrompts.find((item) => item.id === id);
+const defaultOriginalScenarioCategories: OriginalScenarioCategory[] = [
+  {
+    id: 'ecommerce',
+    title: '电商',
+    subtitle: '突出首屏卖点与转化钩子',
+    prompt: '请创作以电商转化为目标的短视频脚本，突出产品核心价值、视觉吸引力、使用场景和清晰的下单理由。',
+    children: defaultOriginalScenarioPrompts.filter((item) => ['main-image', 'product-overview', 'product-intro', 'guide'].includes(item.id)),
+  },
+  {
+    id: 'unboxing-category',
+    title: '产品开箱',
+    subtitle: '开箱细节、上手体验和惊喜感',
+    prompt: '请从真实开箱和首次体验出发创作脚本，呈现拆封过程、产品细节、上手感受和逐步揭晓的惊喜。',
+    children: defaultOriginalScenarioPrompts.filter((item) => ['unboxing', 'unboxing-oral', 'review'].includes(item.id)),
+  },
+  {
+    id: 'pain-point-category',
+    title: '人群痛点产品介绍',
+    subtitle: '先讲真实困扰，再给解决方案',
+    prompt: '请围绕目标人群的真实困扰创作产品介绍脚本，先建立痛点共鸣，再自然说明产品如何解决问题并带来改变。',
+    children: defaultOriginalScenarioPrompts.filter((item) => ['pain-point', 'vlog', 'desire'].includes(item.id)),
+  },
+];
 
-const parseOriginalScenarioPrompts = (value?: string): OriginalScenarioPrompt[] => {
-  if (!value?.trim()) return defaultOriginalScenarioPrompts;
+const parseOriginalScenarioPrompts = (value?: string): OriginalScenarioCategory[] => {
+  if (!value?.trim()) return defaultOriginalScenarioCategories;
   try {
-    const parsed = JSON.parse(value) as OriginalScenarioPrompt[];
-    const list = Array.isArray(parsed) ? parsed.filter((item) => item?.id && item?.title && item?.prompt).map((item) => {
-      const defaultItem = getDefaultOriginalScenarioPrompt(item.id);
-      return { ...item, subtitle: item.subtitle ?? defaultItem?.subtitle ?? '', tag: item.tag ?? defaultItem?.tag ?? '' };
-    }) : [];
-    if (!list.length) return defaultOriginalScenarioPrompts;
-    const configuredById = new Map(list.map((item) => [item.id, item]));
-    const builtInScenarios = defaultOriginalScenarioPrompts.map((item) => configuredById.get(item.id) || item);
-    const customScenarios = list.filter((item) => !defaultOriginalScenarioPrompts.some((defaultItem) => defaultItem.id === item.id));
-    return [...builtInScenarios, ...customScenarios];
+    const parsed = JSON.parse(value) as Array<OriginalScenarioCategory | OriginalScenarioPrompt>;
+    if (!Array.isArray(parsed) || !parsed.length) return defaultOriginalScenarioCategories;
+    if ('children' in parsed[0]) {
+      const categories = (parsed as OriginalScenarioCategory[])
+        .map((item, categoryIndex) => ({
+          id: item?.id || `category-${categoryIndex}`,
+          title: item?.title ?? '',
+          subtitle: item?.subtitle ?? '',
+          prompt: item?.prompt ?? '',
+          children: Array.isArray(item?.children)
+            ? item.children.map((child, childIndex) => ({
+              id: child?.id || `scenario-${categoryIndex}-${childIndex}`,
+              title: child?.title ?? '',
+              subtitle: child?.subtitle ?? '',
+              tag: child?.tag ?? '',
+              prompt: child?.prompt ?? '',
+            }))
+            : [],
+        }));
+      return categories.length ? categories : defaultOriginalScenarioCategories;
+    }
+    const legacyItems = (parsed as OriginalScenarioPrompt[]).filter((item) => item?.id && item?.title && item?.prompt);
+    const legacyById = new Map(legacyItems.map((item) => [item.id, item]));
+    const knownIds = new Set(defaultOriginalScenarioPrompts.map((item) => item.id));
+    return defaultOriginalScenarioCategories.map((category, index) => ({
+      ...category,
+      children: [
+        ...category.children.map((child) => legacyById.get(child.id) || child),
+        ...(index === 0 ? legacyItems.filter((item) => !knownIds.has(item.id)) : []),
+      ],
+    }));
   } catch {
-    return defaultOriginalScenarioPrompts;
+    return defaultOriginalScenarioCategories;
   }
 };
 
-const stringifyOriginalScenarioPrompts = (list: OriginalScenarioPrompt[]) => JSON.stringify(list.filter((item) => item.title.trim() && item.prompt.trim()).map((item, index) => ({
-  id: item.id || `scenario-${Date.now()}-${index}`,
-  title: item.title.trim(),
-  subtitle: item.subtitle?.trim() || '',
-  tag: item.tag?.trim() || '',
-  prompt: item.prompt.trim(),
-})));
+const stringifyOriginalScenarioPrompts = (list: OriginalScenarioCategory[]) => JSON.stringify(list
+  .map((category, categoryIndex) => ({
+    id: category.id || `category-${Date.now()}-${categoryIndex}`,
+    title: category.title,
+    subtitle: category.subtitle || '',
+    prompt: category.prompt,
+    children: category.children
+      .map((item, itemIndex) => ({
+        id: item.id || `scenario-${Date.now()}-${categoryIndex}-${itemIndex}`,
+        title: item.title,
+        subtitle: item.subtitle || '',
+        tag: item.tag || '',
+        prompt: item.prompt,
+      })),
+  })));
 
 const SiteConfigPage = () => {
   const { notify } = useAdminShell();
@@ -65,12 +125,30 @@ const SiteConfigPage = () => {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [activeTab, setActiveTab] = useState<SiteConfigTab>('logo');
-  const originalScenarioPrompts = parseOriginalScenarioPrompts(config.originalScenarioPrompts);
+  const [expandedCategoryIds, setExpandedCategoryIds] = useState<string[]>(defaultOriginalScenarioCategories.map((item) => item.id));
+  const [selectedPromptNode, setSelectedPromptNode] = useState<PromptTreeSelection>({ kind: 'category', categoryId: defaultOriginalScenarioCategories[0].id });
+  const [originalScenarioCategories, setOriginalScenarioCategories] = useState<OriginalScenarioCategory[]>(defaultOriginalScenarioCategories);
+  const selectedOriginalCategory = originalScenarioCategories.find((item) => item.id === selectedPromptNode.categoryId)
+    || originalScenarioCategories[0];
+  const selectedOriginalCategoryIndex = originalScenarioCategories.findIndex((item) => item.id === selectedOriginalCategory?.id);
+  const selectedOriginalChild = selectedPromptNode.kind === 'child'
+    ? selectedOriginalCategory?.children.find((item) => item.id === selectedPromptNode.childId)
+    : undefined;
+  const selectedOriginalChildIndex = selectedOriginalChild
+    ? selectedOriginalCategory.children.findIndex((item) => item.id === selectedOriginalChild.id)
+    : -1;
 
   const load = async () => {
     setLoading(true);
     try {
-      setConfig(await systemApi.getSiteConfig());
+      const loadedConfig = await systemApi.getSiteConfig();
+      const loadedCategories = parseOriginalScenarioPrompts(loadedConfig.originalScenarioPrompts);
+      setConfig(loadedConfig);
+      setOriginalScenarioCategories(loadedCategories);
+      setExpandedCategoryIds(loadedCategories.map((item) => item.id));
+      if (loadedCategories[0]) {
+        setSelectedPromptNode({ kind: 'category', categoryId: loadedCategories[0].id });
+      }
     } catch {
       notify('站点配置加载失败');
     } finally {
@@ -85,8 +163,15 @@ const SiteConfigPage = () => {
   const save = async (nextConfig = config) => {
     setSaving(true);
     try {
-      const updated = await systemApi.updateSiteConfig(nextConfig);
-      setConfig(updated || nextConfig);
+      const configToSave = {
+        ...nextConfig,
+        originalScenarioPrompts: stringifyOriginalScenarioPrompts(originalScenarioCategories),
+      };
+      const updated = await systemApi.updateSiteConfig(configToSave);
+      setConfig(updated || configToSave);
+      if (updated?.originalScenarioPrompts) {
+        setOriginalScenarioCategories(parseOriginalScenarioPrompts(updated.originalScenarioPrompts));
+      }
       notify('站点配置已保存');
     } catch {
       notify('保存失败');
@@ -117,23 +202,61 @@ const SiteConfigPage = () => {
     await save(nextConfig);
   };
 
-  const updateOriginalScenarioPrompt = (index: number, patch: Partial<OriginalScenarioPrompt>) => {
-    const nextList = originalScenarioPrompts.map((item, itemIndex) => (itemIndex === index ? { ...item, ...patch } : item));
-    setConfig({ ...config, originalScenarioPrompts: stringifyOriginalScenarioPrompts(nextList) });
+  const syncOriginalScenarioCategories = (nextList: OriginalScenarioCategory[]) => {
+    setOriginalScenarioCategories(nextList);
+    setConfig((currentConfig) => ({
+      ...currentConfig,
+      originalScenarioPrompts: stringifyOriginalScenarioPrompts(nextList),
+    }));
   };
 
-  const addOriginalScenarioPrompt = () => {
-    const nextList = [...originalScenarioPrompts, { id: `scenario-${Date.now()}`, title: '新场景', subtitle: '填写前台给用户看的场景说明', tag: '原创场景', prompt: '请填写这个场景对应的 AI 提示词。' }];
-    setConfig({ ...config, originalScenarioPrompts: stringifyOriginalScenarioPrompts(nextList) });
+  const updateOriginalCategory = (categoryIndex: number, patch: Partial<OriginalScenarioCategory>) => {
+    const nextList = originalScenarioCategories.map((category, index) => (index === categoryIndex ? { ...category, ...patch } : category));
+    syncOriginalScenarioCategories(nextList);
   };
 
-  const removeOriginalScenarioPrompt = (index: number) => {
-    const nextList = originalScenarioPrompts.filter((_, itemIndex) => itemIndex !== index);
-    setConfig({ ...config, originalScenarioPrompts: stringifyOriginalScenarioPrompts(nextList.length ? nextList : defaultOriginalScenarioPrompts) });
+  const updateOriginalScenarioPrompt = (categoryIndex: number, itemIndex: number, patch: Partial<OriginalScenarioPrompt>) => {
+    const nextList = originalScenarioCategories.map((category, index) => index === categoryIndex ? {
+      ...category,
+      children: category.children.map((item, childIndex) => childIndex === itemIndex ? { ...item, ...patch } : item),
+    } : category);
+    syncOriginalScenarioCategories(nextList);
+  };
+
+  const addOriginalScenarioPrompt = (categoryIndex: number) => {
+    const childId = `scenario-${Date.now()}`;
+    const category = originalScenarioCategories[categoryIndex];
+    const nextList = originalScenarioCategories.map((item, index) => index === categoryIndex ? {
+      ...item,
+      children: [...item.children, { id: childId, title: '新子类', subtitle: '填写子类说明', tag: '原创场景', prompt: '请填写这个子类对应的通用提示词。' }],
+    } : item);
+    syncOriginalScenarioCategories(nextList);
+    if (category) {
+      setExpandedCategoryIds((current) => current.includes(category.id) ? current : [...current, category.id]);
+      setSelectedPromptNode({ kind: 'child', categoryId: category.id, childId });
+    }
+  };
+
+  const removeOriginalScenarioPrompt = (categoryIndex: number, itemIndex: number) => {
+    const category = originalScenarioCategories[categoryIndex];
+    const nextList = originalScenarioCategories.map((item, index) => index === categoryIndex ? {
+      ...item,
+      children: item.children.filter((_, childIndex) => childIndex !== itemIndex),
+    } : item);
+    syncOriginalScenarioCategories(nextList);
+    if (category) setSelectedPromptNode({ kind: 'category', categoryId: category.id });
   };
 
   const resetOriginalScenarioPrompts = () => {
-    setConfig({ ...config, originalScenarioPrompts: stringifyOriginalScenarioPrompts(defaultOriginalScenarioPrompts) });
+    syncOriginalScenarioCategories(defaultOriginalScenarioCategories);
+    setExpandedCategoryIds(defaultOriginalScenarioCategories.map((item) => item.id));
+    setSelectedPromptNode({ kind: 'category', categoryId: defaultOriginalScenarioCategories[0].id });
+  };
+
+  const toggleOriginalCategory = (categoryId: string) => {
+    setExpandedCategoryIds((current) => current.includes(categoryId)
+      ? current.filter((id) => id !== categoryId)
+      : [...current, categoryId]);
   };
 
   return (
@@ -215,34 +338,136 @@ const SiteConfigPage = () => {
       ) : null}
 
       {activeTab === 'prompt' ? (
-      <SectionCard title="AI原创脚本场景提示词" description="维护用户端 AI原创页场景卡片的前台展示文案，以及每个选项给大模型使用的后台提示词。" action={<span className="status-badge green">Original Prompts</span>}>
-        <div className="original-scenario-admin-list">
-          {originalScenarioPrompts.map((item, index) => (
-            <div className="original-scenario-admin-item" key={`${item.id}-${index}`}>
-              <label className="form-field original-scenario-title-field">
-                <span>类型名称 title</span>
-                <input value={item.title} onChange={(event) => updateOriginalScenarioPrompt(index, { title: event.target.value })} placeholder="例如：电商主图" />
-              </label>
-              <label className="form-field original-scenario-tag-field">
-                <span>类型标签 tag</span>
-                <input value={item.tag || ''} onChange={(event) => updateOriginalScenarioPrompt(index, { tag: event.target.value })} placeholder="例如：主图转化" />
-              </label>
-              <label className="form-field original-scenario-subtitle-field">
-                <span>前台显示描述 subtitle（给用户看）</span>
-                <textarea value={item.subtitle || ''} onChange={(event) => updateOriginalScenarioPrompt(index, { subtitle: event.target.value })} placeholder="展示在前台卡片/内容框里的说明，面向用户阅读" />
-              </label>
-              <label className="form-field original-scenario-prompt-field">
-                <span>大模型提示词 prompt（给生成脚本的大模型用）</span>
-                <textarea value={item.prompt} onChange={(event) => updateOriginalScenarioPrompt(index, { prompt: event.target.value })} placeholder="选择该场景后用于生成脚本的大模型提示词" />
-              </label>
-              <button className="toolbar-btn danger original-scenario-remove" type="button" onClick={() => removeOriginalScenarioPrompt(index)}><Trash2 size={16} />删除</button>
+      <SectionCard title="AI原创脚本分类提示词" description="顶部卡片是大类，下拉框是当前大类的子类。生成时会自动合并两级通用提示词。" action={<span className="status-badge green">Original Prompts</span>}>
+        <div className="original-prompt-tree-layout">
+          <aside className="original-prompt-tree" aria-label="AI原创提示词分类树">
+            <div className="original-prompt-tree-title">
+              <FolderTree size={17} />
+              <strong>分类结构</strong>
+              <span>{originalScenarioCategories.length} 个大类</span>
             </div>
-          ))}
+            {originalScenarioCategories.map((category, categoryIndex) => {
+              const expanded = expandedCategoryIds.includes(category.id);
+              const categorySelected = selectedPromptNode.kind === 'category' && selectedOriginalCategory?.id === category.id;
+              return (
+                <div className="original-prompt-tree-branch" key={category.id}>
+                  <button
+                    className={`original-prompt-tree-node category ${categorySelected ? 'active' : ''}`}
+                    type="button"
+                    onClick={() => {
+                      setSelectedPromptNode({ kind: 'category', categoryId: category.id });
+                      toggleOriginalCategory(category.id);
+                    }}
+                  >
+                    <span className={`original-prompt-tree-chevron ${expanded ? 'expanded' : ''}`}>
+                      <ChevronRight size={15} />
+                    </span>
+                    <FolderTree size={17} />
+                    <span className="original-prompt-tree-copy">
+                      <strong>{category.title || '未命名大类'}</strong>
+                      <small>{category.children.length} 个子类</small>
+                    </span>
+                  </button>
+                  {expanded ? (
+                    <div className="original-prompt-tree-children">
+                      {category.children.map((item) => (
+                        <button
+                          className={`original-prompt-tree-node child ${selectedPromptNode.kind === 'child' && selectedPromptNode.childId === item.id ? 'active' : ''}`}
+                          type="button"
+                          key={item.id}
+                          onClick={() => setSelectedPromptNode({ kind: 'child', categoryId: category.id, childId: item.id })}
+                        >
+                          <FileText size={15} />
+                          <span className="original-prompt-tree-copy">
+                            <strong>{item.title || '未命名子类'}</strong>
+                            <small>{item.tag || '未设置标签'}</small>
+                          </span>
+                        </button>
+                      ))}
+                      <button className="original-prompt-tree-add" type="button" onClick={() => addOriginalScenarioPrompt(categoryIndex)}>
+                        <Plus size={14} />新增子类
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })}
+          </aside>
+
+          <section className="original-prompt-editor">
+            {selectedOriginalCategory && selectedPromptNode.kind === 'category' ? (
+              <>
+                <header className="original-prompt-editor-head">
+                  <div>
+                    <span>大类配置</span>
+                    <h3>{selectedOriginalCategory.title || '未命名大类'}</h3>
+                  </div>
+                  <span className="status-badge green">{selectedOriginalCategory.children.length} 个子类</span>
+                </header>
+                <div className="original-prompt-editor-fields">
+                  <label className="form-field">
+                    <span>大类名称（顶部卡片）</span>
+                    <input value={selectedOriginalCategory.title} onChange={(event) => updateOriginalCategory(selectedOriginalCategoryIndex, { title: event.target.value })} placeholder="例如：电商" />
+                  </label>
+                  <label className="form-field">
+                    <span>大类前台描述</span>
+                    <textarea value={selectedOriginalCategory.subtitle || ''} onChange={(event) => updateOriginalCategory(selectedOriginalCategoryIndex, { subtitle: event.target.value })} placeholder="显示在顶部卡片中" />
+                  </label>
+                  <label className="form-field original-prompt-editor-wide">
+                    <span>大类通用提示词</span>
+                    <textarea value={selectedOriginalCategory.prompt} onChange={(event) => updateOriginalCategory(selectedOriginalCategoryIndex, { prompt: event.target.value })} placeholder="选择该大类后始终加入内容框的提示词" />
+                  </label>
+                </div>
+                <button className="toolbar-btn original-category-add-child" type="button" onClick={() => addOriginalScenarioPrompt(selectedOriginalCategoryIndex)}><Plus size={16} />新增子类</button>
+              </>
+            ) : null}
+
+            {selectedOriginalCategory && selectedOriginalChild && selectedPromptNode.kind === 'child' ? (
+              <>
+                <header className="original-prompt-editor-head">
+                  <div>
+                    <span>{selectedOriginalCategory.title || '未命名大类'} / 子类配置</span>
+                    <h3>{selectedOriginalChild.title || '未命名子类'}</h3>
+                  </div>
+                  <button
+                    className="toolbar-btn danger"
+                    type="button"
+                    disabled={selectedOriginalCategory.children.length <= 1}
+                    onClick={() => removeOriginalScenarioPrompt(selectedOriginalCategoryIndex, selectedOriginalChildIndex)}
+                  >
+                    <Trash2 size={16} />删除子类
+                  </button>
+                </header>
+                <div className="original-prompt-editor-fields">
+                  <label className="form-field">
+                    <span>子类名称（下拉框）</span>
+                    <input value={selectedOriginalChild.title} onChange={(event) => updateOriginalScenarioPrompt(selectedOriginalCategoryIndex, selectedOriginalChildIndex, { title: event.target.value })} placeholder="例如：电商主图" />
+                  </label>
+                  <label className="form-field">
+                    <span>子类标签</span>
+                    <input value={selectedOriginalChild.tag || ''} onChange={(event) => updateOriginalScenarioPrompt(selectedOriginalCategoryIndex, selectedOriginalChildIndex, { tag: event.target.value })} placeholder="例如：主图转化" />
+                  </label>
+                  <label className="form-field original-prompt-editor-wide">
+                    <span>子类说明</span>
+                    <textarea value={selectedOriginalChild.subtitle || ''} onChange={(event) => updateOriginalScenarioPrompt(selectedOriginalCategoryIndex, selectedOriginalChildIndex, { subtitle: event.target.value })} placeholder="子类用途说明" />
+                  </label>
+                  <label className="form-field original-prompt-editor-wide">
+                    <span>子类通用提示词</span>
+                    <textarea value={selectedOriginalChild.prompt} onChange={(event) => updateOriginalScenarioPrompt(selectedOriginalCategoryIndex, selectedOriginalChildIndex, { prompt: event.target.value })} placeholder="与大类提示词合并后显示在内容框" />
+                  </label>
+                </div>
+                <div className="original-prompt-combined-preview">
+                  <span>前台组合预览</span>
+                  <p>{selectedOriginalCategory.prompt}</p>
+                  <p>{selectedOriginalChild.prompt}</p>
+                </div>
+              </>
+            ) : null}
+          </section>
         </div>
         <div className="site-config-actions site-config-actions-inline site-analysis-actions">
-          <button className="toolbar-btn" type="button" onClick={addOriginalScenarioPrompt}><Plus size={16} />新增选项</button>
           <button className="toolbar-btn" type="button" onClick={resetOriginalScenarioPrompts}>恢复默认</button>
-          <button className="toolbar-btn" type="button" onClick={() => save()} disabled={saving}><Save size={16} />{saving ? '保存中' : '保存场景提示词'}</button>
+          <button className="toolbar-btn" type="button" onClick={() => save()} disabled={saving}><Save size={16} />{saving ? '保存中' : '保存分类提示词'}</button>
         </div>
       </SectionCard>
       ) : null}

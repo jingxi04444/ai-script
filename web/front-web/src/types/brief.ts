@@ -20,12 +20,17 @@ export interface Brief {
   targetScene?: string;
   otherRequirements?: string;
   briefContent?: string;
+  richContent?: string;
   isShared?: number;
   shareEnabled?: number;
   shareToken?: string;
   shareUrl?: string;
+  sharePermission?: BriefSharePermission;
+  accessPermission?: BriefSharePermission;
   forceNewVersion?: boolean;
 }
+
+export type BriefSharePermission = 'read' | 'edit' | 'manage';
 
 export interface BriefAiResult {
   id: string;
@@ -70,6 +75,7 @@ export interface BriefShareResult {
   briefId: string;
   shareToken: string;
   shareUrl: string;
+  permission: BriefSharePermission;
 }
 
 export interface BriefEditRequest {

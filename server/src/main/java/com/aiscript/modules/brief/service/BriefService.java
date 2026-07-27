@@ -21,9 +21,13 @@ public interface BriefService {
 
     BriefVO update(Integer id, BriefSaveDTO dto);
 
-    BriefShareVO enableShare(Integer id);
+    BriefShareVO enableShare(Integer id, String permission);
+
+    List<BriefShareVO> shareLinks(Integer id);
 
     BriefVO getByShareToken(String token);
+
+    BriefVO updateByShareToken(String token, BriefSaveDTO dto);
 
     BriefVO copyToProject(Integer id, Integer projectId);
 

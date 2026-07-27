@@ -7,6 +7,8 @@ import com.aiscript.common.util.JsonUtils;
 import com.aiscript.framework.tenant.TenantContext;
 import com.aiscript.integration.llm.LlmClient;
 import com.aiscript.modules.brief.entity.AiBrief;
+import com.aiscript.modules.brief.entity.AiBriefCollaborator;
+import com.aiscript.modules.brief.mapper.AiBriefCollaboratorMapper;
 import com.aiscript.modules.brief.mapper.AiBriefMapper;
 import com.aiscript.modules.generation.entity.AiGenerationTask;
 import com.aiscript.modules.generation.mapper.AiGenerationTaskMapper;
@@ -57,6 +59,7 @@ public class ScriptServiceImpl implements ScriptService {
     private final AiStoryboardShotMapper shotMapper;
     private final AiGenerationTaskMapper generationTaskMapper;
     private final AiBriefMapper briefMapper;
+    private final AiBriefCollaboratorMapper briefCollaboratorMapper;
     private final SysScriptFormatConfigMapper scriptFormatMapper;
     private final LlmClient llmClient;
     private final PromptRenderService promptRenderService;
@@ -68,6 +71,7 @@ public class ScriptServiceImpl implements ScriptService {
         AiStoryboardShotMapper shotMapper,
         AiGenerationTaskMapper generationTaskMapper,
         AiBriefMapper briefMapper,
+        AiBriefCollaboratorMapper briefCollaboratorMapper,
         SysScriptFormatConfigMapper scriptFormatMapper,
         LlmClient llmClient,
         PromptRenderService promptRenderService
@@ -78,6 +82,7 @@ public class ScriptServiceImpl implements ScriptService {
         this.shotMapper = shotMapper;
         this.generationTaskMapper = generationTaskMapper;
         this.briefMapper = briefMapper;
+        this.briefCollaboratorMapper = briefCollaboratorMapper;
         this.scriptFormatMapper = scriptFormatMapper;
         this.llmClient = llmClient;
         this.promptRenderService = promptRenderService;
@@ -224,10 +229,18 @@ public class ScriptServiceImpl implements ScriptService {
     }
 
     @Override
-    public PageResult<ScriptTemplateVO> templatePage(PageQuery query) {
+    public PageResult<ScriptTemplateVO> templatePage(PageQuery query, String category) {
         LambdaQueryWrapper<AiScriptTemplate> wrapper = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(query.getKeyword())) {
-            wrapper.like(AiScriptTemplate::getTemplateName, query.getKeyword());
+            wrapper.and(keywordWrapper -> keywordWrapper
+                .like(AiScriptTemplate::getTemplateName, query.getKeyword())
+                .or()
+                .like(AiScriptTemplate::getTemplateSource, query.getKeyword())
+                .or()
+                .like(AiScriptTemplate::getDifficulty, query.getKeyword()));
+        }
+        if (StringUtils.hasText(category)) {
+            wrapper.eq(AiScriptTemplate::getCategory, category);
         }
         wrapper.orderByAsc(AiScriptTemplate::getSortOrder)
             .orderByDesc(AiScriptTemplate::getUpdateTime)
@@ -375,13 +388,15 @@ public class ScriptServiceImpl implements ScriptService {
             AiBrief brief = briefMapper.selectOne(new LambdaQueryWrapper<AiBrief>()
                 .eq(AiBrief::getId, Integer.valueOf(dto.getBriefId()))
                 .eq(AiBrief::getTenantId, currentTenantId())
-                .eq(AiBrief::getCreateBy, currentUserId())
                 .last("LIMIT 1"));
-            if (brief == null) {
+            Integer userId = currentUserId();
+            boolean hasAccess = brief != null && (userId.equals(brief.getCreateBy())
+                || briefCollaboratorMapper.selectCount(new LambdaQueryWrapper<AiBriefCollaborator>()
+                    .eq(AiBriefCollaborator::getBriefId, brief.getId())
+                    .eq(AiBriefCollaborator::getUserId, userId)
+                    .eq(AiBriefCollaborator::getStatus, 1)) > 0);
+            if (!hasAccess) {
                 throw new BusinessException("所选产品 Brief 不存在，请重新选择产品");
-            }
-            if (StringUtils.hasText(dto.getProjectId()) && !Integer.valueOf(dto.getProjectId()).equals(brief.getProjectId())) {
-                throw new BusinessException("所选产品 Brief 不属于当前项目");
             }
             return brief;
         } catch (NumberFormatException ex) {
@@ -423,20 +438,25 @@ public class ScriptServiceImpl implements ScriptService {
                 "脚本格式：" + formatInfo.name(),
                 "脚本格式要求：\n" + formatInfo.requirement(),
                 "脚本时长：" + nullToEmpty(dto.getDuration()),
+                "上传画面文件：" + nullToEmpty(dto.getProductFrameFileName()),
+                "上传画面表格内容：\n" + nullToEmpty(dto.getProductFrameContent()),
                 "用户补充要求：\n" + nullToEmpty(userPrompt)
             ).stream().filter(line -> !line.endsWith("：\n") && !line.endsWith("：")).toList().stream().reduce((a, b) -> a + "\n\n" + b).orElse("");
         }
+        String promptLabel = "original".equals(dto.getType()) ? "用户提示词" : "用户补充要求";
         return List.of(
+            promptLabel + "：\n" + nullToEmpty(userPrompt),
             "产品 Brief：\n" + nullToEmpty(productInfo),
             "脚本类型：" + nullToEmpty(dto.getType()),
             "脚本格式：" + formatInfo.name(),
             "脚本格式要求：\n" + formatInfo.requirement(),
             "脚本时长：" + nullToEmpty(dto.getDuration()),
+            "上传画面文件：" + nullToEmpty(dto.getProductFrameFileName()),
+            "上传画面表格内容：\n" + nullToEmpty(dto.getProductFrameContent()),
             "模板信息：\n" + nullToEmpty(templateText),
             "参考链接：" + nullToEmpty(dto.getReferenceUrl()),
             "参考视频文案：\n" + nullToEmpty(dto.getReferenceCopy()),
-            "结构分析：\n" + nullToEmpty(dto.getStructureAnalysis()),
-            "用户补充要求：\n" + nullToEmpty(userPrompt)
+            "结构分析：\n" + nullToEmpty(dto.getStructureAnalysis())
         ).stream().filter(line -> !line.endsWith("：\n") && !line.endsWith("：")).toList().stream().reduce((a, b) -> a + "\n\n" + b).orElse("");
     }
 
@@ -524,7 +544,7 @@ public class ScriptServiceImpl implements ScriptService {
             + "脚本时长：" + duration + "\n"
             + "脚本格式：" + formatInfo.name() + "\n"
             + "脚本格式要求：" + formatInfo.requirement() + "\n"
-            + "创作需求：" + prompt + "\n\n"
+            + ("original".equals(dto.getType()) ? "用户提示词：" : "创作需求：") + prompt + "\n\n"
             + "开场钩子：别再用普通方式介绍产品了，先让用户看到真实痛点。\n"
             + "痛点共鸣：把目标人群每天都会遇到的麻烦说清楚，让用户产生代入感。\n"
             + "卖点展开：围绕核心卖点给出具体场景，展示产品如何解决问题。\n"
@@ -535,6 +555,7 @@ public class ScriptServiceImpl implements ScriptService {
     private void fillTemplate(AiScriptTemplate template, TemplateSaveDTO dto) {
         template.setTemplateName(dto.getName());
         template.setCategory(dto.getCategory());
+        template.setTemplateSource(dto.getTemplateSource());
         template.setActor(dto.getActor());
         template.setPeople(dto.getPeople());
         template.setPopularity(dto.getPopularity());

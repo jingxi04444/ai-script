@@ -266,6 +266,90 @@
   white-space: nowrap;
 }
 
+.assets-record-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  align-content: start;
+  gap: 14px;
+  padding-top: 30px;
+}
+
+.assets-record-card {
+  min-width: 0;
+  min-height: 88px;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 13px;
+  padding: 15px;
+  border: 1px solid #313435;
+  border-radius: 10px;
+  background: #1b1d1d;
+  color: #d9dcdc;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.assets-record-card:hover {
+  border-color: rgba(80, 208, 93, 0.65);
+  background: #202520;
+  transform: translateY(-2px);
+}
+
+.assets-record-icon {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: rgba(80, 208, 93, 0.12);
+  color: #67db71;
+  font-size: 20px;
+}
+
+.assets-record-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+#root .assets-library-shell .assets-record-copy strong,
+#root .assets-library-shell .assets-record-copy small,
+#root .assets-library-shell .assets-record-copy em {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#root .assets-library-shell .assets-record-copy strong {
+  color: #e5e8e8;
+  font-size: 15px;
+  font-weight: 680;
+}
+
+#root .assets-library-shell .assets-record-copy small {
+  color: #a1a7a8;
+  font-size: 12px;
+}
+
+#root .assets-library-shell .assets-record-copy em {
+  color: #707678;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.assets-record-card > .anticon {
+  color: #747a7c;
+  font-size: 12px;
+}
+
+.assets-record-empty {
+  margin: 0;
+  color: #7f8587;
+}
+
 @media (max-width: 1680px) {
   .assets-folder-grid {
     grid-template-columns: repeat(auto-fill, 150px);

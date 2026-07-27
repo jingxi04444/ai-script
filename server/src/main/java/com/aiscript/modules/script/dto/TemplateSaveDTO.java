@@ -6,6 +6,7 @@ import lombok.Data;
 public class TemplateSaveDTO {
     private String name;
     private String category;
+    private String templateSource;
     private String actor;
     private String people;
     private String popularity;

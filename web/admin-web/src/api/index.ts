@@ -16,11 +16,37 @@ export interface PageResult<T> {
   pages: number;
 }
 
-function redirectToLogin() {
+const ADMIN_AUTH_NOTICE_KEY = 'admin_auth_notice';
+const adminBasePath = (import.meta.env.BASE_URL || '/admin/').replace(/\/$/, '');
+const adminLoginPath = `${adminBasePath}/login`;
+let redirectingToLogin = false;
+
+const isLoginRequest = (requestUrl?: string) => Boolean(requestUrl?.replace(/\?.*$/, '').endsWith('/auth/login'));
+
+export function handleAdminAuthFailure(error: unknown, requestUrl?: string): boolean {
+  if (isLoginRequest(requestUrl)) return false;
+  const candidate = error as {
+    code?: number;
+    message?: string;
+    response?: { status?: number; data?: { code?: number; message?: string } };
+  };
+  const payload = candidate.response?.data || candidate;
+  const unauthorized = candidate.response?.status === 401 || payload?.code === 40100;
+  if (!unauthorized) return false;
+
   localStorage.removeItem('admin_token');
-  if (window.location.pathname !== '/admin/login') {
-    window.location.href = '/admin/login';
+  sessionStorage.setItem(ADMIN_AUTH_NOTICE_KEY, payload?.message || '登录已过期，请重新登录');
+  if (window.location.pathname !== adminLoginPath && !redirectingToLogin) {
+    redirectingToLogin = true;
+    window.location.replace(`${adminLoginPath}?reason=expired`);
   }
+  return true;
+}
+
+export function takeAdminAuthNotice(): string {
+  const notice = sessionStorage.getItem(ADMIN_AUTH_NOTICE_KEY) || '';
+  sessionStorage.removeItem(ADMIN_AUTH_NOTICE_KEY);
+  return notice;
 }
 
 const api = axios.create({
@@ -58,7 +84,7 @@ api.interceptors.response.use(
         return apiResponse.data;
       }
       if (apiResponse.code === 40100) {
-        redirectToLogin();
+        handleAdminAuthFailure(apiResponse, response.config.url);
       }
       return Promise.reject(apiResponse);
     }
@@ -66,9 +92,7 @@ api.interceptors.response.use(
     return payload;
   },
   (error) => {
-    if (error.response?.status === 401 || error?.code === 40100) {
-      redirectToLogin();
-    }
+    handleAdminAuthFailure(error, error.config?.url);
     return Promise.reject(error.response?.data || error);
   }
 );

@@ -1732,3 +1732,1166 @@
 .profile-dialog-content dt { color: #899398; font-size: 12px; }
 .profile-dialog-content dd { min-width: 0; margin: 0; overflow: hidden; color: #eef2f3; font-size: 14px; font-weight: 750; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 520px) { .profile-dialog-content dl { grid-template-columns: 1fr; } }
+
+/* Brief document library and review workspace. */
+.brief-studio-backdrop {
+  padding: 12px;
+}
+
+.brief-studio-modal {
+  width: min(1580px, calc(100vw - 24px)) !important;
+  height: min(920px, calc(100vh - 24px)) !important;
+  max-height: calc(100vh - 24px) !important;
+  padding: 0 !important;
+  display: grid !important;
+  overflow: hidden !important;
+  border: 1px solid #343a3d !important;
+  border-radius: 16px !important;
+  background: #151819 !important;
+  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.62) !important;
+}
+
+.brief-studio-modal.is-folders {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.brief-folder-head {
+  min-height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 18px 26px;
+  border-bottom: 1px solid #2d3234;
+}
+
+.brief-folder-head > div:first-child {
+  min-width: 0;
+}
+
+.brief-folder-head > div:first-child > span {
+  color: #7eea73;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.brief-folder-head h2 {
+  margin: 5px 0 0;
+  color: #f4f7f7;
+  font-size: 22px !important;
+}
+
+.brief-folder-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brief-folder-create {
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 14px 0 11px;
+  border: 1px solid #394043;
+  border-radius: 9px;
+  background: #1c2021;
+  box-shadow: none;
+  color: #e7ebec;
+  font-size: 13px;
+  font-weight: 700;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.brief-folder-create .anticon {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: rgba(104, 219, 100, 0.13);
+  color: #75df6e;
+  font-size: 11px;
+}
+
+.brief-folder-create:hover {
+  border-color: rgba(104, 219, 100, 0.52);
+  background: #222827;
+  color: #ffffff;
+}
+
+.brief-folder-close {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 40px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: #8e989c;
+  font-size: 18px;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.brief-folder-close:hover {
+  border-color: #3b4245;
+  background: #202425;
+  color: #f0f4f4;
+}
+
+.brief-folder-toolbar {
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 26px;
+  border-bottom: 1px solid #292e30;
+  background: #121516;
+}
+
+.brief-folder-toolbar label {
+  width: min(520px, 60vw);
+  height: 40px;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 0 13px;
+  border: 1px solid #353c3f;
+  border-radius: 9px;
+  background: #0e1112;
+  color: #7f898d;
+}
+
+.brief-folder-toolbar input {
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #edf2f2;
+}
+
+.brief-folder-toolbar > span {
+  color: #889296;
+  font-size: 12px;
+}
+
+.brief-folder-grid {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  align-content: start;
+  gap: 16px;
+  padding: 24px 26px 32px;
+  overflow-y: auto;
+}
+
+.brief-folder-card {
+  position: relative;
+  min-width: 0;
+  min-height: 128px;
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid #33393b;
+  border-radius: 12px;
+  background: #1a1e1f;
+  color: #edf2f2;
+  text-align: left;
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+
+.brief-folder-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(103, 220, 102, 0.62);
+  background: #1d2420;
+}
+
+.brief-folder-shape {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(86, 208, 91, 0.12);
+  color: #72df69;
+  font-size: 25px;
+}
+
+.brief-folder-copy {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.brief-folder-copy strong,
+.brief-folder-copy small,
+.brief-folder-copy em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brief-folder-copy strong {
+  color: #edf2f2;
+  font-size: 15px;
+  font-weight: 760;
+}
+
+.brief-folder-copy small {
+  color: #9ba5a8;
+  font-size: 12px;
+}
+
+.brief-folder-copy em {
+  color: #667175;
+  font-size: 11px;
+  font-style: normal;
+}
+
+.brief-folder-shared {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: rgba(92, 209, 97, 0.11);
+  color: #76df6d;
+  font-size: 10px;
+}
+
+.brief-folder-empty {
+  grid-column: 1 / -1;
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 9px;
+  color: #758084;
+  text-align: center;
+}
+
+.brief-folder-empty > .anticon {
+  color: #5fca61;
+  font-size: 34px;
+}
+
+.brief-folder-empty strong {
+  color: #bec6c8;
+}
+
+.brief-studio-modal.is-detail {
+  grid-template-rows: 66px minmax(0, 1fr);
+}
+
+.brief-studio-topbar {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 0 14px;
+  border-bottom: 1px solid #303537;
+  background: #171a1b;
+}
+
+.brief-studio-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brief-studio-title > button,
+.brief-studio-close {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #aeb6b9;
+}
+
+.brief-studio-title > .anticon {
+  color: #6ddd68;
+  font-size: 20px;
+}
+
+.brief-studio-title > div {
+  min-width: 0;
+}
+
+.brief-studio-title h2 {
+  max-width: 360px;
+  margin: 0;
+  overflow: hidden;
+  color: #eef2f3;
+  font-size: 15px !important;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brief-studio-title > div > span {
+  color: #727d80;
+  font-size: 10px;
+}
+
+.brief-studio-title select {
+  height: 34px;
+  min-width: 70px;
+  padding: 0 9px;
+  border: 1px solid #41484b;
+  border-radius: 7px;
+  outline: 0;
+  background: #202426;
+  color: #dfe4e5;
+}
+
+.brief-studio-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.brief-studio-actions > button:not(.brief-studio-close) {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid #3a4144;
+  border-radius: 8px;
+  background: #202426;
+  color: #c7ced0;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.brief-studio-actions > button:hover,
+.brief-studio-actions > button.active {
+  border-color: rgba(104, 219, 100, 0.56);
+  background: rgba(66, 143, 66, 0.16);
+  color: #88e879;
+}
+
+.brief-studio-actions > .brief-apply-action {
+  border-color: rgba(104, 219, 100, 0.46) !important;
+  background: rgba(66, 143, 66, 0.14) !important;
+  color: #8be581 !important;
+}
+
+.brief-studio-body {
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+}
+
+.brief-document-stage {
+  min-width: 0;
+  min-height: 0;
+  padding: 28px;
+  overflow: auto;
+  background: #0d1011;
+}
+
+.brief-document-sheet {
+  width: min(920px, 100%);
+  min-height: 100%;
+  margin: 0 auto;
+  overflow: hidden;
+  border: 1px solid #303638;
+  border-radius: 12px;
+  background: #171b1c;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+}
+
+.brief-document-sheet.is-editing {
+  border-color: #303638;
+  background: transparent;
+  box-shadow: none;
+}
+
+.brief-document-sheet > header {
+  padding: 28px 30px 24px;
+  border-bottom: 1px solid #2c3234;
+  background: #1c211e;
+}
+
+.brief-document-sheet > header > span {
+  color: #75db6d;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.16em;
+}
+
+.brief-document-sheet > header h1 {
+  margin: 8px 0 5px;
+  color: #f2f5f5;
+  font-size: 25px;
+}
+
+.brief-document-sheet > header p {
+  margin: 0;
+  color: #8d989b;
+  font-size: 13px;
+}
+
+.brief-document-title-input {
+  display: block;
+  width: min(100%, 560px);
+  margin: 8px 0 5px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #f2f5f5;
+  font-size: 25px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.brief-document-title-input:focus {
+  box-shadow: 0 2px 0 rgba(104, 219, 100, 0.7);
+}
+
+.brief-document-title-input::placeholder {
+  color: #697477;
+}
+
+.brief-document-grid,
+.brief-document-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0;
+  padding: 10px 30px 34px;
+}
+
+.brief-document-content-layout {
+  padding: 24px 30px 34px;
+}
+
+.brief-document-field,
+.brief-document-edit-field {
+  min-width: 0;
+  padding: 20px 0;
+  border-bottom: 1px solid #292f31;
+}
+
+.brief-document-field:nth-child(odd):not(.wide),
+.brief-document-edit-field:nth-child(odd):not(.wide) {
+  padding-right: 20px;
+}
+
+.brief-document-field:nth-child(even):not(.wide),
+.brief-document-edit-field:nth-child(even):not(.wide) {
+  padding-left: 20px;
+  border-left: 1px solid #292f31;
+}
+
+.brief-document-field.wide,
+.brief-document-edit-field.wide {
+  grid-column: 1 / -1;
+}
+
+.brief-rich-editor-field {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 20px 0;
+  border-bottom: 1px solid #292f31;
+}
+
+.brief-document-field > span,
+.brief-document-edit-field > span,
+.brief-rich-editor-field > span {
+  display: block;
+  margin-bottom: 8px;
+  color: #727e81;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.brief-document-field p {
+  margin: 0;
+  color: #dce2e3;
+  font-size: 14px;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.brief-document-rich-value > div {
+  color: #dce2e3;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.brief-document-rich-value h2,
+.brief-document-rich-value h3 {
+  margin: 18px 0 8px;
+  color: #f2f5f5;
+}
+
+.brief-document-rich-value h2 {
+  font-size: 20px;
+}
+
+.brief-document-rich-value h3 {
+  padding-left: 9px;
+  border-left: 3px solid #69d965;
+  font-size: 16px;
+}
+
+.brief-document-rich-value p {
+  margin: 0 0 12px;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  white-space: normal;
+}
+
+.brief-document-rich-value ul,
+.brief-document-rich-value ol {
+  margin: 8px 0 12px;
+  padding-left: 22px;
+}
+
+.brief-document-edit-field input,
+.brief-document-edit-field textarea {
+  width: 100%;
+  border: 1px solid #3b4447;
+  border-radius: 8px;
+  outline: 0;
+  background: #101415;
+  color: #edf2f2;
+}
+
+.brief-document-edit-field input {
+  height: 38px;
+  padding: 0 11px;
+}
+
+.brief-document-edit-field textarea {
+  min-height: 82px;
+  padding: 10px 11px;
+  resize: vertical;
+  line-height: 1.55;
+}
+
+.brief-selling-edit-layout {
+  display: grid;
+  gap: 18px;
+  padding: 24px 30px 34px;
+}
+
+.brief-selling-edit-overview {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.85fr) minmax(0, 1.15fr);
+  height: 240px;
+  min-height: 240px;
+  overflow: visible;
+}
+
+.brief-selling-edit-small-fields {
+  display: grid;
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+
+.brief-selling-edit-plain-field {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  min-width: 0;
+  padding: 18px;
+}
+
+.brief-selling-edit-plain-field + .brief-selling-edit-plain-field {
+  align-content: end;
+}
+
+.brief-selling-edit-plain-field > span {
+  color: #e7ecec;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.brief-selling-edit-plain-field input {
+  width: 100%;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid #3b4447;
+  border-radius: 8px;
+  outline: 0;
+  background: #101415;
+  color: #edf2f2;
+}
+
+.brief-selling-edit-plain-field input:focus {
+  border-color: rgba(104, 219, 100, 0.68);
+  box-shadow: 0 0 0 2px rgba(104, 219, 100, 0.1);
+}
+
+.brief-selling-edit-audience {
+  min-height: 0;
+  padding: 18px 0 18px 18px;
+}
+
+.brief-selling-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  height: 420px;
+  min-height: 420px;
+  overflow: visible;
+}
+
+.brief-selling-edit-grid > .rich-text-field {
+  min-width: 0;
+  min-height: 0;
+  padding: 0 18px;
+}
+
+.brief-selling-edit-grid > .rich-text-field:first-child {
+  padding-left: 0;
+}
+
+.brief-selling-edit-grid > .rich-text-field:last-child {
+  padding-right: 0;
+}
+
+.brief-selling-edit-grid > .rich-text-field + .rich-text-field {
+  border-left: 0;
+}
+
+.brief-selling-edit-rich .selling-rich-editor {
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.brief-selling-edit-audience .selling-rich-editor {
+  height: auto;
+  min-height: 0;
+}
+
+.brief-selling-edit-grid .selling-rich-editor {
+  height: 362px;
+  min-height: 362px;
+}
+
+.brief-rich-toolbar {
+  min-height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 1px solid #3b4447;
+  border-bottom: 0;
+  border-radius: 8px 8px 0 0;
+  background: #1b2021;
+}
+
+.brief-rich-toolbar button,
+.brief-rich-toolbar label {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 9px;
+  border: 1px solid #3a4245;
+  border-radius: 6px;
+  background: #24292b;
+  color: #c7ced0;
+  font-size: 11px;
+}
+
+.brief-rich-toolbar button:hover,
+.brief-rich-toolbar label:hover,
+.brief-rich-toolbar button.active {
+  border-color: rgba(104, 219, 100, 0.5);
+  background: rgba(66, 143, 66, 0.18);
+  color: #8be581;
+}
+
+.brief-rich-toolbar .brief-rich-color-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
+.brief-rich-toolbar .brief-rich-color-control button {
+  border-radius: 6px 0 0 6px;
+}
+
+.brief-rich-toolbar .brief-rich-color-control label {
+  width: 34px;
+  padding-inline: 6px;
+  border-left: 0;
+  border-radius: 0 6px 6px 0;
+}
+
+.brief-rich-toolbar input[type="color"] {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.brief-rich-toolbar select {
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+}
+
+.brief-rich-editor {
+  min-height: 180px;
+  padding: 16px;
+  border: 1px solid #3b4447;
+  border-radius: 0 0 8px 8px;
+  outline: 0;
+  background: #101415;
+  color: #e6ebec;
+  font-size: 14px;
+  line-height: 1.75;
+}
+
+.brief-rich-editor strong,
+.brief-rich-editor b,
+.brief-rich-editor [style*='font-weight'] {
+  font-weight: 850 !important;
+}
+
+.brief-rich-editor strong,
+.brief-rich-editor b {
+  font-size: inherit;
+}
+
+.brief-rich-editor:focus {
+  border-color: rgba(104, 219, 100, 0.62);
+  box-shadow: inset 0 0 0 1px rgba(104, 219, 100, 0.14);
+}
+
+.brief-rich-editor h2,
+.brief-rich-editor h3 {
+  margin: 14px 0 7px;
+}
+
+.brief-rich-editor p {
+  margin: 0 0 10px;
+}
+
+.brief-studio-sidebar {
+  min-width: 0;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: 52px minmax(0, 1fr);
+  border-left: 1px solid #303537;
+  background: #171a1b;
+}
+
+.brief-side-tabs {
+  display: flex;
+  align-items: end;
+  gap: 22px;
+  padding: 0 20px;
+  border-bottom: 1px solid #303537;
+}
+
+.brief-side-tabs button {
+  height: 52px;
+  padding: 0 2px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #7f898d;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.brief-side-tabs button.active {
+  border-bottom-color: #68d866;
+  color: #e7ecec;
+}
+
+.brief-side-content {
+  min-height: 0;
+  padding: 18px;
+  overflow-y: auto;
+}
+
+.brief-side-section {
+  display: grid;
+  gap: 13px;
+  padding: 16px 0;
+  border-bottom: 1px solid #2a3032;
+}
+
+.brief-side-section:first-child {
+  padding-top: 0;
+}
+
+.brief-side-section h3 {
+  margin: 0;
+  color: #e3e8e9;
+  font-size: 14px;
+}
+
+.brief-side-section dl {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.brief-side-section dl > div {
+  display: grid;
+  grid-template-columns: 74px minmax(0, 1fr);
+  gap: 10px;
+}
+
+.brief-side-section dt {
+  color: #717c80;
+  font-size: 11px;
+}
+
+.brief-side-section dd {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: #bec6c8;
+  font-size: 12px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brief-side-section dd.shared {
+  color: #76df6d;
+}
+
+.brief-side-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brief-side-section-head button {
+  border: 0;
+  background: transparent;
+  color: #75dc6d;
+  font-size: 11px;
+}
+
+.brief-side-version-list {
+  display: grid;
+  gap: 7px;
+}
+
+.brief-side-version-list button {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 45px minmax(0, 1fr) 14px;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 10px;
+  border: 1px solid #343b3e;
+  border-radius: 8px;
+  background: #111516;
+  color: #bfc7c9;
+  text-align: left;
+}
+
+.brief-side-version-list button.active {
+  border-color: rgba(105, 218, 100, 0.48);
+  color: #82e576;
+}
+
+.brief-side-version-list small {
+  overflow: hidden;
+  color: #6f797d;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brief-side-hint {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #343b3e;
+  border-radius: 9px;
+  background: #111516;
+  color: #939da0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.brief-side-hint .anticon {
+  margin-right: 7px;
+  color: #6edb69;
+}
+
+.brief-side-primary {
+  height: 36px;
+  border: 1px solid rgba(104, 219, 100, 0.5);
+  border-radius: 8px;
+  background: rgba(63, 148, 65, 0.15);
+  color: #84e779;
+}
+
+.brief-side-primary:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+
+.brief-share-settings > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.brief-share-settings > div:first-child > span {
+  color: #758084;
+  font-size: 10px;
+}
+
+.brief-share-permissions {
+  display: grid;
+  gap: 7px;
+}
+
+.brief-share-permissions > article {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 11px;
+  border: 1px solid #343b3e;
+  border-radius: 9px;
+  background: #111516;
+  color: #c8d0d2;
+  text-align: left;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+.brief-share-permissions > article.active {
+  border-color: rgba(104, 219, 100, 0.52);
+  background: rgba(62, 133, 63, 0.12);
+}
+
+.brief-share-permissions > article > div {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.brief-share-permissions > article span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.brief-share-permissions > article i {
+  width: 12px;
+  height: 12px;
+  display: block;
+  border: 2px solid #596366;
+  border-radius: 50%;
+}
+
+.brief-share-permissions > article.active i {
+  border: 3px solid #78df70;
+  box-shadow: 0 0 0 2px rgba(120, 223, 112, 0.13);
+}
+
+.brief-share-permissions > article small {
+  padding-left: 20px;
+  color: #778185;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.brief-share-permissions > article code {
+  max-width: 210px;
+  margin-left: 20px;
+  overflow: hidden;
+  color: #8f9a9d;
+  font-family: inherit;
+  font-size: 9px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brief-share-permissions > article > button {
+  flex: 0 0 auto;
+  min-width: 78px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border: 1px solid rgba(104, 219, 100, 0.45);
+  border-radius: 7px;
+  background: rgba(63, 148, 65, 0.14);
+  color: #84e779;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.brief-share-permissions > article > button:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.brief-side-requests article {
+  display: grid;
+  gap: 6px;
+  padding: 11px;
+  border: 1px solid #343b3e;
+  border-radius: 9px;
+  background: #111516;
+}
+
+.brief-side-requests article strong {
+  color: #dce2e3;
+  font-size: 12px;
+}
+
+.brief-side-requests article p,
+.brief-side-empty {
+  margin: 0;
+  color: #8d979a;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.brief-side-requests article > span {
+  color: #72dc6b;
+  font-size: 10px;
+}
+
+.brief-side-requests article > div {
+  display: flex;
+  gap: 6px;
+}
+
+.brief-side-requests article button {
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid #3a4245;
+  border-radius: 7px;
+  background: #202526;
+  color: #bcc4c6;
+}
+
+@media (max-width: 1080px) {
+  .brief-studio-body {
+    grid-template-columns: minmax(0, 1fr) 280px;
+  }
+
+  .brief-studio-actions > button:not(.brief-studio-close) {
+    width: 36px;
+    padding: 0;
+    overflow: hidden;
+    color: transparent;
+    gap: 0;
+  }
+
+  .brief-studio-actions > button:not(.brief-studio-close) .anticon {
+    color: #c7ced0;
+    font-size: 15px;
+  }
+}
+
+@media (max-width: 760px) {
+  .brief-studio-modal.is-detail {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .brief-studio-topbar {
+    align-items: flex-start;
+    padding: 10px;
+  }
+
+  .brief-studio-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr) 280px;
+  }
+
+  .brief-studio-sidebar {
+    border-top: 1px solid #303537;
+    border-left: 0;
+  }
+
+  .brief-document-stage {
+    padding: 14px;
+  }
+
+  .brief-document-grid,
+  .brief-document-edit-grid {
+    grid-template-columns: 1fr;
+    padding: 8px 18px 24px;
+  }
+
+  .brief-selling-edit-layout {
+    padding: 18px;
+  }
+
+  .brief-selling-edit-overview,
+  .brief-selling-edit-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .brief-selling-edit-overview,
+  .brief-selling-edit-grid {
+    height: auto;
+    min-height: 0;
+  }
+
+  .brief-selling-edit-small-fields {
+    border-right: 0;
+  }
+
+  .brief-selling-edit-audience {
+    padding-top: 18px;
+    padding-left: 0;
+  }
+
+  .brief-selling-edit-grid > .rich-text-field {
+    padding: 18px 0;
+  }
+
+  .brief-selling-edit-grid > .rich-text-field + .rich-text-field {
+    border-top: 0;
+    border-left: 0;
+  }
+
+  .brief-selling-edit-audience .selling-rich-editor,
+  .brief-selling-edit-grid .selling-rich-editor {
+    height: 190px;
+    min-height: 190px;
+  }
+
+  .brief-document-field,
+  .brief-document-edit-field,
+  .brief-document-field:nth-child(odd):not(.wide),
+  .brief-document-edit-field:nth-child(odd):not(.wide),
+  .brief-document-field:nth-child(even):not(.wide),
+  .brief-document-edit-field:nth-child(even):not(.wide) {
+    grid-column: auto;
+    padding: 16px 0;
+    border-left: 0;
+  }
+}

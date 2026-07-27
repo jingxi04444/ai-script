@@ -28,7 +28,7 @@ public interface ScriptService {
 
     List<ScriptTemplateVO> enabledTemplates();
 
-    PageResult<ScriptTemplateVO> templatePage(PageQuery query);
+    PageResult<ScriptTemplateVO> templatePage(PageQuery query, String category);
 
     ScriptTemplateVO templateById(Integer id);
 

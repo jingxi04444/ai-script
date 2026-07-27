@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CaretRightFilled, FolderFilled, MenuFoldOutlined } from '@ant-design/icons';
+import { CaretRightFilled, FileTextOutlined, FolderFilled, FormOutlined, MenuFoldOutlined, RightOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { assetApi } from '../../api/asset';
 import { briefApi } from '../../api/brief';
 import { scriptApi } from '../../api/script';
 import HomeRail from '../../components/Layout/HomeRail';
 import type { Asset } from '../../types/asset';
+import type { Brief } from '../../types/brief';
+import type { Script } from '../../types/script';
+import { formatDateTime } from '../../utils/format';
 import './assets-page.css';
 
 type LibraryView = 'briefs' | 'scripts' | 'materials' | 'works';
@@ -36,8 +39,8 @@ const AssetsPage = () => {
   });
   const [selectedFolderKey, setSelectedFolderKey] = useState<string | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [briefCount, setBriefCount] = useState<number | null>(null);
-  const [mineScriptCount, setMineScriptCount] = useState<number | null>(null);
+  const [briefs, setBriefs] = useState<Brief[]>([]);
+  const [scripts, setScripts] = useState<Script[]>([]);
   const [viralScriptCount, setViralScriptCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -47,11 +50,11 @@ const AssetsPage = () => {
       briefApi.mineList(),
       scriptApi.mineList(),
       assetApi.viralAssets({ page: 1, pageSize: 1 }),
-    ]).then(([assetResult, briefResult, templateResult, viralResult]) => {
+    ]).then(([assetResult, briefResult, scriptResult, viralResult]) => {
       if (cancelled) return;
       setAssets(assetResult.status === 'fulfilled' ? assetResult.value.list || [] : []);
-      setBriefCount(briefResult.status === 'fulfilled' ? briefResult.value.length : 0);
-      setMineScriptCount(templateResult.status === 'fulfilled' ? templateResult.value.length : 0);
+      setBriefs(briefResult.status === 'fulfilled' ? briefResult.value : []);
+      setScripts(scriptResult.status === 'fulfilled' ? scriptResult.value : []);
       setViralScriptCount(viralResult.status === 'fulfilled' ? viralResult.value.total || 0 : 0);
     });
     return () => { cancelled = true; };
@@ -61,9 +64,9 @@ const AssetsPage = () => {
     const countBy = (predicate: (asset: Asset) => boolean) => assets.filter(predicate).length;
     const works = assets.filter((asset) => asset.category === 'project' || asset.category === 'upload');
     return {
-      briefs: [{ key: 'mine-briefs', name: '我的Brief', count: briefCount }],
+      briefs: [{ key: 'mine-briefs', name: '我的Brief', count: briefs.length }],
       scripts: [
-        { key: 'mine-scripts', name: '我的脚本', count: mineScriptCount },
+        { key: 'mine-scripts', name: '我的脚本', count: scripts.length },
         { key: 'viral-scripts', name: '爆款脚本', count: viralScriptCount },
       ],
       materials: [
@@ -85,7 +88,7 @@ const AssetsPage = () => {
         { key: 'document', name: '文档作品', count: works.filter((asset) => asset.type === 'document').length },
       ],
     };
-  }, [assets, briefCount, mineScriptCount, viralScriptCount]);
+  }, [assets, briefs.length, scripts.length, viralScriptCount]);
 
   const folders = foldersByView[activeView];
   const selectedFolder = folders.find((folder) => folder.key === selectedFolderKey) || null;
@@ -95,6 +98,79 @@ const AssetsPage = () => {
     setActiveView(view);
     setSelectedFolderKey(null);
     setExpandedViews((current) => ({ ...current, [view]: !current[view] }));
+  };
+
+  const openBrief = (brief: Brief) => {
+    const params = new URLSearchParams({
+      step: 'selling-points',
+      briefId: brief.id,
+      briefDialog: '1',
+    });
+    navigate(`/workspace?${params.toString()}`);
+  };
+
+  const openScript = (script: Script) => {
+    const params = new URLSearchParams({
+      projectId: script.projectId,
+      step: 'script-generator',
+      scriptMode: script.type,
+      editScriptId: script.id,
+    });
+    navigate(`/workspace?${params.toString()}`);
+  };
+
+  const renderFolderContents = () => {
+    if (selectedFolderKey === 'mine-briefs') {
+      return (
+        <section className="assets-record-grid" aria-label="全部 Brief">
+          {briefs.map((brief) => (
+            <button className="assets-record-card" type="button" key={brief.id} onClick={() => openBrief(brief)}>
+              <span className="assets-record-icon"><FormOutlined /></span>
+              <span className="assets-record-copy">
+                <strong>{brief.productName || brief.name || '未命名 Brief'}</strong>
+                <small>{brief.productModel || 'Brief'}</small>
+                <em>更新于 {formatDateTime(brief.updatedAt)}</em>
+              </span>
+              <RightOutlined />
+            </button>
+          ))}
+          {!briefs.length && <p className="assets-record-empty">暂无 Brief</p>}
+        </section>
+      );
+    }
+
+    if (selectedFolderKey === 'mine-scripts') {
+      return (
+        <section className="assets-record-grid" aria-label="全部脚本">
+          {scripts.map((script) => (
+            <button className="assets-record-card" type="button" key={script.id} onClick={() => openScript(script)}>
+              <span className="assets-record-icon"><FileTextOutlined /></span>
+              <span className="assets-record-copy">
+                <strong>{script.name || '未命名脚本'}</strong>
+                <small>{script.type} · {script.status}</small>
+                <em>更新于 {formatDateTime(script.updatedAt)}</em>
+              </span>
+              <RightOutlined />
+            </button>
+          ))}
+          {!scripts.length && <p className="assets-record-empty">暂无脚本</p>}
+        </section>
+      );
+    }
+
+    return (
+      <section className="assets-folder-grid" aria-label={`${LIBRARY_LABELS[activeView]}文件夹`}>
+        {visibleFolders.map((folder) => (
+          <button className="assets-folder-card" type="button" key={folder.key} onClick={() => setSelectedFolderKey(folder.key)}>
+            <span className="assets-folder-art" aria-hidden="true">
+              <i />
+            </span>
+            <strong>{folder.name}</strong>
+            <small>共{folder.count === null ? '--' : folder.count}项</small>
+          </button>
+        ))}
+      </section>
+    );
   };
 
   return (
@@ -155,17 +231,7 @@ const AssetsPage = () => {
           <div className="assets-library-body">
             <p className="assets-library-eyebrow">资产管理</p>
             <h1>{selectedFolder?.name || LIBRARY_LABELS[activeView]}</h1>
-            <section className="assets-folder-grid" aria-label={`${LIBRARY_LABELS[activeView]}文件夹`}>
-              {visibleFolders.map((folder) => (
-                <button className="assets-folder-card" type="button" key={folder.key} onClick={() => setSelectedFolderKey(folder.key)}>
-                  <span className="assets-folder-art" aria-hidden="true">
-                    <i />
-                  </span>
-                  <strong>{folder.name}</strong>
-                  <small>共{folder.count === null ? '--' : folder.count}项</small>
-                </button>
-              ))}
-            </section>
+            {renderFolderContents()}
           </div>
         </section>
       </section>
