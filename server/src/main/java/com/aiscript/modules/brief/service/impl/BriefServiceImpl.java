@@ -14,13 +14,22 @@ import com.aiscript.modules.brief.entity.AiBriefCollaborator;
 import com.aiscript.modules.brief.entity.AiBriefEditRequest;
 import com.aiscript.modules.brief.entity.AiBriefShareLink;
 import com.aiscript.modules.brief.entity.AiBriefVersion;
+import com.aiscript.modules.brief.entity.AiProjectBriefRef;
 import com.aiscript.modules.brief.mapper.AiBriefCollaboratorMapper;
 import com.aiscript.modules.brief.mapper.AiBriefEditRequestMapper;
 import com.aiscript.modules.brief.mapper.AiBriefMapper;
 import com.aiscript.modules.brief.mapper.AiBriefShareLinkMapper;
 import com.aiscript.modules.brief.mapper.AiBriefVersionMapper;
+import com.aiscript.modules.brief.mapper.AiProjectBriefRefMapper;
+import com.aiscript.modules.project.entity.AiProject;
+import com.aiscript.modules.project.mapper.AiProjectMapper;
 import com.aiscript.modules.brief.service.BriefService;
 import com.aiscript.modules.brief.vo.BriefEditRequestVO;
+import com.aiscript.modules.brief.vo.BriefAssetGroupVO;
+import com.aiscript.modules.brief.vo.BriefAssetItemVO;
+import com.aiscript.modules.brief.vo.BriefAssetLibraryVO;
+import com.aiscript.modules.brief.vo.BriefAssetRowVO;
+import com.aiscript.modules.brief.vo.BriefDetailQueryResult;
 import com.aiscript.modules.brief.vo.BriefShareVO;
 import com.aiscript.modules.brief.vo.BriefVO;
 import com.aiscript.security.LoginUser;
@@ -32,6 +41,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -47,6 +57,8 @@ public class BriefServiceImpl implements BriefService {
     private static final Integer DEFAULT_TENANT_ID = 1;
     private final AiBriefMapper briefMapper;
     private final AiBriefVersionMapper briefVersionMapper;
+    private final AiProjectBriefRefMapper projectBriefRefMapper;
+    private final AiProjectMapper projectMapper;
     private final AiBriefCollaboratorMapper collaboratorMapper;
     private final AiBriefEditRequestMapper editRequestMapper;
     private final AiBriefShareLinkMapper shareLinkMapper;
@@ -54,12 +66,16 @@ public class BriefServiceImpl implements BriefService {
     public BriefServiceImpl(
         AiBriefMapper briefMapper,
         AiBriefVersionMapper briefVersionMapper,
+        AiProjectBriefRefMapper projectBriefRefMapper,
+        AiProjectMapper projectMapper,
         AiBriefCollaboratorMapper collaboratorMapper,
         AiBriefEditRequestMapper editRequestMapper,
         AiBriefShareLinkMapper shareLinkMapper
     ) {
         this.briefMapper = briefMapper;
         this.briefVersionMapper = briefVersionMapper;
+        this.projectBriefRefMapper = projectBriefRefMapper;
+        this.projectMapper = projectMapper;
         this.collaboratorMapper = collaboratorMapper;
         this.editRequestMapper = editRequestMapper;
         this.shareLinkMapper = shareLinkMapper;
@@ -67,12 +83,25 @@ public class BriefServiceImpl implements BriefService {
 
     @Override
     public List<BriefVO> list(Integer projectId) {
-        return briefMapper.selectList(new LambdaQueryWrapper<AiBrief>()
-                .eq(AiBrief::getProjectId, projectId)
-                .orderByDesc(AiBrief::getUpdateTime))
+        ensureOwnedProject(projectId);
+        List<Integer> linkedBriefIds = projectBriefRefMapper.selectList(
+                new LambdaQueryWrapper<AiProjectBriefRef>()
+                    .eq(AiProjectBriefRef::getProjectId, projectId)
+                    .eq(AiProjectBriefRef::getTenantId, currentTenantId()))
             .stream()
-            .map(this::toVOWithVersions)
+            .map(AiProjectBriefRef::getBriefId)
             .toList();
+        LambdaQueryWrapper<AiBrief> wrapper = new LambdaQueryWrapper<>();
+        wrapper.and(scope -> {
+            scope.and(direct -> direct
+                .eq(AiBrief::getProjectId, projectId)
+                .eq(AiBrief::getTenantId, currentTenantId()));
+            if (!linkedBriefIds.isEmpty()) {
+                scope.or().in(AiBrief::getId, linkedBriefIds);
+            }
+        });
+        wrapper.orderByDesc(AiBrief::getUpdateTime);
+        return toVOsWithVersions(briefMapper.selectList(wrapper));
     }
 
     @Override
@@ -89,28 +118,16 @@ public class BriefServiceImpl implements BriefService {
                     .or()
                     .like(AiBrief::getProductModel, keyword));
         }
-        return briefMapper.selectList(wrapper).stream().map(this::toVOWithVersions).toList();
+        return toVOsWithVersions(briefMapper.selectList(wrapper));
     }
 
     @Override
     public List<BriefVO> mineList(String keyword) {
         Integer userId = requireCurrentUserId();
-        List<Integer> collaboratedBriefIds = collaboratorMapper.selectList(new LambdaQueryWrapper<AiBriefCollaborator>()
-                .eq(AiBriefCollaborator::getUserId, userId)
-                .eq(AiBriefCollaborator::getStatus, 1))
-            .stream()
-            .map(AiBriefCollaborator::getBriefId)
-            .toList();
         LambdaQueryWrapper<AiBrief> wrapper = new LambdaQueryWrapper<AiBrief>()
+                .eq(AiBrief::getTenantId, currentTenantId())
+                .eq(AiBrief::getCreateBy, userId)
                 .orderByDesc(AiBrief::getUpdateTime);
-        wrapper.and(access -> {
-            access.and(owned -> owned
-                    .eq(AiBrief::getTenantId, currentTenantId())
-                    .eq(AiBrief::getCreateBy, userId));
-            if (!collaboratedBriefIds.isEmpty()) {
-                access.or().in(AiBrief::getId, collaboratedBriefIds);
-            }
-        });
         if (StringUtils.hasText(keyword)) {
             wrapper.and(query -> query
                     .like(AiBrief::getBriefName, keyword)
@@ -119,16 +136,56 @@ public class BriefServiceImpl implements BriefService {
                     .or()
                     .like(AiBrief::getProductModel, keyword));
         }
-        return briefMapper.selectList(wrapper).stream().map(this::toVOWithVersions).toList();
+        return toVOsWithVersions(briefMapper.selectList(wrapper));
+    }
+
+
+
+    @Override
+    public BriefAssetLibraryVO assetLibrary() {
+        List<BriefAssetRowVO> rows = briefMapper.selectAssetLibraryRows(
+            currentTenantId(),
+            requireCurrentUserId()
+        );
+        Map<Integer, BriefAssetGroupVO> groups = new LinkedHashMap<>();
+        for (BriefAssetRowVO row : rows) {
+            BriefAssetGroupVO group = groups.computeIfAbsent(row.getProjectId(), projectId -> {
+                BriefAssetGroupVO created = new BriefAssetGroupVO();
+                created.setProjectId(String.valueOf(projectId));
+                created.setProjectName(row.getProjectName());
+                created.setBriefs(new ArrayList<>());
+                return created;
+            });
+
+            BriefAssetItemVO item = new BriefAssetItemVO();
+            item.setId(String.valueOf(row.getBriefId()));
+            item.setProjectId(String.valueOf(row.getProjectId()));
+            item.setName(row.getName());
+            item.setProductName(row.getProductName());
+            item.setProductModel(row.getProductModel());
+            item.setUpdatedAt(row.getUpdatedAt() == null ? null : row.getUpdatedAt().toString());
+            group.getBriefs().add(item);
+        }
+
+        BriefAssetLibraryVO result = new BriefAssetLibraryVO();
+        result.setTotal((int) rows.stream().map(BriefAssetRowVO::getBriefId).distinct().count());
+        result.setProjects(new ArrayList<>(groups.values()));
+        return result;
     }
 
     @Override
     public BriefVO getById(Integer id) {
-        AiBrief brief = briefMapper.selectById(id);
-        if (brief == null) {
-            throw new BusinessException("Brief 不存在");
+        BriefDetailQueryResult detail = briefMapper.selectDetail(
+            id,
+            currentTenantId(),
+            requireCurrentUserId()
+        );
+        if (detail == null || detail.getBrief() == null) {
+            throw new BusinessException("Brief 不存在或无权查看");
         }
-        return toVOWithVersions(brief);
+        BriefVO vo = BriefConvert.toVO(detail.getBrief(), detail.getVersions());
+        vo.setAccessPermission(normalizeSharePermission(detail.getAccessPermission()));
+        return vo;
     }
 
     @Override
@@ -183,9 +240,12 @@ public class BriefServiceImpl implements BriefService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void delete(Integer id) {
         AiBrief brief = getBrief(id);
         ensureOwner(brief);
+        projectBriefRefMapper.delete(new LambdaQueryWrapper<AiProjectBriefRef>()
+            .eq(AiProjectBriefRef::getBriefId, id));
         briefMapper.deleteById(id);
     }
 
@@ -243,7 +303,10 @@ public class BriefServiceImpl implements BriefService {
         ResolvedShareLink resolved = resolveShareLink(token);
         AiBrief brief = resolved.brief();
         Integer viewerId = currentUserIdOrNull();
-        if (viewerId != null && !viewerId.equals(brief.getCreateBy())) {
+        if (viewerId != null) {
+            if (viewerId.equals(brief.getCreateBy())) {
+                throw new BusinessException("不能使用自己创建的 Brief 分享链接");
+            }
             upsertCollaborator(brief, viewerId, resolved.permission(), "link");
         }
         return toVOWithVersions(brief, resolved.permission());
@@ -251,16 +314,25 @@ public class BriefServiceImpl implements BriefService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public BriefVO updateByShareToken(String token, BriefSaveDTO dto) {
+    public BriefVO updateByShareToken(String token, Integer projectId, BriefSaveDTO dto) {
         ResolvedShareLink resolved = resolveShareLink(token);
         if ("read".equals(resolved.permission())) {
             throw new BusinessException("当前分享链接仅可阅读，不能修改 Brief");
         }
         Integer userId = requireCurrentUserId();
         AiBrief brief = resolved.brief();
-        if (!userId.equals(brief.getCreateBy())) {
-            upsertCollaborator(brief, userId, resolved.permission(), "link");
+        if (userId.equals(brief.getCreateBy())) {
+            throw new BusinessException("不能使用自己创建的 Brief 分享链接");
         }
+        ensureOwnedProject(projectId);
+        Long referenceCount = projectBriefRefMapper.selectCount(new LambdaQueryWrapper<AiProjectBriefRef>()
+            .eq(AiProjectBriefRef::getTenantId, currentTenantId())
+            .eq(AiProjectBriefRef::getProjectId, projectId)
+            .eq(AiProjectBriefRef::getBriefId, brief.getId()));
+        if (referenceCount == 0) {
+            throw new BusinessException("请先将共享 Brief 加入所选项目");
+        }
+        upsertCollaborator(brief, userId, resolved.permission(), "link");
         fillPartial(brief, dto);
         brief.setVersionNo(brief.getVersionNo() == null ? 1 : brief.getVersionNo() + 1);
         briefMapper.updateById(brief);
@@ -270,33 +342,31 @@ public class BriefServiceImpl implements BriefService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public BriefVO copyToProject(Integer id, Integer projectId) {
-        AiBrief source = getBrief(id);
-        if (projectId == null) {
-            throw new BusinessException("项目ID不能为空");
+    public BriefVO linkToProject(Integer id, Integer projectId) {
+        AiBrief brief = getBrief(id);
+        Integer userId = requireCurrentUserId();
+        if (userId.equals(brief.getCreateBy())) {
+            throw new BusinessException("不能将自己创建的 Brief 作为共享 Brief 加入项目");
         }
-        AiBrief target = new AiBrief();
-        target.setTenantId(currentTenantId());
-        target.setProjectId(projectId);
-        target.setBriefName(source.getBriefName());
-        target.setProductName(source.getProductName());
-        target.setProductModel(source.getProductModel());
-        target.setPrice(source.getPrice());
-        target.setSlogan(source.getSlogan());
-        target.setPrimarySellingPoint(source.getPrimarySellingPoint());
-        target.setTargetAudience(source.getTargetAudience());
-        target.setTargetScene(source.getTargetScene());
-        target.setOtherRequirements(source.getOtherRequirements());
-        target.setBriefContent(source.getBriefContent());
-        target.setRichContent(source.getRichContent());
-        target.setVersionNo(1);
-        target.setStatus("draft");
-        target.setIsShared(0);
-        target.setShareEnabled(0);
-        target.setSharePermission("read");
-        briefMapper.insert(target);
-        saveVersion(target, "copy-from-shared");
-        return toVOWithVersions(target);
+        ensureOwnedProject(projectId);
+        if (!hasCollaboratorPermission(brief.getId(), userId, "read", "edit", "manage")) {
+            throw new BusinessException("请先通过有效分享链接访问该 Brief");
+        }
+
+        AiProjectBriefRef existing = projectBriefRefMapper.selectOne(
+            new LambdaQueryWrapper<AiProjectBriefRef>()
+                .eq(AiProjectBriefRef::getProjectId, projectId)
+                .eq(AiProjectBriefRef::getBriefId, brief.getId())
+                .last("LIMIT 1")
+        );
+        if (existing == null) {
+            AiProjectBriefRef reference = new AiProjectBriefRef();
+            reference.setTenantId(currentTenantId());
+            reference.setProjectId(projectId);
+            reference.setBriefId(brief.getId());
+            projectBriefRefMapper.insert(reference);
+        }
+        return toVOWithVersions(brief);
     }
 
     @Override
@@ -495,6 +565,20 @@ public class BriefServiceImpl implements BriefService {
             return dto.getName();
         }
         return "未命名产品";
+    }
+
+    private void ensureOwnedProject(Integer projectId) {
+        if (projectId == null) {
+            throw new BusinessException("项目ID不能为空");
+        }
+        Integer userId = requireCurrentUserId();
+        Long count = projectMapper.selectCount(new LambdaQueryWrapper<AiProject>()
+            .eq(AiProject::getId, projectId)
+            .eq(AiProject::getTenantId, currentTenantId())
+            .eq(AiProject::getOwnerId, userId));
+        if (count == 0) {
+            throw new BusinessException("项目不存在或无权操作");
+        }
     }
 
     private AiBrief getBrief(Integer id) {
@@ -716,6 +800,58 @@ public class BriefServiceImpl implements BriefService {
         version.setChangeNote(changeNote);
         version.setCreateTime(LocalDateTime.now());
         briefVersionMapper.insert(version);
+    }
+
+    private List<BriefVO> toVOsWithVersions(List<AiBrief> briefs) {
+        if (briefs == null || briefs.isEmpty()) {
+            return List.of();
+        }
+
+        List<Integer> briefIds = briefs.stream().map(AiBrief::getId).toList();
+        List<AiBriefVersion> versions = briefVersionMapper.selectList(new LambdaQueryWrapper<AiBriefVersion>()
+                .in(AiBriefVersion::getBriefId, briefIds)
+                .orderByDesc(AiBriefVersion::getBriefId)
+                .orderByDesc(AiBriefVersion::getVersionNo));
+        Map<Integer, List<AiBriefVersion>> versionsByBriefId = new HashMap<>();
+        for (AiBriefVersion version : versions) {
+            versionsByBriefId.computeIfAbsent(version.getBriefId(), ignored -> new ArrayList<>()).add(version);
+        }
+
+        Integer userId = currentUserIdOrNull();
+        Map<Integer, String> collaboratorPermissions = new HashMap<>();
+        if (userId != null) {
+            List<Integer> nonOwnedBriefIds = briefs.stream()
+                .filter(brief -> !userId.equals(brief.getCreateBy()))
+                .map(AiBrief::getId)
+                .toList();
+            if (!nonOwnedBriefIds.isEmpty()) {
+                List<AiBriefCollaborator> collaborators = collaboratorMapper.selectList(
+                    new LambdaQueryWrapper<AiBriefCollaborator>()
+                        .in(AiBriefCollaborator::getBriefId, nonOwnedBriefIds)
+                        .eq(AiBriefCollaborator::getUserId, userId)
+                        .eq(AiBriefCollaborator::getStatus, 1));
+                for (AiBriefCollaborator collaborator : collaborators) {
+                    collaboratorPermissions.put(
+                        collaborator.getBriefId(),
+                        normalizeSharePermission(collaborator.getPermission())
+                    );
+                }
+            }
+        }
+
+        return briefs.stream().map(brief -> {
+            BriefVO vo = BriefConvert.toVO(
+                brief,
+                versionsByBriefId.getOrDefault(brief.getId(), List.of())
+            );
+            String accessPermission = userId == null
+                ? "read"
+                : userId.equals(brief.getCreateBy())
+                    ? "manage"
+                    : collaboratorPermissions.getOrDefault(brief.getId(), "read");
+            vo.setAccessPermission(accessPermission);
+            return vo;
+        }).toList();
     }
 
     private BriefVO toVOWithVersions(AiBrief brief) {

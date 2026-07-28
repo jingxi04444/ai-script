@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { message } from 'antd';
-import { CloseOutlined, EditOutlined, LinkOutlined, SaveOutlined } from '@ant-design/icons';
+import { message, Select } from 'antd';
+import { CloseOutlined, EditOutlined, FolderAddOutlined, LinkOutlined, SaveOutlined } from '@ant-design/icons';
 import { briefApi } from '../../api/brief';
+import { projectApi } from '../../api/project';
 import BriefContentLayout from '../../components/Brief/BriefContentLayout';
 import RichTextField from '../Workspace/SellingPoints/RichTextField';
 import type { Brief } from '../../types/brief';
+import type { Project } from '../../types/project';
 import { useAuthStore } from '../../stores/authStore';
 import './brief-share-page.css';
 
@@ -64,6 +66,12 @@ const briefFromVersionContent = (brief: Brief, versionContent?: string): Brief =
   };
 };
 
+const getErrorMessage = (error: unknown, fallback: string) => {
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+    return error.message;
+  }
+  return fallback;
+};
 const BriefSharePage = () => {
   const { token } = useParams();
   const navigate = useNavigate();
@@ -74,7 +82,13 @@ const BriefSharePage = () => {
   const [editRichValues, setEditRichValues] = useState<BriefRichValues>(emptyRichValues);
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [selectedProjectId, setSelectedProjectId] = useState<string>();
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const [linkingProject, setLinkingProject] = useState(false);
 
   useEffect(() => {
     if (!token) {
@@ -83,9 +97,40 @@ const BriefSharePage = () => {
     }
     briefApi.getByShareToken(token)
       .then(setBrief)
-      .catch(() => message.error('分享链接不存在或已失效'))
+      .catch((error) => {
+        const errorMessage = getErrorMessage(error, '分享链接不存在或已失效');
+        setLoadError(errorMessage);
+        message.error(errorMessage);
+      })
       .finally(() => setLoading(false));
   }, [token]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setProjects([]);
+      setSelectedProjectId(undefined);
+      return;
+    }
+    let cancelled = false;
+    setProjectsLoading(true);
+    projectApi.getList({ page: 1, pageSize: 1000 })
+      .then((result) => {
+        if (cancelled) return;
+        setProjects(result.list);
+        const projectIdFromUrl = searchParams.get('projectId');
+        setSelectedProjectId((current) => {
+          const candidate = projectIdFromUrl || current;
+          return candidate && result.list.some((project) => project.id === candidate) ? candidate : undefined;
+        });
+      })
+      .catch(() => {
+        if (!cancelled) message.error('项目列表加载失败');
+      })
+      .finally(() => {
+        if (!cancelled) setProjectsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [isAuthenticated, searchParams]);
 
   const selectedVersion = useMemo(() => {
     if (!brief) return null;
@@ -146,9 +191,14 @@ const BriefSharePage = () => {
       goLogin();
       return;
     }
+    if (!selectedProjectId) {
+      message.warning('请先选择要关联的项目，项目 ID 不能为空');
+      return;
+    }
     setSaving(true);
     try {
-      const updated = await briefApi.updateByShareToken(token, {
+      await briefApi.linkToProject(brief.id, selectedProjectId);
+      const updated = await briefApi.updateByShareToken(token, selectedProjectId, {
         ...editValues,
         name: editValues.productName || editValues.name || brief.name,
         richContent: JSON.stringify(editRichValues),
@@ -158,19 +208,42 @@ const BriefSharePage = () => {
       setIsEditing(false);
       if (searchParams.has('versionId')) navigate(window.location.pathname, { replace: true });
       message.success('修改已保存到同一份 Brief');
-    } catch {
-      message.error('保存失败，请确认当前链接具有编辑权限');
+    } catch (error) {
+      message.error(getErrorMessage(error, '保存失败，请确认项目关联和编辑权限'));
     } finally {
       setSaving(false);
     }
   };
 
+  const linkBriefToProject = async (projectId: string) => {
+    if (!isAuthenticated) {
+      message.warning('请先登录后再加入项目');
+      goLogin();
+      return;
+    }
+    if (!brief || !projectId) {
+      message.warning('请选择要加入的项目');
+      return;
+    }
+    const previousProjectId = selectedProjectId;
+    setSelectedProjectId(projectId);
+    setLinkingProject(true);
+    try {
+      await briefApi.linkToProject(brief.id, projectId);
+      message.success('已关联到项目，后续将持续同步同一份 Brief');
+    } catch (error) {
+      setSelectedProjectId(previousProjectId);
+      message.error(getErrorMessage(error, '加入项目失败，请确认分享链接和项目权限'));
+    } finally {
+      setLinkingProject(false);
+    }
+  };
   if (loading) {
     return <main className="brief-share-page"><section className="brief-share-status">正在加载 Brief...</section></main>;
   }
 
   if (!brief || !displayBrief) {
-    return <main className="brief-share-page"><section className="brief-share-status">分享链接不存在或已失效</section></main>;
+    return <main className="brief-share-page"><section className="brief-share-status">{loadError || '分享链接不存在或已失效'}</section></main>;
   }
 
   return (
@@ -193,6 +266,25 @@ const BriefSharePage = () => {
           </div>
           <div className="brief-share-actions">
             <em>{permissionLabel}</em>
+            <div className="brief-share-project-picker">
+              <FolderAddOutlined />
+              <Select
+                showSearch
+                loading={projectsLoading || linkingProject}
+                value={selectedProjectId}
+                placeholder="选择项目并关联"
+                optionFilterProp="label"
+                options={projects.map((project) => ({ value: project.id, label: project.name }))}
+                onChange={(projectId) => { void linkBriefToProject(projectId); }}
+                onDropdownVisibleChange={(open) => {
+                  if (open && !isAuthenticated) {
+                    message.warning('请先登录后再加入项目');
+                    goLogin();
+                  }
+                }}
+                notFoundContent={projectsLoading ? '正在加载…' : '暂无可用项目，请先创建项目'}
+              />
+            </div>
             {canEdit ? (
               isEditing ? (
                 <>
@@ -271,8 +363,9 @@ const BriefSharePage = () => {
           <BriefContentLayout brief={displayBrief} className="brief-share-content-layout" />
         )}
 
-        <footer>{permissionLabel}链接 · 登录后会自动加入“我的 Brief”并持续同步最新内容</footer>
+        <footer>{permissionLabel}链接 · 关联到项目后会持续同步源 Brief 的最新内容</footer>
       </section>
+
     </main>
   );
 };

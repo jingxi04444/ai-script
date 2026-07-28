@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiscript.modules.project.mapper.AiProjectMapper">
+
+    <select id="selectPageWithStats"
+            resultType="com.aiscript.modules.project.vo.ProjectStatsRow">
+        SELECT
+            p.id,
+            p.owner_id,
+            p.project_name,
+            p.category,
+            p.status,
+            COALESCE(brief_stats.brief_count, 0) AS brief_count,
+            COALESCE(script_stats.script_count, 0) AS script_count,
+            COALESCE(video_stats.video_count, 0) AS video_count,
+            p.create_time,
+            p.update_time
+        FROM ai_project p
+        LEFT JOIN (
+            SELECT project_id, COUNT(*) AS brief_count
+            FROM (
+                SELECT project_id, id AS brief_id
+                FROM ai_brief
+                WHERE deleted = 0
+                <if test="tenantId != null">
+                    AND tenant_id = #{tenantId}
+                </if>
+                UNION
+                SELECT project_id, brief_id
+                FROM ai_project_brief_ref
+                WHERE deleted = 0
+                <if test="tenantId != null">
+                    AND tenant_id = #{tenantId}
+                </if>
+            ) all_project_briefs
+            GROUP BY project_id
+        ) brief_stats ON brief_stats.project_id = p.id
+        LEFT JOIN (
+            SELECT project_id, COUNT(*) AS script_count
+            FROM ai_storyboard_script
+            WHERE deleted = 0
+            <if test="tenantId != null">
+                AND tenant_id = #{tenantId}
+            </if>
+            GROUP BY project_id
+        ) script_stats ON script_stats.project_id = p.id
+        LEFT JOIN (
+            SELECT project_id, COUNT(*) AS video_count
+            FROM ai_video_segment
+            WHERE 1 = 1
+            <if test="tenantId != null">
+                AND tenant_id = #{tenantId}
+            </if>
+            GROUP BY project_id
+        ) video_stats ON video_stats.project_id = p.id
+        WHERE p.deleted = 0
+        <if test="tenantId != null">
+            AND p.tenant_id = #{tenantId}
+        </if>
+        <if test="ownerId != null">
+            AND p.owner_id = #{ownerId}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND p.project_name LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        <if test="status != null and status != ''">
+            AND p.status = #{status}
+        </if>
+        ORDER BY p.update_time DESC
+    </select>
+
+
+    <select id="selectStatsById"
+            resultType="com.aiscript.modules.project.vo.ProjectStatsRow">
+        SELECT
+            p.id,
+            p.owner_id,
+            p.project_name,
+            p.category,
+            p.status,
+            (
+                SELECT COUNT(*)
+                FROM ai_brief direct_brief
+                WHERE direct_brief.project_id = p.id
+                  AND direct_brief.tenant_id = p.tenant_id
+                  AND direct_brief.deleted = 0
+            ) + (
+                SELECT COUNT(*)
+                FROM ai_project_brief_ref ref
+                WHERE ref.project_id = p.id
+                  AND ref.tenant_id = p.tenant_id
+                  AND ref.deleted = 0
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM ai_brief direct_duplicate
+                      WHERE direct_duplicate.id = ref.brief_id
+                        AND direct_duplicate.project_id = p.id
+                        AND direct_duplicate.tenant_id = p.tenant_id
+                        AND direct_duplicate.deleted = 0
+                  )
+            ) AS brief_count,
+            (
+                SELECT COUNT(*)
+                FROM ai_storyboard_script script
+                WHERE script.project_id = p.id
+                  AND script.tenant_id = p.tenant_id
+                  AND script.deleted = 0
+            ) AS script_count,
+            (
+                SELECT COUNT(*)
+                FROM ai_video_segment video
+                WHERE video.project_id = p.id
+                  AND video.tenant_id = p.tenant_id
+            ) AS video_count,
+            p.create_time,
+            p.update_time
+        FROM ai_project p
+        WHERE p.id = #{projectId}
+          AND p.tenant_id = #{tenantId}
+          AND p.deleted = 0
+        <if test="ownerId != null">
+            AND p.owner_id = #{ownerId}
+        </if>
+        LIMIT 1
+    </select>
+
+</mapper>

@@ -59,8 +59,11 @@
   white-space: nowrap;
 }
 
-.selling-rich-toolbar button {
-  cursor: pointer;
+
+
+.selling-rich-toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
 }
 
 .selling-rich-toolbar button:hover,
@@ -130,8 +133,14 @@
   outline: 0;
   background: transparent;
   color: #edf3f3;
+  color-scheme: dark;
   font-size: 12px;
   cursor: pointer;
+}
+
+.selling-rich-toolbar select option {
+  background: #1a2022;
+  color: #edf3f3;
 }
 
 .selling-rich-toolbar .clear-format {

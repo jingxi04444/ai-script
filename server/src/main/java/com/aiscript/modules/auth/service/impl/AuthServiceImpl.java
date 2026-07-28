@@ -14,10 +14,15 @@ import com.aiscript.modules.auth.service.AuthService;
 import com.aiscript.modules.auth.vo.AdminUserVO;
 import com.aiscript.modules.auth.vo.LoginVO;
 import com.aiscript.modules.auth.vo.UserInfoVO;
+import com.aiscript.modules.system.entity.SysRole;
+import com.aiscript.modules.system.entity.SysUserRole;
+import com.aiscript.modules.system.mapper.SysRoleMapper;
+import com.aiscript.modules.system.mapper.SysUserRoleMapper;
 import com.aiscript.security.JwtTokenProvider;
 import com.aiscript.security.LoginUser;
 import com.aiscript.security.PermissionService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -39,6 +44,8 @@ public class AuthServiceImpl implements AuthService {
     private final PasswordEncoder passwordEncoder;
     private final SmsClient smsClient;
     private final PermissionService permissionService;
+    private final SysRoleMapper roleMapper;
+    private final SysUserRoleMapper userRoleMapper;
 
     public AuthServiceImpl(
         JwtTokenProvider jwtTokenProvider,
@@ -46,7 +53,9 @@ public class AuthServiceImpl implements AuthService {
         SysVerificationCodeMapper verificationCodeMapper,
         PasswordEncoder passwordEncoder,
         SmsClient smsClient,
-        PermissionService permissionService
+        PermissionService permissionService,
+        SysRoleMapper roleMapper,
+        SysUserRoleMapper userRoleMapper
     ) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.sysUserMapper = sysUserMapper;
@@ -54,9 +63,12 @@ public class AuthServiceImpl implements AuthService {
         this.passwordEncoder = passwordEncoder;
         this.smsClient = smsClient;
         this.permissionService = permissionService;
+        this.roleMapper = roleMapper;
+        this.userRoleMapper = userRoleMapper;
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public LoginVO login(LoginDTO dto, String userType) {
         SysUser user = sysUserMapper.selectOne(new LambdaQueryWrapper<SysUser>()
             .eq(SysUser::getAccount, dto.getUsername())
@@ -75,6 +87,7 @@ public class AuthServiceImpl implements AuthService {
         if (user.getStatus() != null && user.getStatus() == 0) {
             throw new BusinessException(ResultCode.FORBIDDEN, "账号已被禁用");
         }
+        ensureDefaultFrontRole(user);
         LoginUser loginUser = LoginUser.builder()
             .userId(user.getId())
             .tenantId(user.getTenantId())
@@ -87,6 +100,32 @@ public class AuthServiceImpl implements AuthService {
         loginVO.setToken(token);
         loginVO.setUser(toUserInfoVO(user));
         return loginVO;
+    }
+
+    private void ensureDefaultFrontRole(SysUser user) {
+        if (user == null || !"front".equals(user.getUserType())) {
+            return;
+        }
+        Long assignedRoleCount = userRoleMapper.selectCount(new QueryWrapper<SysUserRole>()
+            .eq("user_id", user.getId()));
+        if (assignedRoleCount > 0) {
+            return;
+        }
+        SysRole defaultRole = roleMapper.selectOne(new QueryWrapper<SysRole>()
+            .eq("role_code", "front_user")
+            .eq("status", 1)
+            .and(wrapper -> wrapper.eq("tenant_id", user.getTenantId())
+                .or()
+                .isNull("tenant_id"))
+            .orderByDesc("tenant_id")
+            .last("limit 1"));
+        if (defaultRole == null) {
+            throw new BusinessException("前台默认角色未配置，请联系管理员");
+        }
+        SysUserRole userRole = new SysUserRole();
+        userRole.userId = user.getId();
+        userRole.roleId = defaultRole.id;
+        userRoleMapper.insert(userRole);
     }
 
     @Override

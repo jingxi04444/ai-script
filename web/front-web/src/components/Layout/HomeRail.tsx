@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dropdown, message } from 'antd';
+import { CheckOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import { paymentApi } from '../../api/payment';
 import { siteApi } from '../../api/site';
+import { useAuthStore } from '../../stores/authStore';
+import { applyTheme, getStoredThemeMode, type ThemeMode } from '../../utils/theme';
 import MemberPaymentDialog from '../Modal/MemberPaymentDialog';
 import RechargeDialog from '../Modal/RechargeDialog';
 import ProfileDialog from '../Modal/ProfileDialog';
+import './home-rail.css';
 
 interface HomeRailProps {
   activeLabel: string;
@@ -28,10 +32,16 @@ const homeNavItems = [
 
 const HomeRail = ({ activeLabel, onCreate, onHome, onProjects, onAssets, onMember, onRecharge }: HomeRailProps) => {
   const navigate = useNavigate();
+  const logout = useAuthStore((state) => state.logout);
   const [balance, setBalance] = useState<number | null>(null);
-  const [homeLogoUrl, setHomeLogoUrl] = useState('');
+  const [homeLogoUrl, setHomeLogoUrl] = useState(() => siteApi.getCachedConfig()?.homeLogoUrl || '');
   const [profileOpen, setProfileOpen] = useState(false);
   const [fallbackCommerceDialog, setFallbackCommerceDialog] = useState<'member' | 'recharge' | null>(null);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(getStoredThemeMode);
+
+  useEffect(() => {
+    applyTheme(themeMode);
+  }, [themeMode]);
 
   useEffect(() => {
     paymentApi.wallet()
@@ -71,6 +81,24 @@ const HomeRail = ({ activeLabel, onCreate, onHome, onProjects, onAssets, onMembe
 
   const profileMenuItems: MenuProps['items'] = [
     {
+      key: 'appearance',
+      icon: themeMode === 'light' ? <SunOutlined /> : <MoonOutlined />,
+      label: '\u663e\u793a\u6a21\u5f0f',
+      children: [
+        {
+          key: 'theme-light',
+          icon: <SunOutlined />,
+          label: <span className="rail-theme-option"><span>{'\u6d45\u8272\u6a21\u5f0f'}</span>{themeMode === 'light' ? <CheckOutlined /> : null}</span>,
+        },
+        {
+          key: 'theme-dark',
+          icon: <MoonOutlined />,
+          label: <span className="rail-theme-option"><span>{'\u6df1\u8272\u6a21\u5f0f'}</span>{themeMode === 'dark' ? <CheckOutlined /> : null}</span>,
+        },
+      ],
+    },
+    { type: 'divider' },
+    {
       key: 'info',
       label: '我的信息',
     },
@@ -81,15 +109,31 @@ const HomeRail = ({ activeLabel, onCreate, onHome, onProjects, onAssets, onMembe
       key: 'orders',
       label: '我的订单',
     },
+    {
+      type: 'divider',
+    },
+    {
+      key: 'logout',
+      danger: true,
+      label: '\u9000\u51fa',
+    },
   ];
 
   const handleProfileMenuClick: MenuProps['onClick'] = ({ key }) => {
+    if (key === 'theme-light' || key === 'theme-dark') {
+      setThemeMode(key === 'theme-light' ? 'light' : 'dark');
+      return;
+    }
     if (key === 'info') {
       setProfileOpen(true);
       return;
     }
     if (key === 'orders') {
       navigate('/payment/orders');
+      return;
+    }
+    if (key === 'logout') {
+      void logout().finally(() => navigate('/login', { replace: true }));
     }
   };
 
@@ -131,7 +175,8 @@ const HomeRail = ({ activeLabel, onCreate, onHome, onProjects, onAssets, onMembe
         <Dropdown
           menu={{ items: profileMenuItems, onClick: handleProfileMenuClick }}
           trigger={['click']}
-          placement="top"
+          placement="bottomLeft"
+          autoAdjustOverflow={false}
           overlayClassName="rail-profile-dropdown"
         >
           <button className="rail-bottom-icon rail-bottom-menu" type="button" aria-label="更多菜单" aria-haspopup="menu"><span /></button>

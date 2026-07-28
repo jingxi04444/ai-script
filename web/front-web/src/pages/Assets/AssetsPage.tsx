@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CaretRightFilled, FileTextOutlined, FolderFilled, FormOutlined, MenuFoldOutlined, RightOutlined } from '@ant-design/icons';
-import { useNavigate } from 'react-router-dom';
+import { CaretRightFilled, FileTextOutlined, FolderFilled, FormOutlined, LeftOutlined, MenuFoldOutlined, RightOutlined } from '@ant-design/icons';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { assetApi } from '../../api/asset';
 import { briefApi } from '../../api/brief';
+
 import { scriptApi } from '../../api/script';
 import HomeRail from '../../components/Layout/HomeRail';
 import type { Asset } from '../../types/asset';
-import type { Brief } from '../../types/brief';
+import type { BriefAssetItem, BriefAssetLibrary } from '../../types/brief';
+
 import type { Script } from '../../types/script';
 import { formatDateTime } from '../../utils/format';
 import './assets-page.css';
@@ -30,6 +32,7 @@ const LIBRARY_ORDER: LibraryView[] = ['briefs', 'scripts', 'materials', 'works']
 
 const AssetsPage = () => {
   const navigate = useNavigate();
+  const [assetSearchParams] = useSearchParams();
   const [activeView, setActiveView] = useState<LibraryView>('briefs');
   const [expandedViews, setExpandedViews] = useState<Record<LibraryView, boolean>>({
     briefs: true,
@@ -37,26 +40,58 @@ const AssetsPage = () => {
     materials: false,
     works: false,
   });
-  const [selectedFolderKey, setSelectedFolderKey] = useState<string | null>(null);
+  const [selectedFolderKey, setSelectedFolderKey] = useState<string | null>(
+    assetSearchParams.get('briefProjectId') ? 'mine-briefs' : null,
+  );
+  const [selectedBriefProjectId, setSelectedBriefProjectId] = useState<string | null>(
+    assetSearchParams.get('briefProjectId'),
+  );
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [briefs, setBriefs] = useState<Brief[]>([]);
+  const [briefLibrary, setBriefLibrary] = useState<BriefAssetLibrary | null>(null);
+  const [briefsLoading, setBriefsLoading] = useState(true);
+  const [briefLoadFailed, setBriefLoadFailed] = useState(false);
+
   const [scripts, setScripts] = useState<Script[]>([]);
   const [viralScriptCount, setViralScriptCount] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.allSettled([
-      assetApi.list({ page: 1, pageSize: 200 }),
-      briefApi.mineList(),
-      scriptApi.mineList(),
-      assetApi.viralAssets({ page: 1, pageSize: 1 }),
-    ]).then(([assetResult, briefResult, scriptResult, viralResult]) => {
-      if (cancelled) return;
-      setAssets(assetResult.status === 'fulfilled' ? assetResult.value.list || [] : []);
-      setBriefs(briefResult.status === 'fulfilled' ? briefResult.value : []);
-      setScripts(scriptResult.status === 'fulfilled' ? scriptResult.value : []);
-      setViralScriptCount(viralResult.status === 'fulfilled' ? viralResult.value.total || 0 : 0);
-    });
+
+    briefApi.assetLibrary()
+      .then((library) => {
+        if (!cancelled) setBriefLibrary(library);
+      })
+      .catch(() => {
+        if (!cancelled) setBriefLoadFailed(true);
+      })
+      .finally(() => {
+        if (!cancelled) setBriefsLoading(false);
+      });
+
+    assetApi.list({ page: 1, pageSize: 200 })
+      .then((page) => {
+        if (!cancelled) setAssets(page.list || []);
+      })
+      .catch(() => {
+        if (!cancelled) setAssets([]);
+      });
+
+    scriptApi.mineList()
+      .then((list) => {
+        if (!cancelled) setScripts(list);
+      })
+      .catch(() => {
+        if (!cancelled) setScripts([]);
+      });
+
+    assetApi.viralAssets({ page: 1, pageSize: 1 })
+      .then((page) => {
+        if (!cancelled) setViralScriptCount(page.total || 0);
+      })
+      .catch(() => {
+        if (!cancelled) setViralScriptCount(0);
+      });
+
     return () => { cancelled = true; };
   }, []);
 
@@ -64,7 +99,7 @@ const AssetsPage = () => {
     const countBy = (predicate: (asset: Asset) => boolean) => assets.filter(predicate).length;
     const works = assets.filter((asset) => asset.category === 'project' || asset.category === 'upload');
     return {
-      briefs: [{ key: 'mine-briefs', name: '我的Brief', count: briefs.length }],
+      briefs: [{ key: 'mine-briefs', name: '我的Brief', count: briefLibrary?.total ?? null }],
       scripts: [
         { key: 'mine-scripts', name: '我的脚本', count: scripts.length },
         { key: 'viral-scripts', name: '爆款脚本', count: viralScriptCount },
@@ -88,23 +123,40 @@ const AssetsPage = () => {
         { key: 'document', name: '文档作品', count: works.filter((asset) => asset.type === 'document').length },
       ],
     };
-  }, [assets, briefs.length, scripts.length, viralScriptCount]);
+  }, [assets, briefLibrary?.total, scripts.length, viralScriptCount]);
 
   const folders = foldersByView[activeView];
   const selectedFolder = folders.find((folder) => folder.key === selectedFolderKey) || null;
   const visibleFolders = selectedFolder ? [selectedFolder] : folders;
+  const briefProjectFolders = useMemo<AssetFolder[]>(
+    () => (briefLibrary?.projects || []).map((project) => ({
+      key: project.projectId,
+      name: project.projectName,
+      count: project.briefs.length,
+    })),
+    [briefLibrary],
+  );
+  const selectedBriefProject = briefProjectFolders.find((folder) => folder.key === selectedBriefProjectId) || null;
+  const selectedBriefProjectData = briefLibrary?.projects.find(
+    (project) => project.projectId === selectedBriefProjectId,
+  );
+  const visibleProjectBriefs = selectedBriefProjectData?.briefs || [];
 
   const handleLibraryClick = (view: LibraryView) => {
     setActiveView(view);
     setSelectedFolderKey(null);
+    setSelectedBriefProjectId(null);
     setExpandedViews((current) => ({ ...current, [view]: !current[view] }));
   };
 
-  const openBrief = (brief: Brief) => {
+  const openBrief = (brief: BriefAssetItem) => {
     const params = new URLSearchParams({
+      projectId: brief.projectId,
       step: 'selling-points',
       briefId: brief.id,
       briefDialog: '1',
+      briefOrigin: 'assets',
+      assetProjectId: brief.projectId,
     });
     navigate(`/workspace?${params.toString()}`);
   };
@@ -120,10 +172,29 @@ const AssetsPage = () => {
   };
 
   const renderFolderContents = () => {
-    if (selectedFolderKey === 'mine-briefs') {
+    if (selectedFolderKey === 'mine-briefs' && !selectedBriefProjectId) {
+      if (briefsLoading) return <p className="assets-record-empty">正在加载 Brief 项目…</p>;
+      if (briefLoadFailed) return <p className="assets-record-empty">Brief 项目加载失败，请刷新后重试</p>;
       return (
-        <section className="assets-record-grid" aria-label="全部 Brief">
-          {briefs.map((brief) => (
+        <section className="assets-folder-grid" aria-label="Brief 项目文件夹">
+          {briefProjectFolders.map((folder) => (
+            <button className="assets-folder-card" type="button" key={folder.key} onClick={() => setSelectedBriefProjectId(folder.key)}>
+              <span className="assets-folder-art" aria-hidden="true"><i /></span>
+              <strong>{folder.name}</strong>
+              <small>共 {folder.count ?? 0} 份 Brief</small>
+            </button>
+          ))}
+          {!briefProjectFolders.length && <p className="assets-record-empty">暂无 Brief 项目</p>}
+        </section>
+      );
+    }
+
+    if (selectedFolderKey === 'mine-briefs') {
+      if (briefsLoading) return <p className="assets-record-empty">正在加载当前项目 Brief…</p>;
+      if (briefLoadFailed) return <p className="assets-record-empty">当前项目 Brief 加载失败，请刷新后重试</p>;
+      return (
+        <section className="assets-record-grid" aria-label={`${selectedBriefProject?.name || '当前项目'}的 Brief`}>
+          {visibleProjectBriefs.map((brief) => (
             <button className="assets-record-card" type="button" key={brief.id} onClick={() => openBrief(brief)}>
               <span className="assets-record-icon"><FormOutlined /></span>
               <span className="assets-record-copy">
@@ -134,11 +205,10 @@ const AssetsPage = () => {
               <RightOutlined />
             </button>
           ))}
-          {!briefs.length && <p className="assets-record-empty">暂无 Brief</p>}
+          {!visibleProjectBriefs.length && <p className="assets-record-empty">当前项目暂无 Brief</p>}
         </section>
       );
     }
-
     if (selectedFolderKey === 'mine-scripts') {
       return (
         <section className="assets-record-grid" aria-label="全部脚本">
@@ -209,6 +279,7 @@ const AssetsPage = () => {
                         onClick={() => {
                           setActiveView(view);
                           setSelectedFolderKey(folder.key);
+                          setSelectedBriefProjectId(null);
                         }}
                       >
                         <FolderFilled />
@@ -230,7 +301,12 @@ const AssetsPage = () => {
           </header>
           <div className="assets-library-body">
             <p className="assets-library-eyebrow">资产管理</p>
-            <h1>{selectedFolder?.name || LIBRARY_LABELS[activeView]}</h1>
+            {selectedBriefProject && (
+              <button className="assets-library-back" type="button" onClick={() => setSelectedBriefProjectId(null)}>
+                <LeftOutlined /> 返回项目文件夹
+              </button>
+            )}
+            <h1>{selectedBriefProject?.name || selectedFolder?.name || LIBRARY_LABELS[activeView]}</h1>
             {renderFolderContents()}
           </div>
         </section>

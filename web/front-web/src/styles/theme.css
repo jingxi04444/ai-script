@@ -1,0 +1,1062 @@
+:root {
+  --theme-accent: #62e670;
+  --theme-accent-rgb: 98, 230, 112;
+}
+
+html[data-color-mode='light'] {
+  color-scheme: light;
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --panel-2: #f7f9fa;
+  --panel-3: #eef2f4;
+  --line: rgba(31, 41, 47, 0.14);
+  --text: #1f262a;
+  --muted: #667178;
+  --green-line: rgba(var(--theme-accent-rgb), 0.28);
+  --shadow: 0 18px 50px rgba(38, 48, 54, 0.12);
+}
+
+html[data-color-mode='dark'] {
+  color-scheme: dark;
+}
+
+html[data-color-mode='light'] body,
+html[data-color-mode='light'] .home-app-shell,
+html[data-color-mode='light'] .workspace-app-shell,
+html[data-color-mode='light'] .prototype-home,
+html[data-color-mode='light'] .workspace-shell,
+html[data-color-mode='light'] .my-projects-shell,
+html[data-color-mode='light'] .my-projects-page,
+html[data-color-mode='light'] .assets-library-shell,
+html[data-color-mode='light'] .assets-library-layout,
+html[data-color-mode='light'] .payment-orders-shell,
+html[data-color-mode='light'] .payment-orders-page {
+  background: #f4f6f8;
+  color: #1f262a;
+}
+
+html[data-color-mode='light'] .home-rail,
+html[data-color-mode='light'] .workspace-shell .home-rail,
+html[data-color-mode='light'] .workspace-sidebar,
+html[data-color-mode='light'] .assets-library-sidebar,
+html[data-color-mode='light'] .assets-library-topbar {
+  border-color: #dfe4e7;
+  background: #ffffff;
+}
+
+html[data-color-mode='light'] .home-rail nav button,
+html[data-color-mode='light'] .rail-bottom-icon,
+html[data-color-mode='light'] .assets-library-sidebar nav button {
+  color: #667178;
+}
+
+html[data-color-mode='light'] .home-rail nav button.active,
+html[data-color-mode='light'] .home-rail nav button:hover,
+html[data-color-mode='light'] .assets-library-sidebar nav button.active,
+html[data-color-mode='light'] .assets-library-sidebar nav button:hover {
+  color: #172025;
+  background: rgba(var(--theme-accent-rgb), 0.12);
+}
+
+html[data-color-mode='light'] .workspace-main,
+html[data-color-mode='light'] .creation-topbar,
+html[data-color-mode='light'] .workspace-main .workbench-card,
+html[data-color-mode='light'] .assets-library-content,
+html[data-color-mode='light'] .assets-library-body,
+html[data-color-mode='light'] .assets-folder-card,
+html[data-color-mode='light'] .assets-record-card,
+html[data-color-mode='light'] .payment-orders-panel {
+  border-color: #dfe4e7;
+  background: #ffffff;
+  color: #1f262a;
+}
+
+html[data-color-mode='light'] .project-step-head,
+html[data-color-mode='light'] .creation-topbar,
+html[data-color-mode='light'] .assets-library-topbar {
+  border-color: #dfe4e7;
+}
+
+html[data-color-mode='light'] .project-step-head .project-title-text,
+html[data-color-mode='light'] .project-back,
+html[data-color-mode='light'] .my-projects-hero h1,
+html[data-color-mode='light'] .payment-orders-hero h1,
+html[data-color-mode='light'] .assets-library-topbar strong,
+html[data-color-mode='light'] .assets-library-body h1,
+html[data-color-mode='light'] .assets-record-copy strong {
+  color: #1f262a !important;
+}
+
+html[data-color-mode='light'] .my-projects-page::before,
+html[data-color-mode='light'] .payment-orders-page::before,
+html[data-color-mode='light'] .workspace-main::before {
+  opacity: 0.18;
+}
+
+.home-rail nav button.active,
+.home-rail nav button:hover,
+.rail-profile-dropdown .ant-dropdown-menu-item:hover,
+.rail-profile-dropdown .ant-dropdown-menu-submenu-title:hover {
+  color: var(--theme-accent) !important;
+}
+
+.rail-membership-card,
+.next-step-button,
+.my-projects-create-button,
+.generate-script-button,
+.template-generate-button {
+  border-color: rgba(var(--theme-accent-rgb), 0.48) !important;
+  background-color: var(--theme-accent) !important;
+}
+
+.rail-profile-dropdown .ant-dropdown-menu-item:hover,
+.ant-dropdown-menu-submenu-popup .ant-dropdown-menu-item:hover {
+  background: rgba(var(--theme-accent-rgb), 0.14) !important;
+}
+
+.rail-profile-dropdown .ant-dropdown-menu-item-selected,
+.ant-dropdown-menu-submenu-popup .ant-dropdown-menu-item-selected {
+  color: var(--theme-accent) !important;
+  background: rgba(var(--theme-accent-rgb), 0.16) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-rail *,
+  .rail-profile-dropdown * {
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Light-mode compatibility for screens that still use literal dark colors. */
+html[data-color-mode='light'] .home-stage,
+html[data-color-mode='light'] .brief-page,
+html[data-color-mode='light'] .brief-document-stage,
+html[data-color-mode='light'] .brief-studio-body,
+html[data-color-mode='light'] .script-generator-page {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] :where(
+  .page-header, .project-card, .step-pill, .insight-panel, .workbench-card,
+  .template-card, .template-detail, .brief-row, .version-row, .file-drop,
+  .brief-studio-modal, .brief-studio-topbar, .brief-document-sheet,
+  .brief-document-sheet > header, .brief-studio-sidebar, .brief-folder-card,
+  .brief-folder-toolbar, .brief-rich-toolbar, .brief-rich-editor,
+  .brief-document-edit-field input, .brief-document-edit-field textarea,
+  .brief-selling-edit-plain-field input, .script-entry-card,
+  .script-result-panel, .structure-analysis-panel, .script-config-panel,
+  .analysis-mode-card, .structure-card-grid article, .modal-card,
+  .commerce-modal, .manager-panel, .shared-brief-panel, .brief-picker-panel,
+  .brief-detail-panel, .brief-detail-card, .brief-summary-card,
+  .brief-selected-card, .request-panel, .shared-library-card,
+  .collaboration-card, .brief-version-card, .profile-dialog-card
+) {
+  border-color: var(--line) !important;
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  box-shadow: var(--shadow);
+}
+
+html[data-color-mode='light'] :where(
+  .brief-studio-topbar, .brief-studio-sidebar, .brief-side-tabs,
+  .brief-side-section, .brief-document-sheet > header, .brief-document-field,
+  .brief-document-edit-field, .brief-rich-editor-field
+) {
+  border-color: var(--line) !important;
+}
+
+html[data-color-mode='light'] :where(
+  .brief-studio-title h2, .brief-document-sheet h1, .brief-document-field p,
+  .brief-document-rich-value, .brief-document-rich-value h2,
+  .brief-document-rich-value h3, .brief-selling-edit-plain-field > span,
+  .brief-side-tabs button.active, .brief-side-section h3,
+  .brief-side-section dd, .profile-dialog-card h2,
+  .profile-dialog-content dd, .modal-head h2, .panel-title strong
+) {
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] :where(
+  .brief-studio-title > div > span, .brief-document-sheet > header p,
+  .brief-document-field > span, .brief-document-edit-field > span,
+  .brief-rich-editor-field > span, .brief-side-tabs button,
+  .brief-side-section dt, .profile-dialog-content dt,
+  .modal-copy, .panel-title small
+) {
+  color: var(--muted) !important;
+}
+
+html[data-color-mode='light'] :where(
+  input, textarea, select, .ant-input, .ant-input-affix-wrapper,
+  .ant-select-selector, .ant-picker, .ant-input-number,
+  .ant-input-number-input
+) {
+  border-color: var(--line) !important;
+  background: var(--panel-2) !important;
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] :where(input, textarea)::placeholder,
+html[data-color-mode='light'] .ant-select-selection-placeholder {
+  color: #7a858b !important;
+  opacity: 1;
+}
+
+html[data-color-mode='light'] :where(
+  .ant-dropdown-menu, .ant-dropdown-menu-submenu-popup .ant-dropdown-menu,
+  .ant-select-dropdown, .ant-picker-dropdown .ant-picker-panel-container,
+  .ant-popover-inner, .ant-tooltip-inner
+) {
+  border-color: var(--line) !important;
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+html[data-color-mode='light'] :where(
+  .ant-dropdown-menu-item, .ant-dropdown-menu-submenu-title,
+  .ant-dropdown-menu-title-content, .ant-select-item,
+  .ant-select-item-option-content, .ant-picker-content,
+  .ant-picker-header, .ant-popover-inner-content
+) {
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] :where(
+  .ant-dropdown-menu-item:hover, .ant-dropdown-menu-submenu-title:hover,
+  .ant-select-item-option-active, .ant-select-item-option-selected
+) {
+  background: rgba(var(--theme-accent-rgb), 0.13) !important;
+}
+
+html[data-color-mode='light'] .rail-profile-dropdown .ant-dropdown-menu {
+  border-color: var(--line) !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  box-shadow: 0 18px 44px rgba(35, 45, 50, 0.18) !important;
+}
+
+html[data-color-mode='light'] .rail-profile-dropdown :where(
+  .ant-dropdown-menu-item, .ant-dropdown-menu-submenu-title,
+  .ant-dropdown-menu-title-content
+) {
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .home-stage :where(
+  .quick-actions > button, .hot-header button
+) {
+  border-color: var(--line);
+  background: var(--panel);
+  color: var(--text);
+  box-shadow: 0 8px 24px rgba(38, 48, 54, 0.08);
+}
+
+html[data-color-mode='light'] .home-stage :where(
+  .quick-action-copy, .quick-action-copy strong,
+  .quick-action-copy span, .hot-header h2
+) {
+  color: var(--text) !important;
+}
+
+/* Workspace light-mode text contrast across creation steps 1-6. */
+html[data-color-mode='light'] .selling-workspace-main :where(
+  .field-box > span,
+  .audience-field > span,
+  .selling-textarea > span
+) {
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .workspace-main :where(
+  .workspace-panel-head h2,
+  .script-generation-wait h2,
+  .script-entry-copy h2,
+  .script-entry-card strong,
+  .script-entry-card p,
+  .script-result-panel h3,
+  .script-result-panel p,
+  .structure-analysis-panel h3,
+  .structure-analysis-panel p,
+  .script-config-panel h3,
+  .analysis-mode-card strong,
+  .analysis-mode-card p,
+  .structure-card-grid strong,
+  .structure-card-grid p,
+  .storyboard-library-summary h2,
+  .storyboard-empty-state strong
+) {
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .workspace-main :where(
+  .script-entry-copy p,
+  .script-generation-wait p,
+  .workspace-panel-head p,
+  .storyboard-library-summary p,
+  .storyboard-empty-state p
+) {
+  color: var(--muted) !important;
+}
+
+html[data-color-mode='light'] .workspace-main :where(
+  .ant-select-selection-item,
+  .ant-select-selection-placeholder,
+  .ant-select-arrow,
+  .ant-select-suffix,
+  .ant-select .anticon
+) {
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .workspace-main :where(
+  .project-title-edit-button,
+  .step-collapse-toggle
+) {
+  color: var(--muted) !important;
+}
+
+html[data-color-mode='light'] .home-stage .quick-actions button:not(.primary) small {
+  color: var(--muted) !important;
+}
+
+html[data-color-mode='light'] .home-stage .quick-actions button:not(.primary) .quick-action-icon {
+  color: var(--muted) !important;
+  background: var(--panel-3) !important;
+}
+
+/* Complete light surfaces for the six-step project workspace. */
+html[data-color-mode='light'] .workspace-sidebar nav::before {
+  border-left-color: #d5dce0;
+}
+
+html[data-color-mode='light'] .workspace-sidebar nav button {
+  border: 1px solid #dce2e5;
+  background: var(--panel-2);
+  color: var(--text);
+  box-shadow: 0 3px 10px rgba(38, 48, 54, 0.05);
+}
+
+html[data-color-mode='light'] .workspace-sidebar nav button:hover,
+html[data-color-mode='light'] .workspace-sidebar nav button:focus-visible {
+  border-color: rgba(var(--theme-accent-rgb), 0.48);
+  background: rgba(var(--theme-accent-rgb), 0.09);
+  color: #245f2b;
+}
+
+html[data-color-mode='light'] .workspace-sidebar nav button span {
+  border-color: #aeb9be;
+  background: #fff;
+  color: #465158;
+}
+
+html[data-color-mode='light'] .workspace-sidebar nav button i {
+  color: #7d898f;
+}
+
+html[data-color-mode='light'] .workspace-sidebar nav button.active {
+  border-color: rgba(var(--theme-accent-rgb), 0.54);
+  background: rgba(var(--theme-accent-rgb), 0.17);
+  color: #23652d;
+  box-shadow: 0 5px 16px rgba(var(--theme-accent-rgb), 0.12);
+}
+
+html[data-color-mode='light'] .workspace-sidebar nav button.active strong {
+  color: #23652d;
+}
+
+html[data-color-mode='light'] .workspace-sidebar nav button.active span {
+  border-color: var(--theme-accent);
+  background: var(--theme-accent);
+  color: #102c16;
+}
+
+html[data-color-mode='light'] .workspace-sidebar nav button.done {
+  color: var(--text);
+}
+
+html[data-color-mode='light'] .selling-workspace-main :where(
+  .selling-rich-toolbar,
+  .selling-rich-editor
+) {
+  border-color: #d6dde1 !important;
+  background: #fff !important;
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .selling-workspace-main .selling-rich-toolbar {
+  background: var(--panel-3) !important;
+}
+
+html[data-color-mode='light'] .selling-workspace-main .selling-rich-toolbar :where(button, label) {
+  border-color: #cbd4d8 !important;
+  background: #fff !important;
+  color: #354047 !important;
+}
+
+html[data-color-mode='light'] .selling-workspace-main .selling-rich-toolbar :where(button, label):hover,
+html[data-color-mode='light'] .selling-workspace-main .selling-rich-toolbar button.active {
+  border-color: rgba(var(--theme-accent-rgb), 0.56) !important;
+  background: rgba(var(--theme-accent-rgb), 0.13) !important;
+  color: #23652d !important;
+}
+
+html[data-color-mode='light'] .selling-workspace-main .selling-rich-toolbar select {
+  background: transparent !important;
+  color: var(--text) !important;
+  color-scheme: light;
+}
+
+html[data-color-mode='light'] .selling-workspace-main .selling-rich-toolbar select option {
+  background: #fff;
+  color: var(--text);
+}
+
+html[data-color-mode='light'] .selling-workspace-main .selling-rich-editor[data-empty='true']:empty::before,
+html[data-color-mode='light'] .selling-workspace-main .rich-text-field > em {
+  color: var(--muted) !important;
+}
+
+html[data-color-mode='light'] .workspace-main :where(
+  .brief-top-button,
+  .outline-action-button,
+  .brief-check-button,
+  .script-mode-entry-tip
+) {
+  border-color: #cbd5d9 !important;
+  background: var(--panel-2) !important;
+  color: var(--text) !important;
+  box-shadow: 0 3px 10px rgba(38, 48, 54, 0.06) !important;
+}
+
+html[data-color-mode='light'] .workspace-main :where(
+  .outline-action-button.green,
+  .brief-check-button
+) {
+  border-color: rgba(var(--theme-accent-rgb), 0.52) !important;
+  background: rgba(var(--theme-accent-rgb), 0.1) !important;
+  color: #23652d !important;
+}
+
+html[data-color-mode='light'] .workspace-main :where(
+  .script-generation-wait,
+  .reference-link-row,
+  .viral-analysis-columns .analysis-content-frame,
+  .viral-parse-wait,
+  .viral-parse-wait section,
+  .editable-analysis-area,
+  .editable-structure-area,
+  .simple-analysis-panel ul,
+  .analysis-empty-state,
+  .deep-structure-editor-item,
+  .storyboard-script-tabs,
+  .storyboard-library-summary,
+  .storyboard-filter-panel,
+  .storyboard-library-panel,
+  .storyboard-table-view,
+  .storyboard-script-card,
+  .asset-block,
+  .production-card,
+  .delivery-card,
+  .asset-list article,
+  .compact-list article,
+  .check-results,
+  .metric-row,
+  .wallet-card,
+  .simple-list article,
+  .result-strip,
+  .production-history article
+) {
+  border-color: var(--line) !important;
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  box-shadow: 0 7px 22px rgba(38, 48, 54, 0.07) !important;
+}
+
+html[data-color-mode='light'] .workspace-main :where(
+  .workspace-panel-head button,
+  .asset-block button,
+  .production-card button,
+  .delivery-card button,
+  .storyboard-row-actions button,
+  .storyboard-card-actions button,
+  .storyboard-pagination button,
+  .reference-link-row button,
+  .script-result-panel header button,
+  .structure-analysis-panel header button,
+  .structure-analysis-panel footer button
+) {
+  border-color: #cbd5d9 !important;
+  background: var(--panel-2) !important;
+  color: var(--text) !important;
+}
+
+/* Full light-mode coverage for workspace steps 2-3, forms, Brief management and Projects. */
+html[data-color-mode='light'] .script-workspace-main .creation-topbar,
+html[data-color-mode='light'] .storyboard-workspace-main .creation-topbar {
+  border-color: var(--line) !important;
+  background: var(--panel) !important;
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main :where(
+  .script-mode-nav,
+  .script-mode-entry-tip,
+  .script-generator-entry-page,
+  .replica-script-page,
+  .script-template-page,
+  .original-script-page,
+  .template-toolbar-panel,
+  .template-gallery-panel,
+  .selected-template-strip,
+  .template-config-panel,
+  .template-generate-panel,
+  .original-hero-card,
+  .original-main-card,
+  .original-prompt-box,
+  .script-config-panel,
+  .script-result-panel,
+  .structure-analysis-panel
+) {
+  border-color: var(--line) !important;
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  box-shadow: 0 7px 22px rgba(38, 48, 54, 0.07) !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main .script-mode-nav button {
+  border-color: transparent !important;
+  background: transparent !important;
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main .script-mode-nav button.active {
+  border-color: rgba(var(--theme-accent-rgb), 0.5) !important;
+  background: rgba(var(--theme-accent-rgb), 0.13) !important;
+  color: #23652d !important;
+}
+
+html[data-color-mode='light'] .storyboard-workspace-main :where(
+  .storyboard-polish-page,
+  .storyboard-script-tabs,
+  .storyboard-library-summary,
+  .storyboard-filter-panel,
+  .storyboard-library-panel,
+  .storyboard-table-view,
+  .storyboard-table-head,
+  .storyboard-table-row,
+  .storyboard-script-card,
+  .storyboard-view-toggle
+) {
+  border-color: var(--line) !important;
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  box-shadow: none !important;
+}
+
+html[data-color-mode='light'] .storyboard-workspace-main .storyboard-script-tabs button,
+html[data-color-mode='light'] .storyboard-workspace-main .storyboard-view-toggle button {
+  background: transparent !important;
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .storyboard-workspace-main .storyboard-script-tabs button.active,
+html[data-color-mode='light'] .storyboard-workspace-main .storyboard-view-toggle button.active {
+  background: rgba(var(--theme-accent-rgb), 0.1) !important;
+  color: #23652d !important;
+  -webkit-text-fill-color: #23652d !important;
+}
+
+/* Inputs, searches, selects and upload controls on every workspace step. */
+html[data-color-mode='light'] .workspace-main :where(
+  input,
+  textarea,
+  select,
+  .ant-input,
+  .ant-input-affix-wrapper,
+  .ant-select,
+  .ant-select-selector,
+  .reference-link-input,
+  .template-search,
+  .storyboard-search,
+  .storyboard-select,
+  .polish-input-box,
+  .original-scenario-select .ant-select,
+  .original-config-grid .ant-select,
+  .original-config-grid .ant-select-selector,
+  .script-config-fields .ant-select,
+  .script-config-fields .ant-select-selector,
+  .template-config-grid .ant-select,
+  .template-config-grid .ant-select-selector
+) {
+  border-color: #cbd5d9 !important;
+  background: var(--panel-2) !important;
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+  box-shadow: none !important;
+  color-scheme: light;
+}
+
+html[data-color-mode='light'] .workspace-main :where(
+  input,
+  textarea,
+  .ant-input,
+  .ant-select-selection-item,
+  .ant-select-selection-placeholder,
+  .ant-select-selection-search-input,
+  .ant-select-selection-wrap,
+  .ant-select-selection-search,
+  .ant-select-selection-overflow,
+  .ant-select-arrow,
+  .ant-select-suffix,
+  .ant-select .anticon,
+  .original-config-grid label,
+  .original-config-grid label > span,
+  .script-config-fields label,
+  .script-config-fields label > span
+) {
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .workspace-main :where(input, textarea)::placeholder,
+html[data-color-mode='light'] .workspace-main .ant-select-selection-placeholder {
+  color: var(--muted) !important;
+  -webkit-text-fill-color: var(--muted) !important;
+  opacity: 1 !important;
+}
+
+html[data-color-mode='light'] .workspace-main select option {
+  background: #fff !important;
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .workspace-main :where(
+  .ant-upload button,
+  .product-frame-upload .ant-upload button,
+  .template-upload-field button,
+  .original-upload-field button,
+  .script-config-fields label > button,
+  .file-drop,
+  .storyboard-reset-button,
+  .template-page-arrow
+) {
+  border-color: #bfcbd0 !important;
+  background: var(--panel-2) !important;
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+  box-shadow: none !important;
+}
+
+html[data-color-mode='light'] .workspace-main :where(
+  .ant-upload button strong,
+  .ant-upload button small,
+  .ant-upload button .anticon,
+  .product-frame-upload button strong,
+  .product-frame-upload button small,
+  .product-frame-upload button svg,
+  .template-upload-field button strong,
+  .template-upload-field button small,
+  .original-upload-field button strong,
+  .original-upload-field button small,
+  .original-upload-field .anticon
+) {
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .workspace-main :where(
+  .script-entry-copy h2,
+  .script-entry-card strong,
+  .template-card h3,
+  .template-title-row,
+  .original-hero-copy h2,
+  .original-scenario-copy strong,
+  .original-config-section h3,
+  .analysis-panel-title,
+  .storyboard-table-head,
+  .storyboard-table-row strong,
+  .storyboard-script-card h3
+) {
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .workspace-main :where(
+  .script-entry-copy p,
+  .script-entry-card p,
+  .template-card p,
+  .original-hero-copy p,
+  .original-scenario-copy p,
+  .storyboard-table-row time,
+  .storyboard-script-card time,
+  .storyboard-tip
+) {
+  color: var(--muted) !important;
+}
+
+/* Brief manager folder page and detail page. */
+html[data-color-mode='light'] .brief-studio-modal,
+html[data-color-mode='light'] .brief-studio-modal.is-folders,
+html[data-color-mode='light'] .brief-studio-modal.is-detail {
+  border-color: var(--line) !important;
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+html[data-color-mode='light'] .brief-studio-modal :where(
+  .brief-folder-head,
+  .brief-folder-toolbar,
+  .brief-folder-grid,
+  .brief-folder-card,
+  .brief-studio-topbar,
+  .brief-studio-body,
+  .brief-document-stage,
+  .brief-document-sheet,
+  .brief-document-sheet > header,
+  .brief-studio-sidebar,
+  .brief-side-tabs,
+  .brief-side-content,
+  .brief-side-section,
+  .brief-side-version-list button,
+  .brief-share-permissions > article,
+  .brief-side-requests article
+) {
+  border-color: var(--line) !important;
+  background: var(--panel) !important;
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .brief-studio-modal :where(
+  .brief-folder-create,
+  .brief-folder-close,
+  .brief-studio-title > button,
+  .brief-studio-close,
+  .brief-studio-title select,
+  .brief-studio-actions > button:not(.brief-studio-close),
+  .brief-side-section-head button,
+  .brief-side-version-list button,
+  .brief-side-requests article button
+) {
+  border-color: #cbd5d9 !important;
+  background: var(--panel-2) !important;
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .brief-studio-modal :where(
+  .brief-folder-toolbar label,
+  .brief-folder-toolbar input,
+  .brief-document-title-input,
+  .brief-document-edit-field input,
+  .brief-document-edit-field textarea,
+  .brief-selling-edit-plain-field input,
+  .brief-rich-editor,
+  .brief-rich-toolbar,
+  .brief-rich-toolbar button,
+  .brief-rich-toolbar label,
+  .selling-rich-editor,
+  .selling-rich-toolbar,
+  .selling-rich-toolbar button,
+  .selling-rich-toolbar label
+) {
+  border-color: #cbd5d9 !important;
+  background: var(--panel-2) !important;
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+  box-shadow: none !important;
+}
+
+html[data-color-mode='light'] .brief-studio-modal :where(
+  .brief-folder-head h2,
+  .brief-folder-copy strong,
+  .brief-folder-empty strong,
+  .brief-studio-title h2,
+  .brief-document-sheet > header h1,
+  .brief-document-field p,
+  .brief-document-rich-value,
+  .brief-document-rich-value > div,
+  .brief-document-rich-value h2,
+  .brief-document-rich-value h3,
+  .brief-side-section h3,
+  .brief-side-section dd,
+  .brief-side-requests article strong
+) {
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .brief-studio-modal :where(
+  .brief-folder-copy small,
+  .brief-folder-copy em,
+  .brief-folder-toolbar > span,
+  .brief-studio-title > div > span,
+  .brief-document-sheet > header p,
+  .brief-document-field > span,
+  .brief-document-edit-field > span,
+  .brief-rich-editor-field > span,
+  .brief-side-section dt,
+  .brief-side-version-list small,
+  .brief-side-hint,
+  .brief-side-empty,
+  .brief-side-requests article p
+) {
+  color: #4f5a60 !important;
+  -webkit-text-fill-color: #4f5a60 !important;
+}
+
+/* Projects gallery had an independent hard-coded dark theme. */
+html[data-color-mode='light'] .my-projects-shell,
+html[data-color-mode='light'] .my-projects-page,
+html[data-color-mode='light'] .project-gallery-page {
+  background: var(--bg) !important;
+  color: var(--text) !important;
+  scrollbar-color: rgba(31, 41, 47, 0.2) transparent !important;
+}
+
+html[data-color-mode='light'] .project-gallery-toolbar {
+  border-color: var(--line) !important;
+  background: rgba(255, 255, 255, 0.96) !important;
+  color: var(--text) !important;
+  box-shadow: 0 8px 24px rgba(38, 48, 54, 0.07) !important;
+}
+
+html[data-color-mode='light'] .my-projects-shell :where(
+  .project-gallery-collection-button,
+  .project-gallery-select,
+  .project-gallery-search,
+  .project-create-card,
+  .project-gallery-card,
+  .project-detail-dialog,
+  .project-detail-grid div,
+  .project-detail-dialog footer button:not(.primary)
+) {
+  border-color: var(--line) !important;
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  box-shadow: 0 7px 22px rgba(38, 48, 54, 0.07) !important;
+}
+
+html[data-color-mode='light'] .my-projects-shell :where(
+  .project-gallery-select select,
+  .project-gallery-search input,
+  .project-gallery-search .anticon,
+  .project-gallery-select .anticon,
+  .project-gallery-toolbar > strong,
+  .project-create-card > strong,
+  .project-gallery-card h3,
+  .project-detail-dialog h2,
+  .project-detail-grid strong
+) {
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .my-projects-shell .project-gallery-select select option {
+  background: #fff !important;
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .my-projects-shell :where(
+  .project-gallery-search input::placeholder,
+  .project-gallery-card time,
+  .project-gallery-loading,
+  .project-detail-grid span
+) {
+  color: var(--muted) !important;
+  -webkit-text-fill-color: var(--muted) !important;
+}
+
+html[data-color-mode='light'] .my-projects-shell .project-gallery-preview {
+  background: var(--panel-3) !important;
+  color: #667178 !important;
+}
+
+html[data-color-mode='light'] .my-projects-shell .project-create-card > span {
+  background: rgba(var(--theme-accent-rgb), 0.14) !important;
+  color: #23652d !important;
+}
+
+html[data-color-mode='light'] .my-projects-shell .project-gallery-actions button {
+  background: var(--panel-2) !important;
+  color: #4f5a60 !important;
+}
+
+/* Replace the legacy #9da0a1-style low-contrast copy in light mode. */
+html[data-color-mode='light'] :where(
+  .assets-library-eyebrow,
+  .assets-folder-card small,
+  .assets-record-copy small,
+  .assets-record-copy em,
+  .my-projects-loaded,
+  .project-gallery-loading
+) {
+  color: #30383d !important;
+  -webkit-text-fill-color: #30383d !important;
+}
+
+/* Brief detection dialog and application feedback surfaces in light mode. */
+html[data-color-mode='light'] .brief-detection-backdrop {
+  background: rgba(31, 38, 42, 0.34) !important;
+}
+
+html[data-color-mode='light'] .brief-detection-modal {
+  border-color: var(--line) !important;
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  box-shadow: 0 28px 80px rgba(38, 48, 54, 0.2) !important;
+}
+
+html[data-color-mode='light'] .brief-detection-modal .modal-head {
+  border-color: var(--line) !important;
+  background: var(--panel) !important;
+}
+
+html[data-color-mode='light'] .brief-detection-modal .modal-head h2,
+html[data-color-mode='light'] .brief-detection-loading strong,
+html[data-color-mode='light'] .score-ring-inner strong,
+html[data-color-mode='light'] .score-summary p,
+html[data-color-mode='light'] .metric-card-head strong,
+html[data-color-mode='light'] .section-title,
+html[data-color-mode='light'] .section-title strong,
+html[data-color-mode='light'] .suggestion-item strong,
+html[data-color-mode='light'] .reconstructed-example-row p {
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .brief-detection-modal .modal-head span,
+html[data-color-mode='light'] .brief-detection-loading,
+html[data-color-mode='light'] .brief-detection-loading span,
+html[data-color-mode='light'] .score-summary-top span,
+html[data-color-mode='light'] .metric-card-head span,
+html[data-color-mode='light'] .metric-card small,
+html[data-color-mode='light'] .suggestion-item p {
+  color: #4f5a60 !important;
+  -webkit-text-fill-color: #4f5a60 !important;
+}
+
+html[data-color-mode='light'] .brief-detection-modal .modal-close-button {
+  border: 1px solid #cbd5d9 !important;
+  background: var(--panel-2) !important;
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .brief-detection-modal .modal-close-button:hover {
+  border-color: rgba(var(--theme-accent-rgb), 0.52) !important;
+  background: rgba(var(--theme-accent-rgb), 0.12) !important;
+  color: #23652d !important;
+}
+
+html[data-color-mode='light'] .brief-detection-loading-ring {
+  border-color: rgba(var(--theme-accent-rgb), 0.22) !important;
+  border-top-color: #42c858 !important;
+}
+
+html[data-color-mode='light'] .brief-detection-modal :where(
+  .detection-score-card,
+  .metric-card,
+  .warning-block,
+  .suggestion-block,
+  .example-block,
+  .suggestion-item,
+  .reconstructed-example-scroll,
+  .example-block pre
+) {
+  border-color: var(--line) !important;
+  background: var(--panel-2) !important;
+  color: var(--text) !important;
+  box-shadow: none !important;
+}
+
+html[data-color-mode='light'] .brief-detection-modal .score-ring-inner {
+  border-color: rgba(var(--theme-accent-rgb), 0.28) !important;
+  background: radial-gradient(circle at 30% 30%, rgba(var(--theme-accent-rgb), 0.18), #fff 66%) !important;
+}
+
+html[data-color-mode='light'] .brief-detection-modal .score-summary-tags span {
+  border-color: rgba(var(--theme-accent-rgb), 0.34) !important;
+  background: rgba(var(--theme-accent-rgb), 0.1) !important;
+  color: #23652d !important;
+}
+
+html[data-color-mode='light'] .brief-detection-modal .metric-progress {
+  background: #dfe5e8 !important;
+}
+
+html[data-color-mode='light'] .brief-detection-modal .warning-block {
+  border-color: rgba(211, 74, 74, 0.24) !important;
+  background: #fff7f7 !important;
+}
+
+html[data-color-mode='light'] .brief-detection-modal .warning-block ul {
+  color: #7f2f2f !important;
+}
+
+html[data-color-mode='light'] .brief-detection-modal .suggestion-item span {
+  background: rgba(var(--theme-accent-rgb), 0.14) !important;
+  color: #23652d !important;
+}
+
+html[data-color-mode='light'] .brief-detection-modal .reconstructed-example-row {
+  border-color: var(--line) !important;
+}
+
+html[data-color-mode='light'] .brief-detection-modal .reconstructed-example-row span,
+html[data-color-mode='light'] .brief-detection-modal .example-block pre {
+  color: #23652d !important;
+  -webkit-text-fill-color: #23652d !important;
+}
+
+html[data-color-mode='light'] .brief-detection-actions .secondary-action {
+  border-color: #cbd5d9 !important;
+  background: var(--panel-2) !important;
+  color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .brief-detection-actions .primary-action,
+html[data-color-mode='light'] .brief-detection-error .primary-action {
+  border-color: rgba(var(--theme-accent-rgb), 0.52) !important;
+  background: rgba(var(--theme-accent-rgb), 0.14) !important;
+  color: #23652d !important;
+}
+
+/* Ant Design message, notification, confirmation and popover feedback. */
+html[data-color-mode='light'] :where(
+  .ant-message-notice-content,
+  .ant-notification-notice,
+  .ant-modal-content,
+  .ant-popconfirm-inner-content,
+  .ant-alert
+) {
+  border: 1px solid var(--line) !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  color: var(--text) !important;
+  box-shadow: 0 16px 42px rgba(38, 48, 54, 0.16) !important;
+}
+
+html[data-color-mode='light'] :where(
+  .ant-message-notice-content,
+  .ant-message-custom-content,
+  .ant-notification-notice-message,
+  .ant-notification-notice-description,
+  .ant-modal-confirm-title,
+  .ant-modal-confirm-content,
+  .ant-popconfirm-message-title,
+  .ant-popconfirm-description,
+  .ant-alert-message,
+  .ant-alert-description
+) {
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
+
+html[data-color-mode='light'] :where(
+  .ant-notification-notice-close,
+  .ant-modal-close,
+  .ant-popover-message-icon
+) {
+  color: #4f5a60 !important;
+}

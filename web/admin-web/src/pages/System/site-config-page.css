@@ -362,6 +362,19 @@
   font-size: 20px;
 }
 
+.original-prompt-editor-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.site-config-page .original-prompt-editor-actions .icon-only {
+  width: 38px;
+  padding: 0;
+  justify-content: center;
+}
+
 .original-prompt-editor-fields {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

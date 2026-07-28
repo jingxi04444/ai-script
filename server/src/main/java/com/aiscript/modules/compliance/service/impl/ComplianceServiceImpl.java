@@ -19,12 +19,6 @@ import com.aiscript.modules.compliance.vo.ComplianceCheckVO;
 import com.aiscript.modules.compliance.vo.ComplianceRiskVO;
 import com.aiscript.modules.compliance.vo.ComplianceWordVO;
 import com.aiscript.modules.compliance.vo.OriginalityMatchVO;
-import com.aiscript.modules.asset.entity.AiViralAsset;
-import com.aiscript.modules.asset.mapper.AiViralAssetMapper;
-import com.aiscript.modules.source.entity.AiSourceAnalysis;
-import com.aiscript.modules.source.mapper.AiSourceAnalysisMapper;
-import com.aiscript.modules.storyboard.entity.AiScriptVersion;
-import com.aiscript.modules.storyboard.mapper.AiScriptVersionMapper;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
@@ -45,24 +39,15 @@ public class ComplianceServiceImpl implements ComplianceService {
     private final AiComplianceWordMapper wordMapper;
     private final AiComplianceCheckMapper checkMapper;
     private final AiOriginalityCheckMapper originalityCheckMapper;
-    private final AiScriptVersionMapper scriptVersionMapper;
-    private final AiSourceAnalysisMapper sourceAnalysisMapper;
-    private final AiViralAssetMapper viralAssetMapper;
 
     public ComplianceServiceImpl(
         AiComplianceWordMapper wordMapper,
         AiComplianceCheckMapper checkMapper,
-        AiOriginalityCheckMapper originalityCheckMapper,
-        AiScriptVersionMapper scriptVersionMapper,
-        AiSourceAnalysisMapper sourceAnalysisMapper,
-        AiViralAssetMapper viralAssetMapper
+        AiOriginalityCheckMapper originalityCheckMapper
     ) {
         this.wordMapper = wordMapper;
         this.checkMapper = checkMapper;
         this.originalityCheckMapper = originalityCheckMapper;
-        this.scriptVersionMapper = scriptVersionMapper;
-        this.sourceAnalysisMapper = sourceAnalysisMapper;
-        this.viralAssetMapper = viralAssetMapper;
     }
 
     @Override
@@ -183,23 +168,15 @@ public class ComplianceServiceImpl implements ComplianceService {
         Integer currentVersionId = Integer.valueOf(dto.getScriptVersionId());
         List<OriginalityMatchVO> matches = new ArrayList<>();
 
-        scriptVersionMapper.selectList(new LambdaQueryWrapper<AiScriptVersion>()
-                .ne(AiScriptVersion::getId, currentVersionId)
-                .orderByDesc(AiScriptVersion::getCreateTime)
-                .last("LIMIT 100"))
-            .forEach(version -> addMatch(matches, content, "script_version", String.valueOf(version.getId()), version.getVersionTitle(), version.getContentSnapshot()));
-
-        sourceAnalysisMapper.selectList(new LambdaQueryWrapper<AiSourceAnalysis>()
-                .isNotNull(AiSourceAnalysis::getEditableCopy)
-                .orderByDesc(AiSourceAnalysis::getCreateTime)
-                .last("LIMIT 100"))
-            .forEach(source -> addMatch(matches, content, "source_analysis", String.valueOf(source.getId()), source.getTitle(), source.getEditableCopy()));
-
-        viralAssetMapper.selectList(new LambdaQueryWrapper<AiViralAsset>()
-                .isNotNull(AiViralAsset::getScriptText)
-                .orderByDesc(AiViralAsset::getCreateTime)
-                .last("LIMIT 100"))
-            .forEach(asset -> addMatch(matches, content, "viral_asset", String.valueOf(asset.getId()), asset.getAssetName(), asset.getScriptText()));
+        originalityCheckMapper.selectOriginalityCandidates(currentTenantId(), currentVersionId)
+            .forEach(candidate -> addMatch(
+                matches,
+                content,
+                candidate.getSourceType(),
+                String.valueOf(candidate.getSourceId()),
+                candidate.getTitle(),
+                candidate.getContent()
+            ));
 
         return matches.stream()
             .filter(item -> new BigDecimal(item.getSimilarityPercent()).compareTo(new BigDecimal("20")) >= 0)

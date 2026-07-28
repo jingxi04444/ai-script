@@ -10,21 +10,12 @@ interface RichTextFieldProps {
   onChange: (html: string, plainText: string) => void;
 }
 
-type InlineStyleProperty = 'color' | 'fontSize' | 'fontWeight';
-
 interface SelectionBookmark {
   startPath: number[];
   startOffset: number;
   endPath: number[];
   endOffset: number;
 }
-
-const fontSizeMap: Record<string, string> = {
-  '2': '14px',
-  '3': '16px',
-  '4': '18px',
-  '5': '22px',
-};
 
 const getNodePath = (root: Node, target: Node) => {
   const path: number[] = [];
@@ -88,9 +79,8 @@ const RichTextField = ({
   const [characterCount, setCharacterCount] = useState(() => htmlToPlainText(value).length);
   const [activeColor, setActiveColor] = useState('#7eea73');
   const [activeFontSize, setActiveFontSize] = useState('3');
-  const [colorEnabled, setColorEnabled] = useState(false);
-  const [fontSizeEnabled, setFontSizeEnabled] = useState(false);
   const [boldActive, setBoldActive] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
 
   useEffect(() => {
     const editor = editorRef.current;
@@ -132,6 +122,7 @@ const RichTextField = ({
     const plainText = htmlToPlainText(sanitizedHtml);
     setCharacterCount(plainText.length);
     onChange(sanitizedHtml, plainText);
+    window.requestAnimationFrame(() => setCanUndo(document.queryCommandEnabled('undo')));
   };
 
   const restoreSelection = () => {
@@ -176,64 +167,24 @@ const RichTextField = ({
     emitChange();
   };
 
-  const applyInlineStyle = (property: InlineStyleProperty, value: string) => {
-    const editor = editorRef.current;
-    const selection = restoreSelection();
-    if (!editor || !selection?.rangeCount) return;
-    const range = selection.getRangeAt(0);
-    if (!editor.contains(range.commonAncestorContainer) || range.collapsed) {
-      rememberSelection();
-      return;
-    }
-
-    const selectedContent = range.extractContents();
-    selectedContent.querySelectorAll<HTMLElement>('*').forEach((element) => {
-      element.style[property] = '';
-      if (property === 'color' && element.tagName === 'FONT') element.removeAttribute('color');
-      if (property === 'fontSize' && element.tagName === 'FONT') element.removeAttribute('size');
-      if (!element.getAttribute('style')?.trim()) element.removeAttribute('style');
-    });
-
-    const styleWrapper = document.createElement('span');
-    styleWrapper.style[property] = value;
-    styleWrapper.appendChild(selectedContent);
-    range.insertNode(styleWrapper);
-    range.selectNodeContents(styleWrapper);
-    selection.removeAllRanges();
-    selection.addRange(range);
-    rememberSelection();
-    emitChange();
-  };
-
-  const ensureTypingFormat = () => {
-    const editor = editorRef.current;
-    if (!editor) return;
-    document.execCommand('styleWithCSS', false, 'true');
-    if (colorEnabled) document.execCommand('foreColor', false, activeColor);
-    if (fontSizeEnabled) document.execCommand('fontSize', false, activeFontSize);
-    if (document.queryCommandState('bold') !== boldActive) {
-      document.execCommand('bold', false);
-    }
-  };
-
   const toggleBold = () => {
     restoreSelection();
     const next = !document.queryCommandState('bold');
-    const selection = window.getSelection();
-    if (selection?.rangeCount && !selection.getRangeAt(0).collapsed) {
-      applyInlineStyle('fontWeight', next ? '850' : '400');
-    } else {
-      applyFormat('bold');
-    }
+    applyFormat('bold');
     setBoldActive(next);
+  };
+
+  const handleUndo = () => {
+    restoreSelection();
+    document.execCommand('undo');
+    rememberSelection();
+    emitChange();
   };
 
   const clearFormat = () => {
     setBoldActive(false);
     setActiveColor('#7eea73');
     setActiveFontSize('3');
-    setColorEnabled(false);
-    setFontSizeEnabled(false);
     applyFormat('removeFormat');
   };
 
@@ -242,7 +193,6 @@ const RichTextField = ({
     const selectedLength = window.getSelection()?.toString().length || 0;
     const availableLength = Math.max(0, maxLength - characterCount + selectedLength);
     const pastedText = event.clipboardData.getData('text/plain').slice(0, availableLength);
-    ensureTypingFormat();
     document.execCommand('insertText', false, pastedText);
     emitChange();
   };
@@ -255,7 +205,10 @@ const RichTextField = ({
         aria-label={`${label}文字格式`}
         onMouseDown={() => rememberSelection(true)}
       >
-        <button type="button" title="加粗并持续应用" className={boldActive ? 'active' : ''} aria-pressed={boldActive} onMouseDown={(event) => event.preventDefault()} onClick={toggleBold}>
+        <button type="button" className="undo-format" title="撤回上一步编辑（Ctrl+Z）" disabled={!canUndo} onMouseDown={(event) => event.preventDefault()} onClick={handleUndo}>
+          <span aria-hidden="true">↶</span> 撤回
+        </button>
+        <button type="button" title="加粗" className={boldActive ? 'active' : ''} aria-pressed={boldActive} onMouseDown={(event) => event.preventDefault()} onClick={toggleBold}>
           <strong>B</strong>
         </button>
         <span className="rich-color-control">
@@ -264,8 +217,7 @@ const RichTextField = ({
             title="应用当前文字颜色"
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => {
-              setColorEnabled(true);
-              applyInlineStyle('color', activeColor);
+              applyFormat('foreColor', activeColor);
             }}
           >
             颜色
@@ -277,8 +229,7 @@ const RichTextField = ({
               onInput={(event) => {
                 const color = event.currentTarget.value;
                 setActiveColor(color);
-                setColorEnabled(true);
-                applyInlineStyle('color', color);
+                applyFormat('foreColor', color);
               }}
             />
           </label>
@@ -289,8 +240,7 @@ const RichTextField = ({
             title="应用当前字号"
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => {
-              setFontSizeEnabled(true);
-              applyInlineStyle('fontSize', fontSizeMap[activeFontSize] || fontSizeMap['3']);
+              applyFormat('fontSize', activeFontSize);
             }}
           >
             字号
@@ -302,8 +252,7 @@ const RichTextField = ({
               onChange={(event) => {
                 const fontSize = event.target.value;
                 setActiveFontSize(fontSize);
-                setFontSizeEnabled(true);
-                applyInlineStyle('fontSize', fontSizeMap[fontSize] || fontSizeMap['3']);
+                applyFormat('fontSize', fontSize);
               }}
             >
               <option value="2">小号</option>
@@ -327,7 +276,6 @@ const RichTextField = ({
         data-placeholder={placeholder}
         data-empty={characterCount === 0}
         suppressContentEditableWarning
-        dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(value) }}
         onInput={emitChange}
         onMouseUp={() => rememberSelection()}
         onKeyUp={() => rememberSelection()}
@@ -337,9 +285,6 @@ const RichTextField = ({
           if (characterCount >= maxLength && !window.getSelection()?.toString() && event.nativeEvent.inputType.startsWith('insert')) {
             event.preventDefault();
             return;
-          }
-          if (event.nativeEvent.inputType.startsWith('insert')) {
-            ensureTypingFormat();
           }
         }}
       />

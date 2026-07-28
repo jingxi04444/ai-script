@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiscript.modules.system.mapper.SysRoleMapper">
+
+    <select id="selectPageWithPermissions"
+            resultType="com.aiscript.modules.system.vo.RolePageRow">
+        SELECT
+            role.id,
+            role.role_name,
+            role.role_code,
+            role.description,
+            role.is_system,
+            role.status,
+            GROUP_CONCAT(
+                role_permission.permission_id
+                ORDER BY role_permission.permission_id
+                SEPARATOR ','
+            ) AS permission_ids
+        FROM sys_role role
+        LEFT JOIN sys_role_permission role_permission
+            ON role_permission.role_id = role.id
+        WHERE role.deleted = 0
+        <if test="keyword != null and keyword != ''">
+            AND role.role_name LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        GROUP BY
+            role.id,
+            role.role_name,
+            role.role_code,
+            role.description,
+            role.is_system,
+            role.status,
+            role.create_time
+        ORDER BY role.create_time DESC
+    </select>
+
+</mapper>

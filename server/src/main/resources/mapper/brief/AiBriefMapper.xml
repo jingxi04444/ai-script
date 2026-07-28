@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiscript.modules.brief.mapper.AiBriefMapper">
+
+    <select id="selectAssetLibraryRows"
+            resultType="com.aiscript.modules.brief.vo.BriefAssetRowVO">
+        SELECT
+            asset_rows.project_id,
+            asset_rows.project_name,
+            asset_rows.brief_id,
+            asset_rows.name,
+            asset_rows.product_name,
+            asset_rows.product_model,
+            asset_rows.updated_at
+        FROM (
+            SELECT
+                p.id AS project_id,
+                p.project_name,
+                p.update_time AS project_updated_at,
+                b.id AS brief_id,
+                COALESCE(NULLIF(b.product_name, ''), b.brief_name) AS name,
+                COALESCE(NULLIF(b.product_name, ''), b.brief_name) AS product_name,
+                b.product_model,
+                b.update_time AS updated_at
+            FROM ai_project p
+            INNER JOIN ai_brief b
+                ON b.project_id = p.id
+               AND b.tenant_id = #{tenantId}
+               AND b.deleted = 0
+            WHERE p.tenant_id = #{tenantId}
+              AND p.owner_id = #{userId}
+              AND p.deleted = 0
+
+            UNION
+
+            SELECT
+                p.id AS project_id,
+                p.project_name,
+                p.update_time AS project_updated_at,
+                b.id AS brief_id,
+                COALESCE(NULLIF(b.product_name, ''), b.brief_name) AS name,
+                COALESCE(NULLIF(b.product_name, ''), b.brief_name) AS product_name,
+                b.product_model,
+                b.update_time AS updated_at
+            FROM ai_project p
+            INNER JOIN ai_project_brief_ref ref
+                ON ref.project_id = p.id
+               AND ref.tenant_id = #{tenantId}
+               AND ref.deleted = 0
+            INNER JOIN ai_brief b
+                ON b.id = ref.brief_id
+               AND b.tenant_id = #{tenantId}
+               AND b.deleted = 0
+            WHERE p.tenant_id = #{tenantId}
+              AND p.owner_id = #{userId}
+              AND p.deleted = 0
+        ) asset_rows
+        ORDER BY asset_rows.project_updated_at DESC, asset_rows.updated_at DESC
+    </select>
+
+
+    <select id="selectAccessibleProjectBrief"
+            resultType="com.aiscript.modules.brief.entity.AiBrief">
+        SELECT b.*
+        FROM ai_brief b
+        WHERE b.id = #{briefId}
+          AND b.tenant_id = #{tenantId}
+          AND b.deleted = 0
+          AND (
+              b.project_id = #{projectId}
+              OR EXISTS (
+                  SELECT 1
+                  FROM ai_project_brief_ref ref
+                  WHERE ref.project_id = #{projectId}
+                    AND ref.brief_id = b.id
+                    AND ref.tenant_id = #{tenantId}
+                    AND ref.deleted = 0
+              )
+          )
+          AND (
+              b.create_by = #{userId}
+              OR EXISTS (
+                  SELECT 1
+                  FROM ai_brief_collaborator collaborator
+                  WHERE collaborator.brief_id = b.id
+                    AND collaborator.user_id = #{userId}
+                    AND collaborator.tenant_id = #{tenantId}
+                    AND collaborator.status = 1
+                    AND collaborator.deleted = 0
+              )
+          )
+        LIMIT 1
+    </select>
+
+
+    <resultMap id="BriefDetailResultMap"
+               type="com.aiscript.modules.brief.vo.BriefDetailQueryResult">
+        <result property="accessPermission" column="access_permission"/>
+        <association property="brief"
+                     javaType="com.aiscript.modules.brief.entity.AiBrief">
+            <id property="id" column="b_id"/>
+            <result property="tenantId" column="b_tenant_id"/>
+            <result property="projectId" column="b_project_id"/>
+            <result property="briefName" column="b_brief_name"/>
+            <result property="productName" column="b_product_name"/>
+            <result property="productModel" column="b_product_model"/>
+            <result property="price" column="b_price"/>
+            <result property="slogan" column="b_slogan"/>
+            <result property="primarySellingPoint" column="b_primary_selling_point"/>
+            <result property="targetAudience" column="b_target_audience"/>
+            <result property="targetScene" column="b_target_scene"/>
+            <result property="otherRequirements" column="b_other_requirements"/>
+            <result property="briefContent" column="b_brief_content"/>
+            <result property="richContent" column="b_rich_content"/>
+            <result property="versionNo" column="b_version_no"/>
+            <result property="status" column="b_status"/>
+            <result property="isShared" column="b_is_shared"/>
+            <result property="shareEnabled" column="b_share_enabled"/>
+            <result property="shareToken" column="b_share_token"/>
+            <result property="sharePermission" column="b_share_permission"/>
+            <result property="shareTime" column="b_share_time"/>
+            <result property="createBy" column="b_create_by"/>
+            <result property="createTime" column="b_create_time"/>
+            <result property="updateBy" column="b_update_by"/>
+            <result property="updateTime" column="b_update_time"/>
+            <result property="deleted" column="b_deleted"/>
+        </association>
+        <collection property="versions"
+                    ofType="com.aiscript.modules.brief.entity.AiBriefVersion">
+            <id property="id" column="v_id"/>
+            <result property="tenantId" column="v_tenant_id"/>
+            <result property="briefId" column="v_brief_id"/>
+            <result property="versionNo" column="v_version_no"/>
+            <result property="versionLabel" column="v_version_label"/>
+            <result property="contentSnapshot" column="v_content_snapshot"/>
+            <result property="scoreSnapshot" column="v_score_snapshot"/>
+            <result property="changeNote" column="v_change_note"/>
+            <result property="createBy" column="v_create_by"/>
+            <result property="createTime" column="v_create_time"/>
+        </collection>
+    </resultMap>
+
+    <select id="selectDetail" resultMap="BriefDetailResultMap">
+        SELECT
+            CASE
+                WHEN b.create_by = #{userId} THEN 'manage'
+                ELSE COALESCE((
+                    SELECT collaborator_permission.permission
+                    FROM ai_brief_collaborator collaborator_permission
+                    WHERE collaborator_permission.brief_id = b.id
+                      AND collaborator_permission.user_id = #{userId}
+                      AND collaborator_permission.tenant_id = #{tenantId}
+                      AND collaborator_permission.status = 1
+                      AND collaborator_permission.deleted = 0
+                    LIMIT 1
+                ), 'read')
+            END AS access_permission,
+            b.id AS b_id,
+            b.tenant_id AS b_tenant_id,
+            b.project_id AS b_project_id,
+            b.brief_name AS b_brief_name,
+            b.product_name AS b_product_name,
+            b.product_model AS b_product_model,
+            b.price AS b_price,
+            b.slogan AS b_slogan,
+            b.primary_selling_point AS b_primary_selling_point,
+            b.target_audience AS b_target_audience,
+            b.target_scene AS b_target_scene,
+            b.other_requirements AS b_other_requirements,
+            b.brief_content AS b_brief_content,
+            b.rich_content AS b_rich_content,
+            b.version_no AS b_version_no,
+            b.status AS b_status,
+            b.is_shared AS b_is_shared,
+            b.share_enabled AS b_share_enabled,
+            b.share_token AS b_share_token,
+            b.share_permission AS b_share_permission,
+            b.share_time AS b_share_time,
+            b.create_by AS b_create_by,
+            b.create_time AS b_create_time,
+            b.update_by AS b_update_by,
+            b.update_time AS b_update_time,
+            b.deleted AS b_deleted,
+            version.id AS v_id,
+            version.tenant_id AS v_tenant_id,
+            version.brief_id AS v_brief_id,
+            version.version_no AS v_version_no,
+            version.version_label AS v_version_label,
+            version.content_snapshot AS v_content_snapshot,
+            version.score_snapshot AS v_score_snapshot,
+            version.change_note AS v_change_note,
+            version.create_by AS v_create_by,
+            version.create_time AS v_create_time
+        FROM ai_brief b
+        LEFT JOIN ai_brief_version version
+            ON version.brief_id = b.id
+           AND version.tenant_id = #{tenantId}
+        WHERE b.id = #{briefId}
+          AND b.tenant_id = #{tenantId}
+          AND b.deleted = 0
+          AND (
+              b.create_by = #{userId}
+              OR EXISTS (
+                  SELECT 1
+                  FROM ai_brief_collaborator collaborator
+                  WHERE collaborator.brief_id = b.id
+                    AND collaborator.user_id = #{userId}
+                    AND collaborator.tenant_id = #{tenantId}
+                    AND collaborator.status = 1
+                    AND collaborator.deleted = 0
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM ai_project own_project
+                  WHERE own_project.id = b.project_id
+                    AND own_project.owner_id = #{userId}
+                    AND own_project.tenant_id = #{tenantId}
+                    AND own_project.deleted = 0
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM ai_project_brief_ref ref
+                  INNER JOIN ai_project linked_project
+                      ON linked_project.id = ref.project_id
+                     AND linked_project.owner_id = #{userId}
+                     AND linked_project.tenant_id = #{tenantId}
+                     AND linked_project.deleted = 0
+                  WHERE ref.brief_id = b.id
+                    AND ref.tenant_id = #{tenantId}
+                    AND ref.deleted = 0
+              )
+          )
+        ORDER BY version.version_no DESC, version.create_time DESC
+    </select>
+
+</mapper>

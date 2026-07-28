@@ -105,3 +105,117 @@ Prior result: passed
 - Pass 1: blocked before visual comparison because the implementation state redirected to login.
 
 final result: blocked
+
+---
+
+## 2026-07-28 左下角显示模式菜单
+
+- Source visual truth:
+  - `C:/Users/RAOXIA~1/AppData/Local/Temp/codex-clipboard-55a1a496-463d-40f1-9d73-0489781da350.png`
+  - `C:/Users/RAOXIA~1/AppData/Local/Temp/codex-clipboard-bd81ac7b-e2e8-4d3a-a75c-cdd34299468c.png`
+  - `C:/Users/RAOXIA~1/AppData/Local/Temp/codex-clipboard-4644f891-df33-4e30-a579-23207baf8bab.png`
+- Implementation screenshot: `C:/Java/ai/ai-script/qa-theme-menu-light.png`
+- Viewport / CSS size: 1264 × 569
+- Implementation pixels: 1264 × 569, device scale factor 1
+- State: authenticated mock home page, light mode, bottom-left menu open.
+
+**Comparison and findings**
+
+- The popup is fixed to the right of the 104 px navigation rail: x=124, width=206, leaving clear separation from the trigger at right=72.5.
+- Light menu surface is `rgba(255, 255, 255, 0.98)` and menu text is `rgb(37, 42, 45)`, resolving the white-on-white and border contrast issue.
+- Final menu text is `显示模式 / 我的信息 / 我的订单 / 退出`; `主题颜色` is absent.
+- The light-mode compatibility layer now remaps legacy dark panels, right rails, form controls, dropdowns, selects, secondary text, placeholders, and borders to shared light tokens.
+- No actionable P0, P1, or P2 issue remains in the tested menu state.
+
+**Primary interactions tested**
+
+- Persisted and reloaded light mode.
+- Opened the bottom-left menu.
+- Verified popup geometry, surface color, text color, final labels, and removal of the theme-color entry.
+- Ran the production front-end build successfully.
+
+**Comparison history**
+
+- Pass 1: light mode exposed a dark home stage, dark secondary controls, and incomplete right-panel/form compatibility.
+- Pass 2: added shared light surfaces, text, input, popup, and border overrides.
+- Pass 3: removed the user-rejected theme-color submenu and verified the final menu state.
+
+final result: passed
+
+---
+
+## 2026-07-28 创建流程与首页浅色文字对比度
+
+- Source visual truth:
+  - `C:/Users/RAOXIA~1/AppData/Local/Temp/codex-clipboard-634fe770-f804-446e-826b-88b5b74d9654.png`
+  - `C:/Users/RAOXIA~1/AppData/Local/Temp/codex-clipboard-76cc2cf4-7d5a-4079-97a7-f45e63e8479f.png`
+- Workspace implementation screenshot: `C:/Java/ai/ai-script/qa-light-workspace-step1.png`
+- Workspace viewport / implementation pixels: 1264 × 569, device scale factor 1.
+- State: light mode; product selling-points step with top fields, audience field, and three rich-text selling-point editors.
+
+**Comparison and findings**
+
+- The six selling-point labels that were white on the light canvas now compute to `rgb(31, 38, 42)` and are visibly readable in the captured implementation.
+- Script-generator and storyboard top-level headings were opened and verified at `rgb(31, 38, 42)` in light mode.
+- Ant Design selects, arrows, placeholders, project edit controls, and step-collapse controls now use light-mode text tokens.
+- Homepage non-primary category descriptions now compute to `rgb(102, 113, 120)` on white cards; the primary green card intentionally retains light descriptive text.
+- Dark rich-text editing surfaces and dark workflow step buttons retain light text, preserving their intended contrast.
+- No actionable P0, P1, or P2 contrast issue remains in the verified states.
+
+**Primary interactions tested**
+
+- Opened creation steps 1, 2, and 3 in light mode.
+- Verified selling-point labels and top-level step headings using rendered computed styles.
+- Verified all five homepage category description colors.
+- Ran the production front-end build successfully with no CSS syntax warning.
+
+**Comparison history**
+
+- Pass 1: white selling-point labels and near-white homepage descriptions were unreadable on light surfaces.
+- Pass 2: added scoped light-mode text tokens for creation steps, selects, controls, and homepage descriptions.
+- Pass 3: removed overrides that would have changed intentionally dark delivery/storyboard cards, preserving readable light-on-dark text.
+
+final result: passed
+
+---
+
+## 2026-07-28 Workspace light-mode surfaces
+
+- Source visual truth: `C:/Users/RAOXIA~1/AppData/Local/Temp/codex-clipboard-65aefcce-ad0f-47bd-8c51-3975a228d9a6.png`
+- Implementation screenshot: `C:/Java/ai/ai-script/qa-light-workspace-surfaces.png`
+- Viewport / implementation pixels: 1264 x 720, device scale factor 1.
+- State: light mode, selling-points workspace surface fixture using the production class names and styles.
+
+**Comparison and findings**
+
+- Inactive workflow steps now render on `rgb(247, 249, 250)` with dark text and light borders.
+- The active step uses a pale green `rgba(98, 230, 112, 0.17)` surface, reserving strong green for its step number and primary state.
+- Rich-text editor surfaces render white (`rgb(255, 255, 255)`) and their toolbars use light gray (`rgb(238, 242, 244)`).
+- The workspace content surface is white (`rgb(255, 255, 255)`); secondary action buttons use light panels instead of legacy dark gradients.
+- The same shared light tokens cover the remaining script, storyboard, asset, production, and delivery content cards.
+- No actionable P0, P1, or P2 surface-contrast issue remains in the tested state.
+
+**Primary interactions tested**
+
+- Verified computed colors for active and inactive workflow steps.
+- Verified computed colors for the workspace, editor, and toolbar surfaces.
+- Captured the final light-mode workspace evidence.
+- Ran the production front-end build successfully.
+
+**Comparison history**
+
+- Pass 1: light-mode text was readable, but step buttons and editor/content surfaces still retained dark backgrounds.
+- Pass 2: remapped workflow steps, editors, toolbars, secondary buttons, and downstream content cards to light theme tokens.
+- Pass 3: verified rendered computed colors and captured the final workspace surface state.
+
+final result: passed
+
+## Brief 检测弹窗浅色主题（2026-07-28）
+
+- 参考图：`codex-clipboard-d380c38e-1aed-42ec-8a32-93e7f6a4a7d0.png`
+- 实现截图：`qa-light-brief-detection.png`
+- 验证视口：浏览器桌面视口
+- 加载态：弹窗背景 `rgb(255, 255, 255)`；主提示文字 `rgb(31, 38, 42)`；说明文字 `rgb(79, 90, 96)`。
+- 系统提示：提示框背景 `rgba(255, 255, 255, 0.98)`；文字 `rgb(31, 38, 42)`。
+- 覆盖范围：检测加载态、检测结果卡片、警告/建议/示例区、操作按钮、消息/通知/确认/警告提示框。
+- 结论：通过。浅色模式下主要与次要文字均与白色表面形成清晰对比，未再出现白字叠白底。

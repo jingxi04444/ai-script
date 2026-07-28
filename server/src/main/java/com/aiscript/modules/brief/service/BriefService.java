@@ -3,6 +3,7 @@ package com.aiscript.modules.brief.service;
 import com.aiscript.modules.brief.dto.BriefSaveDTO;
 import com.aiscript.modules.brief.dto.BriefEditRequestDTO;
 import com.aiscript.modules.brief.vo.BriefEditRequestVO;
+import com.aiscript.modules.brief.vo.BriefAssetLibraryVO;
 import com.aiscript.modules.brief.vo.BriefShareVO;
 import com.aiscript.modules.brief.vo.BriefVO;
 import java.util.List;
@@ -14,6 +15,8 @@ public interface BriefService {
     List<BriefVO> sharedList(String keyword);
 
     List<BriefVO> mineList(String keyword);
+
+    BriefAssetLibraryVO assetLibrary();
 
     BriefVO getById(Integer id);
 
@@ -27,9 +30,9 @@ public interface BriefService {
 
     BriefVO getByShareToken(String token);
 
-    BriefVO updateByShareToken(String token, BriefSaveDTO dto);
+    BriefVO updateByShareToken(String token, Integer projectId, BriefSaveDTO dto);
 
-    BriefVO copyToProject(Integer id, Integer projectId);
+    BriefVO linkToProject(Integer id, Integer projectId);
 
     BriefEditRequestVO requestEditByShareToken(String token, BriefEditRequestDTO dto);
 

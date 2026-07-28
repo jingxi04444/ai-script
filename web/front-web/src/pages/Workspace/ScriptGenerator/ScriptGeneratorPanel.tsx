@@ -408,6 +408,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   const [generationElapsed, setGenerationElapsed] = useState(0);
   const [templates, setTemplates] = useState<TemplateCard[]>(templateCards);
   const [briefs, setBriefs] = useState<Brief[]>([]);
+  const [briefsLoading, setBriefsLoading] = useState(true);
   const [siteConfig, setSiteConfig] = useState<SiteConfig>({});
   const [scriptFormats, setScriptFormats] = useState<ScriptFormatOption[]>(fallbackFormatOptions);
   const [selectedBriefId, setSelectedBriefId] = useState<string>();
@@ -492,14 +493,28 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   }, []);
 
   useEffect(() => {
-    briefApi.mineList().then((list) => {
+    let cancelled = false;
+    setBriefsLoading(true);
+    setBriefs([]);
+    setSelectedBriefId(undefined);
+    if (!projectId) {
+      setBriefsLoading(false);
+      return () => { cancelled = true; };
+    }
+    briefApi.getList(projectId).then((list) => {
+      if (cancelled) return;
       setBriefs(list);
       setSelectedBriefId((current) => {
         if (briefIdParam && list.some((brief) => brief.id === briefIdParam)) return briefIdParam;
         return current && list.some((brief) => brief.id === current) ? current : list[0]?.id;
       });
-    }).catch(() => message.warning('Brief 列表加载失败'));
-  }, [briefIdParam]);
+    }).catch(() => {
+      if (!cancelled) message.warning('当前项目 Brief 列表加载失败');
+    }).finally(() => {
+      if (!cancelled) setBriefsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [briefIdParam, projectId]);
 
   useEffect(() => {
     if (!editScriptId) return;
@@ -958,11 +973,13 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   const renderBriefSelect = () => (
     <Select
       value={selectedBriefId}
-      placeholder={briefOptions.length ? '选择产品 Brief' : '暂无 Brief'}
+      placeholder={briefsLoading ? 'Brief 加载中…' : briefOptions.length ? '选择产品 Brief' : '当前项目暂无 Brief'}
+      loading={briefsLoading}
+      disabled={briefsLoading || !projectId}
       suffixIcon={<DownOutlined />}
       options={briefOptions}
       onChange={setSelectedBriefId}
-      notFoundContent="暂无 Brief，请先在产品卖点步骤新增"
+      notFoundContent={briefsLoading ? <LoadingOutlined spin /> : '当前项目暂无 Brief，请先在产品卖点步骤新增'}
     />
   );
 

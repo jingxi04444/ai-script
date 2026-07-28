@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiscript.modules.compliance.mapper.AiOriginalityCheckMapper">
+
+    <select id="selectOriginalityCandidates"
+            resultType="com.aiscript.modules.compliance.vo.OriginalityCandidateRow">
+        SELECT source_type, source_id, title, content
+        FROM (
+            (
+                SELECT
+                    'script_version' AS source_type,
+                    version.id AS source_id,
+                    version.version_title AS title,
+                    version.content_snapshot AS content,
+                    version.create_time
+                FROM ai_script_version version
+                WHERE version.id != #{currentVersionId}
+                  AND version.tenant_id = #{tenantId}
+                  AND version.deleted = 0
+                ORDER BY version.create_time DESC
+                LIMIT 100
+            )
+            UNION ALL
+            (
+                SELECT
+                    'source_analysis' AS source_type,
+                    source.id AS source_id,
+                    source.title,
+                    source.editable_copy AS content,
+                    source.create_time
+                FROM ai_source_analysis source
+                WHERE source.editable_copy IS NOT NULL
+                  AND source.tenant_id = #{tenantId}
+                  AND source.deleted = 0
+                ORDER BY source.create_time DESC
+                LIMIT 100
+            )
+            UNION ALL
+            (
+                SELECT
+                    'viral_asset' AS source_type,
+                    asset.id AS source_id,
+                    asset.asset_name AS title,
+                    asset.script_text AS content,
+                    asset.create_time
+                FROM ai_viral_asset asset
+                WHERE asset.script_text IS NOT NULL
+                  AND asset.tenant_id = #{tenantId}
+                  AND asset.deleted = 0
+                ORDER BY asset.create_time DESC
+                LIMIT 100
+            )
+        ) candidates
+    </select>
+
+</mapper>

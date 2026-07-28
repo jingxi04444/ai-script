@@ -71,6 +71,12 @@ const WorkspacePage = () => {
   const scriptModeParam = searchParams.get('scriptMode');
   const activeScriptMode = isScriptMode(scriptModeParam) ? scriptModeParam : null;
   const requestedBriefId = searchParams.get('briefId');
+  const briefOrigin = searchParams.get('briefOrigin');
+  const assetBriefProjectId = searchParams.get('assetProjectId');
+  const currentProjectId = searchParams.get('projectId') || projectId;
+  const isAssetBriefDetail = briefOrigin === 'assets'
+    && searchParams.get('briefDialog') === '1'
+    && !!requestedBriefId;
   const workspaceMainClass = [
     'workspace-main',
     activeStep === 'script-generator' ? 'script-workspace-main' : '',
@@ -135,6 +141,7 @@ const WorkspacePage = () => {
   };
 
   useEffect(() => {
+    if (isAssetBriefDetail) return;
     const id = searchParams.get('projectId');
     if (!id) {
       if (projectId) {
@@ -149,7 +156,7 @@ const WorkspacePage = () => {
       setProject({ id: project.id, title: project.name });
       setTitleDraft(project.name);
     }).catch(() => message.warning('项目详情加载失败'));
-  }, [projectId, reset, searchParams, setProject]);
+  }, [isAssetBriefDetail, projectId, reset, searchParams, setProject]);
 
   useEffect(() => {
     const step = searchParams.get('step');
@@ -197,6 +204,13 @@ const WorkspacePage = () => {
     return ensureProjectId();
   };
 
+  const returnToAssetBriefs = () => {
+    const returnProjectId = assetBriefProjectId || currentProjectId;
+    navigate(returnProjectId
+      ? `/assets?briefProjectId=${encodeURIComponent(returnProjectId)}`
+      : '/assets');
+  };
+
   const renderPanel = () => {
     switch (activeStep) {
       case 'selling-points':
@@ -231,6 +245,19 @@ const WorkspacePage = () => {
         );
     }
   };
+
+  if (isAssetBriefDetail) {
+    return (
+      <BriefDialog
+        projectId={currentProjectId}
+        ensureProjectId={ensureProjectId}
+        initialBriefId={requestedBriefId}
+        onBack={returnToAssetBriefs}
+        refreshKey={briefRefreshKey}
+        onClose={returnToAssetBriefs}
+      />
+    );
+  }
 
   return (
     <main className={isStepsCollapsed ? 'workspace-shell steps-collapsed' : 'workspace-shell'}>
@@ -363,9 +390,10 @@ const WorkspacePage = () => {
 
       {briefDialog && (
         <BriefDialog
-          projectId={projectId}
+          projectId={currentProjectId}
           ensureProjectId={ensureProjectId}
           initialBriefId={requestedBriefId}
+          onBack={briefOrigin === 'assets' ? returnToAssetBriefs : undefined}
           onNewProductDraft={() => {
             sellingPointsRef.current?.resetDraft();
             setProductName('');
@@ -381,6 +409,8 @@ const WorkspacePage = () => {
               const nextParams = new URLSearchParams(searchParams);
               nextParams.delete('briefDialog');
               nextParams.delete('briefId');
+              nextParams.delete('briefOrigin');
+              nextParams.delete('assetProjectId');
               setSearchParams(nextParams, { replace: true });
             }
           }}

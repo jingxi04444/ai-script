@@ -7,8 +7,6 @@ import com.aiscript.common.util.JsonUtils;
 import com.aiscript.framework.tenant.TenantContext;
 import com.aiscript.integration.llm.LlmClient;
 import com.aiscript.modules.brief.entity.AiBrief;
-import com.aiscript.modules.brief.entity.AiBriefCollaborator;
-import com.aiscript.modules.brief.mapper.AiBriefCollaboratorMapper;
 import com.aiscript.modules.brief.mapper.AiBriefMapper;
 import com.aiscript.modules.generation.entity.AiGenerationTask;
 import com.aiscript.modules.generation.mapper.AiGenerationTaskMapper;
@@ -59,7 +57,6 @@ public class ScriptServiceImpl implements ScriptService {
     private final AiStoryboardShotMapper shotMapper;
     private final AiGenerationTaskMapper generationTaskMapper;
     private final AiBriefMapper briefMapper;
-    private final AiBriefCollaboratorMapper briefCollaboratorMapper;
     private final SysScriptFormatConfigMapper scriptFormatMapper;
     private final LlmClient llmClient;
     private final PromptRenderService promptRenderService;
@@ -71,7 +68,6 @@ public class ScriptServiceImpl implements ScriptService {
         AiStoryboardShotMapper shotMapper,
         AiGenerationTaskMapper generationTaskMapper,
         AiBriefMapper briefMapper,
-        AiBriefCollaboratorMapper briefCollaboratorMapper,
         SysScriptFormatConfigMapper scriptFormatMapper,
         LlmClient llmClient,
         PromptRenderService promptRenderService
@@ -82,7 +78,6 @@ public class ScriptServiceImpl implements ScriptService {
         this.shotMapper = shotMapper;
         this.generationTaskMapper = generationTaskMapper;
         this.briefMapper = briefMapper;
-        this.briefCollaboratorMapper = briefCollaboratorMapper;
         this.scriptFormatMapper = scriptFormatMapper;
         this.llmClient = llmClient;
         this.promptRenderService = promptRenderService;
@@ -385,18 +380,14 @@ public class ScriptServiceImpl implements ScriptService {
             throw new BusinessException("请先选择产品 Brief 后再生成脚本");
         }
         try {
-            AiBrief brief = briefMapper.selectOne(new LambdaQueryWrapper<AiBrief>()
-                .eq(AiBrief::getId, Integer.valueOf(dto.getBriefId()))
-                .eq(AiBrief::getTenantId, currentTenantId())
-                .last("LIMIT 1"));
-            Integer userId = currentUserId();
-            boolean hasAccess = brief != null && (userId.equals(brief.getCreateBy())
-                || briefCollaboratorMapper.selectCount(new LambdaQueryWrapper<AiBriefCollaborator>()
-                    .eq(AiBriefCollaborator::getBriefId, brief.getId())
-                    .eq(AiBriefCollaborator::getUserId, userId)
-                    .eq(AiBriefCollaborator::getStatus, 1)) > 0);
-            if (!hasAccess) {
-                throw new BusinessException("所选产品 Brief 不存在，请重新选择产品");
+            AiBrief brief = briefMapper.selectAccessibleProjectBrief(
+                Integer.valueOf(dto.getBriefId()),
+                Integer.valueOf(dto.getProjectId()),
+                currentUserId(),
+                currentTenantId()
+            );
+            if (brief == null) {
+                throw new BusinessException("所选产品 Brief 不属于当前项目，请重新选择产品");
             }
             return brief;
         } catch (NumberFormatException ex) {

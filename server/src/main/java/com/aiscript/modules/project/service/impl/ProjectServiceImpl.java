@@ -3,10 +3,8 @@ package com.aiscript.modules.project.service.impl;
 import com.aiscript.common.api.PageResult;
 import com.aiscript.common.exception.BusinessException;
 import com.aiscript.framework.tenant.TenantContext;
-import com.aiscript.modules.brief.entity.AiBrief;
-import com.aiscript.modules.brief.mapper.AiBriefMapper;
-import com.aiscript.modules.generation.entity.AiVideoSegment;
-import com.aiscript.modules.generation.mapper.AiVideoSegmentMapper;
+import com.aiscript.modules.brief.entity.AiProjectBriefRef;
+import com.aiscript.modules.brief.mapper.AiProjectBriefRefMapper;
 import com.aiscript.modules.project.convert.ProjectConvert;
 import com.aiscript.modules.project.dto.ProjectCreateDTO;
 import com.aiscript.modules.project.dto.ProjectQueryDTO;
@@ -15,8 +13,7 @@ import com.aiscript.modules.project.entity.AiProject;
 import com.aiscript.modules.project.mapper.AiProjectMapper;
 import com.aiscript.modules.project.service.ProjectService;
 import com.aiscript.modules.project.vo.ProjectVO;
-import com.aiscript.modules.storyboard.entity.AiStoryboardScript;
-import com.aiscript.modules.storyboard.mapper.AiStoryboardScriptMapper;
+import com.aiscript.modules.project.vo.ProjectStatsRow;
 import com.aiscript.security.LoginUser;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -33,48 +30,40 @@ public class ProjectServiceImpl implements ProjectService {
     private static final Integer DEFAULT_TENANT_ID = 1;
 
     private final AiProjectMapper projectMapper;
-    private final AiBriefMapper briefMapper;
-    private final AiStoryboardScriptMapper scriptMapper;
-    private final AiVideoSegmentMapper videoSegmentMapper;
+    private final AiProjectBriefRefMapper projectBriefRefMapper;
 
     public ProjectServiceImpl(
         AiProjectMapper projectMapper,
-        AiBriefMapper briefMapper,
-        AiStoryboardScriptMapper scriptMapper,
-        AiVideoSegmentMapper videoSegmentMapper
+        AiProjectBriefRefMapper projectBriefRefMapper
     ) {
         this.projectMapper = projectMapper;
-        this.briefMapper = briefMapper;
-        this.scriptMapper = scriptMapper;
-        this.videoSegmentMapper = videoSegmentMapper;
+        this.projectBriefRefMapper = projectBriefRefMapper;
     }
 
     @Override
     public PageResult<ProjectVO> page(ProjectQueryDTO query, boolean admin) {
-        LambdaQueryWrapper<AiProject> wrapper = new LambdaQueryWrapper<>();
         Integer tenantId = TenantContext.getTenantId();
-        if (tenantId != null) {
-            wrapper.eq(AiProject::getTenantId, tenantId);
-        }
-        if (!admin) {
-            wrapper.eq(AiProject::getOwnerId, currentUserId());
-        }
-        if (StringUtils.hasText(query.getKeyword())) {
-            wrapper.like(AiProject::getProjectName, query.getKeyword());
-        }
-        if (StringUtils.hasText(query.getStatus())) {
-            wrapper.eq(AiProject::getStatus, query.getStatus());
-        }
-        wrapper.orderByDesc(AiProject::getUpdateTime);
-        IPage<AiProject> page = projectMapper.selectPage(new Page<>(query.getPage(), query.getPageSize()), wrapper);
-        List<ProjectVO> list = page.getRecords().stream().map(this::toVOWithStats).toList();
+        Integer ownerId = admin ? null : currentUserId();
+        IPage<ProjectStatsRow> page = projectMapper.selectPageWithStats(
+            new Page<>(query.getPage(), query.getPageSize()),
+            tenantId,
+            ownerId,
+            query.getKeyword(),
+            query.getStatus()
+        );
+        List<ProjectVO> list = page.getRecords().stream().map(this::toProjectVO).toList();
         return new PageResult<>(list, page.getTotal(), page.getCurrent(), page.getSize(), page.getPages());
     }
 
     @Override
     public ProjectVO getById(Integer id) {
-        AiProject project = accessibleProject(id);
-        return toVOWithStats(project);
+        LoginUser loginUser = currentLoginUser();
+        Integer ownerId = "admin".equals(loginUser.getUserType()) ? null : loginUser.getUserId();
+        ProjectStatsRow project = projectMapper.selectStatsById(id, currentTenantId(), ownerId);
+        if (project == null) {
+            throw new BusinessException("项目不存在或无权操作");
+        }
+        return toProjectVO(project);
     }
 
     @Override
@@ -123,8 +112,12 @@ public class ProjectServiceImpl implements ProjectService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void delete(Integer id) {
-        projectMapper.deleteById(accessibleProject(id).getId());
+        AiProject project = accessibleProject(id);
+        projectBriefRefMapper.delete(new LambdaQueryWrapper<AiProjectBriefRef>()
+            .eq(AiProjectBriefRef::getProjectId, project.getId()));
+        projectMapper.deleteById(project.getId());
     }
 
     private AiProject accessibleProject(Integer id) {
@@ -158,26 +151,20 @@ public class ProjectServiceImpl implements ProjectService {
         return loginUser;
     }
 
-    private ProjectVO toVOWithStats(AiProject project) {
-        ProjectVO vo = ProjectConvert.toVO(project);
-        vo.setBriefCount(countBriefs(project.getId()));
-        vo.setScriptCount(countScripts(project.getId()));
-        vo.setVideoCount(countVideos(project.getId()));
+    private ProjectVO toProjectVO(ProjectStatsRow row) {
+        ProjectVO vo = new ProjectVO();
+        vo.setId(String.valueOf(row.getId()));
+        vo.setName(row.getProjectName());
+        vo.setUserId(row.getOwnerId() == null ? null : String.valueOf(row.getOwnerId()));
+        vo.setUsername("demo");
+        vo.setCategory(row.getCategory());
+        vo.setStatus(row.getStatus());
+        vo.setBriefCount(row.getBriefCount());
+        vo.setScriptCount(row.getScriptCount());
+        vo.setVideoCount(row.getVideoCount());
+        vo.setCreatedAt(row.getCreateTime() == null ? null : row.getCreateTime().toString());
+        vo.setUpdatedAt(row.getUpdateTime() == null ? null : row.getUpdateTime().toString());
         return vo;
     }
 
-    private Integer countBriefs(Integer projectId) {
-        return Math.toIntExact(briefMapper.selectCount(new LambdaQueryWrapper<AiBrief>()
-            .eq(AiBrief::getProjectId, projectId)));
-    }
-
-    private Integer countScripts(Integer projectId) {
-        return Math.toIntExact(scriptMapper.selectCount(new LambdaQueryWrapper<AiStoryboardScript>()
-            .eq(AiStoryboardScript::getProjectId, projectId)));
-    }
-
-    private Integer countVideos(Integer projectId) {
-        return Math.toIntExact(videoSegmentMapper.selectCount(new LambdaQueryWrapper<AiVideoSegment>()
-            .eq(AiVideoSegment::getProjectId, projectId)));
-    }
 }

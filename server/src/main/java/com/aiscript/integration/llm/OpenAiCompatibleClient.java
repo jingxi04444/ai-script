@@ -18,6 +18,7 @@ import org.springframework.util.StringUtils;
 
 @Component
 public class OpenAiCompatibleClient implements LlmClient {
+    private static final int DEFAULT_LLM_TIMEOUT_MS = 180_000;
     private final ProviderConfigService providerConfigService;
     private final SecretCipherService secretCipherService;
     private final HttpClient httpClient;
@@ -55,7 +56,7 @@ public class OpenAiCompatibleClient implements LlmClient {
 //        }
         HttpRequest.Builder builder = HttpRequest.newBuilder()
             .uri(URI.create(normalizeEndpointUrl(provider)))
-            .timeout(Duration.ofMillis(provider.getTimeoutMs() == null ? 8000 : provider.getTimeoutMs()))
+            .timeout(Duration.ofMillis(Math.max(provider.getTimeoutMs() == null ? DEFAULT_LLM_TIMEOUT_MS : provider.getTimeoutMs(), DEFAULT_LLM_TIMEOUT_MS)))
             .header("Content-Type", "application/json")
             .POST(HttpRequest.BodyPublishers.ofString(JsonUtils.toJson(payload)));
         if (StringUtils.hasText(provider.getApiKeyEncrypted())) {

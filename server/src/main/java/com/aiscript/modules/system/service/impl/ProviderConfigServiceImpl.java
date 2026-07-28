@@ -22,6 +22,7 @@ import org.springframework.util.StringUtils;
 @Service
 public class ProviderConfigServiceImpl implements ProviderConfigService {
     private static final Integer DEFAULT_TENANT_ID = 1;
+    private static final Integer DEFAULT_LLM_TIMEOUT_MS = 180_000;
     private final SysApiProviderConfigMapper providerConfigMapper;
     private final SecretCipherService secretCipherService;
 
@@ -63,7 +64,9 @@ public class ProviderConfigServiceImpl implements ProviderConfigService {
             entity.setApiKeyEncrypted(secretCipherService.encrypt(dto.getApiKey()));
         }
         entity.setPriority(dto.getPriority() == null ? 100 : dto.getPriority());
-        entity.setTimeoutMs(dto.getTimeoutMs() == null ? 8000 : dto.getTimeoutMs());
+        entity.setTimeoutMs(dto.getTimeoutMs() == null
+                ? ("llm".equalsIgnoreCase(dto.getProviderType()) ? DEFAULT_LLM_TIMEOUT_MS : 8000)
+                : dto.getTimeoutMs());
         entity.setRetryCount(dto.getRetryCount() == null ? 2 : dto.getRetryCount());
         entity.setConfigJson(dto.getConfigJson());
         entity.setStatus(dto.getStatus() == null ? 1 : dto.getStatus());

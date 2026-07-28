@@ -21,7 +21,7 @@ export const scriptApi = {
 
   generate: (params: GenerateScriptParams): Promise<Script> => {
     if (config.useMock) return mockScriptApi.generate(params);
-    return api.post('/scripts/generate', params, { timeout: 120000 });
+    return api.post('/scripts/generate', params, { timeout: 180000 });
   },
 
   update: (id: string, data: Partial<Script>): Promise<Script> => {
@@ -31,7 +31,7 @@ export const scriptApi = {
 
   polish: (id: string, params: PolishScriptParams): Promise<PolishScriptResult> => {
     if (config.useMock) return mockScriptApi.polish(id, params);
-    return api.post(`/scripts/${id}/polish`, params, { timeout: 120000 });
+    return api.post(`/scripts/${id}/polish`, params, { timeout: 180000 });
   },
 
   delete: (id: string): Promise<void> => {

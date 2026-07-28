@@ -19,7 +19,29 @@ export interface SiteConfig {
   originalScenarioPrompts?: string;
 }
 
+let siteConfigCache: SiteConfig | null = null;
+let siteConfigRequest: Promise<SiteConfig> | null = null;
+
 export const siteApi = {
-  getConfig: (): Promise<SiteConfig> => api.get('/site-config'),
+  getCachedConfig: (): SiteConfig | null => siteConfigCache,
+  getConfig: (): Promise<SiteConfig> => {
+    if (siteConfigCache) return Promise.resolve(siteConfigCache);
+    if (siteConfigRequest) return siteConfigRequest;
+
+    const request = (api.get('/site-config') as Promise<SiteConfig>)
+      .then((config) => {
+        siteConfigCache = config;
+        return config;
+      })
+      .finally(() => {
+        siteConfigRequest = null;
+      });
+    siteConfigRequest = request;
+    return request;
+  },
+  clearConfigCache: () => {
+    siteConfigCache = null;
+    siteConfigRequest = null;
+  },
   getHomeBanners: (): Promise<HomeBanner[]> => api.get('/home-banners'),
 };

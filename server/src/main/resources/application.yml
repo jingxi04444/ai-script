@@ -5,7 +5,7 @@ spring:
   application:
     name: ai-script-server
   profiles:
-    active: dev
+    active: prod
   servlet:
     multipart:
       max-file-size: 100MB

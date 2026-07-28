@@ -9,9 +9,11 @@ import java.util.Base64;
 import javax.crypto.Cipher;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
+
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-
+@Slf4j
 @Service
 public class SecretCipherService {
     private static final String PREFIX = "ENC(";
@@ -66,6 +68,7 @@ public class SecretCipherService {
             cipher.init(Cipher.DECRYPT_MODE, keySpec(), new GCMParameterSpec(TAG_LENGTH_BITS, iv));
             return new String(cipher.doFinal(encrypted), StandardCharsets.UTF_8);
         } catch (Exception ex) {
+            log.info("密钥解密失败");
             throw new BusinessException("密钥解密失败");
         }
     }

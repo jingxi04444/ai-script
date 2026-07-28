@@ -6,17 +6,17 @@ spring:
     password: ${MYSQL_PASSWORD}
   data:
     redis:
-      host: ${REDIS_HOST}
+      host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
       database: ${REDIS_DATABASE:0}
 
 app:
   jwt:
-    secret: ${JWT_SECRET}
-    access-token-expire-minutes: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:120}
+    secret: ${JWT_SECRET:change-me-provider-secret-cipher-key}
+    access-token-expire-minutes: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:720}
   secret:
-    cipher-key: ${APP_SECRET_CIPHER_KEY}
+    cipher-key: ${APP_SECRET_CIPHER_KEY:change-me-provider-secret-cipher-key}
   storage:
     provider: ${STORAGE_PROVIDER:aliyun-oss}
     endpoint: ${STORAGE_ENDPOINT:oss-cn-hangzhou.aliyuncs.com}
@@ -27,11 +27,3 @@ app:
     public-base-url: ${STORAGE_PUBLIC_BASE_URL:}
     local-path: ${STORAGE_LOCAL_PATH:/opt/ai-script/uploads}
 
-aliyun:
-  oss:
-    endpoint: ${ALIYUN_OSS_ENDPOINT:}
-    access-key-id: ${ALIYUN_OSS_ACCESS_KEY_ID:}
-    access-key-secret: ${ALIYUN_OSS_ACCESS_KEY_SECRET:}
-    bucket-name: ${ALIYUN_OSS_BUCKET_NAME:}
-    custom-domain: ${ALIYUN_OSS_CUSTOM_DOMAIN:}
-    dir-prefix: ${ALIYUN_OSS_DIR_PREFIX:}

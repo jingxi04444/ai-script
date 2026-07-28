@@ -380,3 +380,19 @@
 
   .assets-folder-art { width: 136px; }
 }
+
+.assets-library-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8f9698;
+  font-size: 13px;
+}
+
+.assets-library-back:hover {
+  color: #67db71;
+}

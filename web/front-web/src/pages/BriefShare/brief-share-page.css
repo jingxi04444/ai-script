@@ -259,3 +259,38 @@
     height: 320px;
   }
 }
+
+.brief-share-project-picker {
+  width: 240px;
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid rgba(104, 219, 100, 0.56);
+  border-radius: 8px;
+  background: rgba(59, 145, 62, 0.13);
+}
+
+.brief-share-project-picker > .anticon {
+  flex: 0 0 auto;
+  color: #88e87d;
+}
+
+.brief-share-project-picker .ant-select {
+  min-width: 0;
+  flex: 1;
+}
+
+.brief-share-project-picker .ant-select-selector {
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.brief-share-project-picker .ant-select-selection-item,
+.brief-share-project-picker .ant-select-selection-placeholder,
+.brief-share-project-picker .ant-select-arrow {
+  color: #dfe6e7 !important;
+  font-weight: 700;
+}

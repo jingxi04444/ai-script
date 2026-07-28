@@ -7,6 +7,7 @@ import com.aiscript.modules.brief.dto.BriefSaveDTO;
 import com.aiscript.modules.brief.dto.BriefShareDTO;
 import com.aiscript.modules.brief.service.BriefService;
 import com.aiscript.modules.brief.vo.BriefEditRequestVO;
+import com.aiscript.modules.brief.vo.BriefAssetLibraryVO;
 import com.aiscript.modules.brief.vo.BriefShareVO;
 import com.aiscript.modules.brief.vo.BriefVO;
 import com.aiscript.modules.system.entity.SysImportTemplateConfig;
@@ -76,14 +77,23 @@ public class BriefController {
         return R.ok(briefService.mineList(keyword));
     }
 
+    @GetMapping("/mine/assets")
+    public R<BriefAssetLibraryVO> assetLibrary() {
+        return R.ok(briefService.assetLibrary());
+    }
+
     @GetMapping("/share/{token}")
     public R<BriefVO> getByShareToken(@PathVariable String token) {
         return R.ok(briefService.getByShareToken(token));
     }
 
     @PutMapping("/share/{token}")
-    public R<BriefVO> updateByShareToken(@PathVariable String token, @RequestBody BriefSaveDTO payload) {
-        return R.ok(briefService.updateByShareToken(token, payload));
+    public R<BriefVO> updateByShareToken(
+        @PathVariable String token,
+        @RequestParam Integer projectId,
+        @RequestBody BriefSaveDTO payload
+    ) {
+        return R.ok(briefService.updateByShareToken(token, projectId, payload));
     }
 
     @GetMapping("/{id}")
@@ -131,9 +141,9 @@ public class BriefController {
         return R.ok(briefService.rejectEditRequest(requestId));
     }
 
-    @PostMapping("/{id}/copy")
-    public R<BriefVO> copyToProject(@PathVariable Integer id, @RequestParam Integer projectId) {
-        return R.ok(briefService.copyToProject(id, projectId));
+    @PostMapping("/{id}/link")
+    public R<BriefVO> linkToProject(@PathVariable Integer id, @RequestParam Integer projectId) {
+        return R.ok(briefService.linkToProject(id, projectId));
     }
 
     @DeleteMapping("/{id}")

@@ -1,7 +1,24 @@
 import { config } from '../config';
 import { mockBriefApi } from '../mock/brief';
 import api from './request';
-import type { Brief, BriefDetectionReport, BriefEditRequest, BriefSharePermission, BriefShareResult } from '../types/brief';
+import type { Brief, BriefAssetLibrary, BriefDetectionReport, BriefEditRequest, BriefSharePermission, BriefShareResult } from '../types/brief';
+
+const briefDetailRequests = new Map<string, Promise<Brief>>();
+
+const getBriefById = (id: string): Promise<Brief> => {
+  const pendingRequest = briefDetailRequests.get(id);
+  if (pendingRequest) return pendingRequest;
+
+  const request = config.useMock
+    ? mockBriefApi.getById(id)
+    : api.get(`/briefs/${id}`) as Promise<Brief>;
+  briefDetailRequests.set(id, request);
+  const clearRequest = () => {
+    if (briefDetailRequests.get(id) === request) briefDetailRequests.delete(id);
+  };
+  request.then(clearRequest, clearRequest);
+  return request;
+};
 
 export const briefApi = {
   getList: (projectId: string): Promise<Brief[]> => {
@@ -19,10 +36,23 @@ export const briefApi = {
     return api.get('/briefs/mine', { params: { keyword } });
   },
 
-  getById: (id: string): Promise<Brief> => {
-    if (config.useMock) return mockBriefApi.getById(id);
-    return api.get(`/briefs/${id}`);
+
+  assetLibrary: async (): Promise<BriefAssetLibrary> => {
+    if (!config.useMock) return api.get('/briefs/mine/assets');
+    const briefs = await mockBriefApi.getList('project-1');
+    const groups = new Map<string, Brief[]>();
+    briefs.forEach((brief) => groups.set(brief.projectId, [...(groups.get(brief.projectId) || []), brief]));
+    return {
+      total: briefs.length,
+      projects: Array.from(groups.entries()).map(([projectId, projectBriefs]) => ({
+        projectId,
+        projectName: `项目 ${projectId}`,
+        briefs: projectBriefs,
+      })),
+    };
   },
+
+  getById: getBriefById,
 
   create: (data: Partial<Brief>): Promise<Brief> => {
     if (config.useMock) return mockBriefApi.create(data);
@@ -71,8 +101,10 @@ export const briefApi = {
   getByShareToken: (token: string): Promise<Brief> =>
     config.useMock ? mockBriefApi.getByShareToken(token) : api.get(`/briefs/share/${token}`),
 
-  updateByShareToken: (token: string, data: Partial<Brief>): Promise<Brief> =>
-    config.useMock ? mockBriefApi.updateByShareToken(token, data) : api.put(`/briefs/share/${token}`, data),
+  updateByShareToken: (token: string, projectId: string, data: Partial<Brief>): Promise<Brief> =>
+    config.useMock
+      ? mockBriefApi.updateByShareToken(token, projectId, data)
+      : api.put(`/briefs/share/${token}`, data, { params: { projectId } }),
 
   requestEditByShareToken: (token: string, message?: string): Promise<BriefEditRequest> =>
     api.post(`/briefs/share/${token}/edit-requests`, { message }),
@@ -86,21 +118,21 @@ export const briefApi = {
   rejectEditRequest: (requestId: string): Promise<BriefEditRequest> =>
     api.post(`/briefs/edit-requests/${requestId}/reject`),
 
-  copyToProject: (briefId: string, projectId: string): Promise<Brief> =>
-    config.useMock ? mockBriefApi.copyToProject(briefId, projectId) : api.post(`/briefs/${briefId}/copy`, null, { params: { projectId } }),
+  linkToProject: (briefId: string, projectId: string): Promise<Brief> =>
+    config.useMock ? mockBriefApi.linkToProject(briefId, projectId) : api.post(`/briefs/${briefId}/link`, null, { params: { projectId } }),
 
   detect: (briefId: string, data?: Partial<Brief>): Promise<BriefDetectionReport> => {
     if (config.useMock) return mockBriefApi.score(briefId);
-    return api.post(`/briefs/${briefId}/ai/detect`, data || {}, { timeout: 120000 });
+    return api.post(`/briefs/${briefId}/ai/detect`, data || {}, { timeout: 180000 });
   },
 
   optimize: (briefId: string): Promise<BriefDetectionReport> => {
     if (config.useMock) return mockBriefApi.optimize(briefId);
-    return api.post(`/briefs/${briefId}/ai/detect`, {}, { timeout: 120000 });
+    return api.post(`/briefs/${briefId}/ai/detect`, {}, { timeout: 180000 });
   },
 
   score: (briefId: string): Promise<BriefDetectionReport> => {
     if (config.useMock) return mockBriefApi.score(briefId);
-    return api.post(`/briefs/${briefId}/ai/detect`, {}, { timeout: 120000 });
+    return api.post(`/briefs/${briefId}/ai/detect`, {}, { timeout: 180000 });
   },
 };

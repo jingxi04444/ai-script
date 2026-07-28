@@ -18,7 +18,7 @@ const emptyForm: ProviderForm = {
   platform: '',
   endpointUrl: '',
   priority: 1,
-  timeoutMs: 30000,
+  timeoutMs: 180000,
   retryCount: 1,
   configJson: '',
   thinkingMode: 'default',

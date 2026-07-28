@@ -9,6 +9,7 @@ import {
   ImportOutlined,
   LeftOutlined,
   LinkOutlined,
+  LoadingOutlined,
   PlusOutlined,
   PlusCircleOutlined,
   SaveOutlined,
@@ -29,6 +30,7 @@ interface BriefDialogProps {
   initialBriefId?: string | null;
   onNewProductDraft?: () => void;
   onApplyBrief?: (brief: Brief) => void;
+  onBack?: () => void;
   refreshKey?: number;
   onClose: () => void;
 }
@@ -77,6 +79,31 @@ const richValuesFromBrief = (brief: Brief): BriefRichValues => {
   };
 };
 
+const briefFromVersionContent = (brief: Brief, versionContent?: string): Brief => {
+  if (!versionContent) return brief;
+  try {
+    const snapshot = JSON.parse(versionContent) as Record<string, unknown>;
+    const value = (key: string, fallback?: string) => (
+      Object.prototype.hasOwnProperty.call(snapshot, key) ? String(snapshot[key] ?? '') : fallback
+    );
+    return {
+      ...brief,
+      name: value('briefName', brief.name) || brief.name,
+      productName: value('productName', brief.productName),
+      productModel: value('productModel', brief.productModel),
+      price: value('price', brief.price),
+      slogan: value('slogan', brief.slogan),
+      primarySellingPoint: value('primarySellingPoint', brief.primarySellingPoint),
+      targetAudience: value('targetAudience', brief.targetAudience),
+      targetScene: value('targetScene', brief.targetScene),
+      otherRequirements: value('otherRequirements', brief.otherRequirements),
+      briefContent: value('briefContent', brief.briefContent),
+      richContent: value('richContent', brief.richContent),
+    };
+  } catch {
+    return { ...brief, briefContent: versionContent };
+  }
+};
 const emptyBriefRichValues: BriefRichValues = {
   audience: '',
   features: '',
@@ -134,10 +161,12 @@ const BriefDialog = ({
   initialBriefId,
   onNewProductDraft,
   onApplyBrief,
+  onBack,
   refreshKey,
   onClose,
 }: BriefDialogProps) => {
   const [briefs, setBriefs] = useState<Brief[]>([]);
+  const [isBriefListLoading, setIsBriefListLoading] = useState(true);
   const [selectedBriefId, setSelectedBriefId] = useState('');
   const [selectedVersionId, setSelectedVersionId] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -151,24 +180,40 @@ const BriefDialog = ({
   const [shareLinks, setShareLinks] = useState<Partial<Record<BriefSharePermission, BriefShareResult>>>({});
   const [sharing, setSharing] = useState(false);
 
-  const loadBriefs = useCallback(() => {
-    briefApi.mineList().then((list) => {
-      setBriefs(list);
-      const target = list.find((brief) => brief.id === initialBriefId)
-        || list.find((brief) => brief.id === selectedBriefId)
-        || list[0];
-      if (target) {
-        setSelectedBriefId(target.id);
-        setSelectedVersionId((current) => target.versions?.some((version) => version.id === current)
-          ? current
-          : target.versions?.[0]?.id || '');
-      }
-    }).catch(() => message.warning('Brief 列表加载失败'));
-  }, [initialBriefId, selectedBriefId]);
-
   useEffect(() => {
-    loadBriefs();
-  }, [loadBriefs, refreshKey]);
+    let cancelled = false;
+    setIsBriefListLoading(true);
+    setBriefs([]);
+    setSelectedBriefId('');
+    setSelectedVersionId('');
+
+    if (!initialBriefId && !projectId) {
+      setIsBriefListLoading(false);
+      return () => { cancelled = true; };
+    }
+
+    const request = initialBriefId
+      ? briefApi.getById(initialBriefId).then((brief) => [brief])
+      : briefApi.getList(projectId as string);
+
+    request.then((list) => {
+      if (cancelled) return;
+      setBriefs(list);
+      const target = initialBriefId
+        ? list.find((brief) => brief.id === initialBriefId)
+        : list[0];
+      setSelectedBriefId(target?.id || '');
+      setSelectedVersionId(target?.versions?.[0]?.id || '');
+    }).catch(() => {
+      if (!cancelled) {
+        message.warning(initialBriefId ? 'Brief 详情加载失败' : 'Brief 列表加载失败');
+      }
+    }).finally(() => {
+      if (!cancelled) setIsBriefListLoading(false);
+    });
+
+    return () => { cancelled = true; };
+  }, [initialBriefId, projectId, refreshKey]);
 
   useEffect(() => {
     if (initialBriefId) setView('detail');
@@ -184,6 +229,10 @@ const BriefDialog = ({
       || currentBrief?.versions?.[0]
       || null,
     [currentBrief, selectedVersionId],
+  );
+  const displayBrief = useMemo(
+    () => currentBrief ? briefFromVersionContent(currentBrief, currentVersion?.content) : null,
+    [currentBrief, currentVersion],
   );
   const currentAccessPermission = currentBrief?.accessPermission || 'manage';
   const canEditCurrentBrief = currentAccessPermission === 'edit' || currentAccessPermission === 'manage';
@@ -229,6 +278,11 @@ const BriefDialog = ({
     setView('detail');
   };
 
+  const selectVersion = (versionId: string) => {
+    setSelectedVersionId(versionId);
+    setIsEditing(false);
+  };
+
   const handleAddBrief = () => {
     onNewProductDraft?.();
     message.success('已进入新建 Brief，请填写产品信息');
@@ -236,8 +290,8 @@ const BriefDialog = ({
   };
 
   const handleApplyBrief = () => {
-    if (!currentBrief) return;
-    onApplyBrief?.(currentBrief);
+    if (!displayBrief) return;
+    onApplyBrief?.(displayBrief);
     message.success('Brief 内容已重新填充到当前项目');
     onClose();
   };
@@ -294,20 +348,20 @@ const BriefDialog = ({
   };
 
   const startEditing = () => {
-    if (!currentBrief) return;
+    if (!displayBrief) return;
     setEditDraft({
-      name: currentBrief.name,
-      productName: currentBrief.productName,
-      productModel: currentBrief.productModel,
-      price: currentBrief.price,
-      slogan: currentBrief.slogan,
-      primarySellingPoint: currentBrief.primarySellingPoint,
-      targetAudience: currentBrief.targetAudience,
-      targetScene: currentBrief.targetScene,
-      otherRequirements: currentBrief.otherRequirements,
-      briefContent: currentBrief.briefContent,
+      name: displayBrief.name,
+      productName: displayBrief.productName,
+      productModel: displayBrief.productModel,
+      price: displayBrief.price,
+      slogan: displayBrief.slogan,
+      primarySellingPoint: displayBrief.primarySellingPoint,
+      targetAudience: displayBrief.targetAudience,
+      targetScene: displayBrief.targetScene,
+      otherRequirements: displayBrief.otherRequirements,
+      briefContent: displayBrief.briefContent,
     });
-    setEditRichValues(richValuesFromBrief(currentBrief));
+    setEditRichValues(richValuesFromBrief(displayBrief));
     setIsEditing(true);
   };
 
@@ -324,6 +378,7 @@ const BriefDialog = ({
 
   const saveEditing = async () => {
     if (!currentBrief) return;
+    const nextLabel = getNextVersionLabel(currentBrief);
     setSaving(true);
     try {
       const saved = await briefApi.update(currentBrief.id, {
@@ -331,10 +386,12 @@ const BriefDialog = ({
         richContent: JSON.stringify(editRichValues),
         name: editDraft.productName || editDraft.name || currentBrief.name,
         projectId: currentBrief.projectId,
+        forceNewVersion: true,
       });
       setBriefs((current) => current.map((brief) => brief.id === saved.id ? saved : brief));
+      setSelectedVersionId(saved.versions?.[0]?.id || '');
       setIsEditing(false);
-      message.success('Brief 已保存');
+      message.success(`Brief 已保存并新增版本 ${nextLabel}`);
     } catch {
       message.error('Brief 保存失败，请确认是否有编辑权限');
     } finally {
@@ -343,24 +400,24 @@ const BriefDialog = ({
   };
 
   const handleDownload = () => {
-    if (!currentBrief) return;
+    if (!displayBrief) return;
     const rows = [
-      ['产品名称', currentBrief.productName || currentBrief.name],
-      ['产品型号', currentBrief.productModel],
-      ['价格', currentBrief.price],
-      ['Slogan', currentBrief.slogan],
-      ['核心卖点', currentBrief.primarySellingPoint],
-      ['目标人群', currentBrief.targetAudience],
-      ['使用场景', currentBrief.targetScene],
-      ['其他要求', currentBrief.otherRequirements],
+      ['产品名称', displayBrief.productName || displayBrief.name],
+      ['产品型号', displayBrief.productModel],
+      ['价格', displayBrief.price],
+      ['Slogan', displayBrief.slogan],
+      ['核心卖点', displayBrief.primarySellingPoint],
+      ['目标人群', displayBrief.targetAudience],
+      ['使用场景', displayBrief.targetScene],
+      ['其他要求', displayBrief.otherRequirements],
     ];
-    const richBriefHtml = getRichBriefContent(currentBrief, currentVersion?.content);
+    const richBriefHtml = getRichBriefContent(displayBrief, currentVersion?.content);
     const html = `<!doctype html><html><head><meta charset="utf-8"><style>
       body{font-family:"Microsoft YaHei",sans-serif;padding:36px;color:#222}h1{font-size:24px}h2{margin-top:28px;font-size:18px}
       table{width:100%;border-collapse:collapse;margin-top:24px}td{border:1px solid #bbb;padding:10px;vertical-align:top}
       td:first-child{width:120px;font-weight:700;background:#f3f3f3}
-    </style></head><body><h1>${escapeHtml(currentBrief.productName || currentBrief.name)}</h1>
-      <p>${escapeHtml(currentVersion?.label || '')} · ${escapeHtml(formatDateTime(currentBrief.updatedAt))}</p>
+    </style></head><body><h1>${escapeHtml(displayBrief.productName || displayBrief.name)}</h1>
+      <p>${escapeHtml(currentVersion?.label || '')} · ${escapeHtml(formatDateTime(displayBrief.updatedAt))}</p>
       <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${escapeHtml(value)}</td></tr>`).join('')}</table>
       <h2>完整 Brief</h2><div>${richBriefHtml}</div>
     </body></html>`;
@@ -368,7 +425,7 @@ const BriefDialog = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `${currentBrief.productName || currentBrief.name || 'Brief'}.doc`;
+    link.download = `${displayBrief.productName || displayBrief.name || 'Brief'}.doc`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -404,7 +461,7 @@ const BriefDialog = ({
             <header className="brief-folder-head">
               <div>
                 <span>Brief 管理</span>
-                <h2 id="brief-title">我的 Brief 文档</h2>
+                <h2 id="brief-title">当前项目 Brief 文档</h2>
               </div>
               <div className="brief-folder-head-actions">
                 <button type="button" className="brief-folder-create" onClick={handleAddBrief}>
@@ -420,11 +477,17 @@ const BriefDialog = ({
                 <FileWordOutlined />
                 <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="搜索 Brief 文档名称或产品型号" />
               </label>
-              <span>共 {visibleBriefs.length} 份文档</span>
+              <span>{isBriefListLoading ? '正在加载当前项目 Brief…' : `共 ${visibleBriefs.length} 份文档`}</span>
             </div>
 
             <div className="brief-folder-grid">
-              {visibleBriefs.map((brief) => (
+              {isBriefListLoading ? (
+                <div className="brief-folder-empty brief-folder-loading">
+                  <LoadingOutlined spin />
+                  <strong>正在加载当前项目 Brief</strong>
+                  <span>请稍候，不会显示其他项目的文档。</span>
+                </div>
+              ) : visibleBriefs.map((brief) => (
                 <button type="button" className="brief-folder-card" key={brief.id} onClick={() => openBrief(brief)}>
                   <span className="brief-folder-shape"><FolderOpenOutlined /></span>
                   <span className="brief-folder-copy">
@@ -435,11 +498,11 @@ const BriefDialog = ({
                   {brief.shareEnabled === 1 ? <span className="brief-folder-shared"><TeamOutlined />已分享</span> : null}
                 </button>
               ))}
-              {!visibleBriefs.length ? (
+              {!isBriefListLoading && !visibleBriefs.length ? (
                 <div className="brief-folder-empty">
                   <FileWordOutlined />
                   <strong>还没有 Brief 文档</strong>
-                  <span>新建或导入产品 Brief 后会显示在这里。</span>
+                  <span>{projectId ? '当前项目还没有 Brief，可新建或导入。' : '请先创建或打开一个项目。'}</span>
                 </div>
               ) : null}
             </div>
@@ -448,13 +511,13 @@ const BriefDialog = ({
           <>
             <header className="brief-studio-topbar">
               <div className="brief-studio-title">
-                <button type="button" aria-label="返回 Brief 文件夹" onClick={() => setView('folders')}><LeftOutlined /></button>
+                <button type="button" aria-label={onBack ? '返回资产管理' : '返回 Brief 文件夹'} onClick={() => onBack ? onBack() : setView('folders')}><LeftOutlined /></button>
                 <FileWordOutlined />
                 <div>
-                  <h2 id="brief-title">{currentBrief?.productName || currentBrief?.name || 'Brief'}</h2>
+                  <h2 id="brief-title">{displayBrief?.productName || displayBrief?.name || 'Brief'}</h2>
                   <span>Brief 文档</span>
                 </div>
-                <select value={selectedVersionId} onChange={(event) => setSelectedVersionId(event.target.value)}>
+                <select value={selectedVersionId} onChange={(event) => selectVersion(event.target.value)}>
                   {currentBrief?.versions?.length ? currentBrief.versions.map((version) => (
                     <option key={version.id} value={version.id}>{version.label}</option>
                   )) : <option value="">v1.0</option>}
@@ -492,12 +555,18 @@ const BriefDialog = ({
                         }))}
                       />
                     ) : (
-                      <h1>{currentBrief?.productName || currentBrief?.name || '未命名 Brief'}</h1>
+                      <h1>{displayBrief?.productName || displayBrief?.name || '未命名 Brief'}</h1>
                     )}
-                    <p>{isEditing ? editDraft.slogan || '产品 Brief 信息' : currentBrief?.slogan || '产品 Brief 信息'}</p>
+                    <p>{isEditing ? editDraft.slogan || '产品 Brief 信息' : displayBrief?.slogan || '产品 Brief 信息'}</p>
                   </header>
 
-                  {currentBrief ? (
+                  {isBriefListLoading ? (
+                    <div className="brief-folder-empty">
+                      <LoadingOutlined spin />
+                      <strong>正在加载 Brief 详情</strong>
+                      <span>正在读取内容和版本记录，请稍候。</span>
+                    </div>
+                  ) : displayBrief ? (
                     isEditing ? (
                       <div className="brief-selling-edit-layout">
                         <section className="brief-selling-edit-overview">
@@ -561,7 +630,7 @@ const BriefDialog = ({
                         </section>
                       </div>
                     ) : (
-                      <BriefContentLayout brief={currentBrief} className="brief-document-content-layout" />
+                      <BriefContentLayout brief={displayBrief} className="brief-document-content-layout" />
                     )
                   ) : <div className="brief-folder-empty">Brief 不存在或已被删除。</div>}
                 </article>
@@ -582,9 +651,9 @@ const BriefDialog = ({
                     <section className="brief-side-section">
                       <h3>文档信息</h3>
                       <dl>
-                        <div><dt>文件名</dt><dd>{currentBrief?.productName || currentBrief?.name}</dd></div>
+                        <div><dt>文件名</dt><dd>{displayBrief?.productName || displayBrief?.name}</dd></div>
                         <div><dt>当前版本</dt><dd>{currentVersion?.label || 'v1.0'}</dd></div>
-                        <div><dt>更新时间</dt><dd>{formatDateTime(currentBrief?.updatedAt)}</dd></div>
+                        <div><dt>更新时间</dt><dd>{formatDateTime(currentVersion?.createdAt || currentBrief?.updatedAt)}</dd></div>
                         <div>
                           <dt>分享状态</dt>
                           <dd className={currentBrief?.shareEnabled === 1 ? 'shared' : ''}>
@@ -604,7 +673,7 @@ const BriefDialog = ({
                             type="button"
                             className={version.id === selectedVersionId ? 'active' : ''}
                             key={version.id}
-                            onClick={() => setSelectedVersionId(version.id)}
+                            onClick={() => selectVersion(version.id)}
                           >
                             <span>{version.label}</span>
                             <small>{formatDateTime(version.createdAt)}</small>

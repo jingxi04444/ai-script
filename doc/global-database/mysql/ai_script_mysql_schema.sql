@@ -31,7 +31,9 @@ CREATE TABLE sys_tenant (
   storage_quota_bytes BIGINT DEFAULT 0 COMMENT '存储配额',
   start_time DATETIME DEFAULT NULL COMMENT '开通时间',
   expire_time DATETIME DEFAULT NULL COMMENT '到期时间',
+  create_by INT DEFAULT NULL COMMENT '创建人',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by INT DEFAULT NULL COMMENT '更新人',
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除：0否 1是',
   PRIMARY KEY (id),
@@ -446,6 +448,22 @@ CREATE TABLE ai_brief_collaborator (
   UNIQUE KEY uk_ai_brief_collaborator_user (brief_id, user_id),
   KEY idx_ai_brief_collaborator_tenant (tenant_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Brief协作者表';
+DROP TABLE IF EXISTS ai_project_brief_ref;
+CREATE TABLE ai_project_brief_ref (
+  id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  project_id INT NOT NULL COMMENT '接收方项目ID',
+  brief_id INT NOT NULL COMMENT '共享Brief ID',
+  create_by INT DEFAULT NULL COMMENT '关联人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_ai_project_brief_ref (project_id, brief_id),
+  KEY idx_ai_project_brief_ref_brief (brief_id),
+  KEY idx_ai_project_brief_ref_tenant (tenant_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目共享Brief引用表';
 
 DROP TABLE IF EXISTS ai_brief_edit_request;
 CREATE TABLE ai_brief_edit_request (

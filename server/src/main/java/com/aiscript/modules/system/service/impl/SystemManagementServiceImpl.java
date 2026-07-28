@@ -31,6 +31,7 @@ import com.aiscript.modules.system.vo.ImportTemplateVO;
 import com.aiscript.modules.system.vo.PermissionVO;
 import com.aiscript.modules.system.vo.PromptTemplateVO;
 import com.aiscript.modules.system.vo.RoleVO;
+import com.aiscript.modules.system.vo.RolePageRow;
 import com.aiscript.modules.system.vo.ScriptFormatVO;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -236,10 +237,17 @@ public class SystemManagementServiceImpl implements SystemManagementService {
 
     @Override
     public PageResult<RoleVO> rolePage(PageQuery query) {
-        QueryWrapper<SysRole> wrapper = new QueryWrapper<>();
-        wrapper.like(StringUtils.hasText(query.getKeyword()), "role_name", query.getKeyword()).orderByDesc("create_time");
-        IPage<SysRole> page = roleMapper.selectPage(new Page<>(query.getPage(), query.getPageSize()), wrapper);
-        return new PageResult<>(page.getRecords().stream().map(this::toRoleVO).toList(), page.getTotal(), page.getCurrent(), page.getSize(), page.getPages());
+        IPage<RolePageRow> page = roleMapper.selectPageWithPermissions(
+            new Page<>(query.getPage(), query.getPageSize()),
+            query.getKeyword()
+        );
+        return new PageResult<>(
+            page.getRecords().stream().map(this::toRoleVO).toList(),
+            page.getTotal(),
+            page.getCurrent(),
+            page.getSize(),
+            page.getPages()
+        );
     }
 
     @Override
@@ -356,6 +364,20 @@ public class SystemManagementServiceImpl implements SystemManagementService {
         vo.sampleRowsJson = entity.sampleRowsJson;
         vo.description = entity.description;
         vo.status = entity.status;
+        return vo;
+    }
+
+    private RoleVO toRoleVO(RolePageRow row) {
+        RoleVO vo = new RoleVO();
+        vo.id = String.valueOf(row.getId());
+        vo.roleName = row.getRoleName();
+        vo.roleCode = row.getRoleCode();
+        vo.description = row.getDescription();
+        vo.isSystem = row.getIsSystem();
+        vo.status = row.getStatus();
+        vo.permissionIds = StringUtils.hasText(row.getPermissionIds())
+            ? List.of(row.getPermissionIds().split(","))
+            : List.of();
         return vo;
     }
 

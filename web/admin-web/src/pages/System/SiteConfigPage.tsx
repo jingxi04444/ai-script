@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronRight, FileText, FolderTree, Image, Plus, RefreshCcw, Save, Trash2, UploadCloud } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronRight, FileText, FolderTree, Image, Plus, RefreshCcw, Save, Trash2, UploadCloud } from 'lucide-react';
 import { systemApi, type SiteConfig } from '../../api/system';
 import { uploadApi } from '../../api/upload';
 import { PageHeader, SectionCard } from '../../components/common/AdminUI';
@@ -223,6 +223,25 @@ const SiteConfigPage = () => {
     syncOriginalScenarioCategories(nextList);
   };
 
+  const moveOriginalScenarioPrompt = (categoryIndex: number, itemIndex: number, offset: -1 | 1) => {
+    const category = originalScenarioCategories[categoryIndex];
+    const targetIndex = itemIndex + offset;
+    if (!category || targetIndex < 0 || targetIndex >= category.children.length) return;
+
+    const nextChildren = [...category.children];
+    const [movedItem] = nextChildren.splice(itemIndex, 1);
+    nextChildren.splice(targetIndex, 0, movedItem);
+    const nextList = originalScenarioCategories.map((item, index) => index === categoryIndex
+      ? { ...item, children: nextChildren }
+      : item);
+    syncOriginalScenarioCategories(nextList);
+    setSelectedPromptNode({
+      kind: 'child',
+      categoryId: category.id,
+      childId: movedItem.id,
+    });
+  };
+
   const addOriginalScenarioPrompt = (categoryIndex: number) => {
     const childId = `scenario-${Date.now()}`;
     const category = originalScenarioCategories[categoryIndex];
@@ -429,6 +448,9 @@ const SiteConfigPage = () => {
                     <span>{selectedOriginalCategory.title || '未命名大类'} / 子类配置</span>
                     <h3>{selectedOriginalChild.title || '未命名子类'}</h3>
                   </div>
+                  <div className="original-prompt-editor-actions">
+                    <button className="toolbar-btn icon-only" type="button" title={'\u4e0a\u79fb'} aria-label={'\u4e0a\u79fb\u5b50\u7c7b'} disabled={selectedOriginalChildIndex <= 0} onClick={() => moveOriginalScenarioPrompt(selectedOriginalCategoryIndex, selectedOriginalChildIndex, -1)}><ArrowUp size={16} /></button>
+                    <button className="toolbar-btn icon-only" type="button" title={'\u4e0b\u79fb'} aria-label={'\u4e0b\u79fb\u5b50\u7c7b'} disabled={selectedOriginalChildIndex >= selectedOriginalCategory.children.length - 1} onClick={() => moveOriginalScenarioPrompt(selectedOriginalCategoryIndex, selectedOriginalChildIndex, 1)}><ArrowDown size={16} /></button>
                   <button
                     className="toolbar-btn danger"
                     type="button"
@@ -437,6 +459,7 @@ const SiteConfigPage = () => {
                   >
                     <Trash2 size={16} />删除子类
                   </button>
+                  </div>
                 </header>
                 <div className="original-prompt-editor-fields">
                   <label className="form-field">

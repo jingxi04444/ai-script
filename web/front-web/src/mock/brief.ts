@@ -36,6 +36,7 @@ const mockBriefs: Brief[] = [
 
 const mockDetectionState = new Map<string, boolean>();
 const mockShareLinks = new Map<string, BriefShareResult>();
+const mockProjectBriefRefs = new Map<string, Set<string>>();
 
 const formatNow = () => new Intl.DateTimeFormat('zh-CN', {
   year: 'numeric',
@@ -104,7 +105,8 @@ const createDetectionReport = (briefId: string, improved = false): BriefDetectio
 export const mockBriefApi = {
   getList: async (_projectId: string) => {
     await delay(300);
-    return unwrapApiResponse(createSuccessResponse(mockBriefs.filter((b) => b.projectId === _projectId)));
+    const linkedBriefIds = mockProjectBriefRefs.get(_projectId) || new Set<string>();
+    return unwrapApiResponse(createSuccessResponse(mockBriefs.filter((b) => b.projectId === _projectId || linkedBriefIds.has(b.id))));
   },
 
   getById: async (id: string) => {
@@ -179,10 +181,12 @@ export const mockBriefApi = {
     }));
   },
 
-  updateByShareToken: async (token: string, data: Partial<Brief>) => {
+  updateByShareToken: async (token: string, projectId: string, data: Partial<Brief>) => {
     await delay(220);
     const link = Array.from(mockShareLinks.values()).find((item) => item.shareToken === token);
     if (!link || link.permission === 'read') throw new Error('当前分享链接不可编辑');
+    const references = mockProjectBriefRefs.get(projectId);
+    if (!projectId || !references?.has(link.briefId)) throw new Error('请先将共享 Brief 加入所选项目');
     const brief = mockBriefs.find((item) => item.id === link.briefId);
     if (!brief) throw new Error('Brief not found');
     Object.assign(brief, data, { updatedAt: new Date().toISOString() });
@@ -193,21 +197,15 @@ export const mockBriefApi = {
     }));
   },
 
-  copyToProject: async (briefId: string, projectId: string) => {
-    await delay(320);
-    const brief = mockBriefs.find((b) => b.id === briefId);
+  linkToProject: async (briefId: string, projectId: string) => {
+    await delay(220);
+    const brief = mockBriefs.find((item) => item.id === briefId);
     if (!brief) throw new Error('Brief not found');
-    const copied: Brief = {
-      ...brief,
-      id: `brief-${Date.now()}`,
-      projectId,
-      updatedAt: new Date().toISOString(),
-      versions: brief.versions.map((version) => ({ ...version })),
-    };
-    mockBriefs.unshift(copied);
-    return unwrapApiResponse(createSuccessResponse(copied));
+    const references = mockProjectBriefRefs.get(projectId) || new Set<string>();
+    references.add(briefId);
+    mockProjectBriefRefs.set(projectId, references);
+    return unwrapApiResponse(createSuccessResponse(brief));
   },
-
   delete: async (_id: string) => {
     await delay(300);
   },

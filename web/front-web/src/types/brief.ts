@@ -30,6 +30,27 @@ export interface Brief {
   forceNewVersion?: boolean;
 }
 
+
+export interface BriefAssetItem {
+  id: string;
+  projectId: string;
+  name: string;
+  productName?: string;
+  productModel?: string;
+  updatedAt: string;
+}
+
+export interface BriefAssetProject {
+  projectId: string;
+  projectName: string;
+  briefs: BriefAssetItem[];
+}
+
+export interface BriefAssetLibrary {
+  total: number;
+  projects: BriefAssetProject[];
+}
+
 export type BriefSharePermission = 'read' | 'edit' | 'manage';
 
 export interface BriefAiResult {
