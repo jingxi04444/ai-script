@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Dropdown, Modal, message } from 'antd';
+import type { MenuProps } from 'antd';
 import { DownOutlined, ExportOutlined, MoreOutlined, PlusOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons';
 import HomeRail from '../../components/Layout/HomeRail';
 import MemberPaymentDialog from '../../components/Modal/MemberPaymentDialog';
@@ -12,13 +14,14 @@ import './projects-page.css';
 
 const ProjectsPage = () => {
   const navigate = useNavigate();
-  const { projects, fetchProjects, isLoading } = useProjectStore();
+  const { projects, fetchProjects, deleteProject, isLoading } = useProjectStore();
   const { setProject, reset } = useWorkspaceStore();
   const [commerceDialog, setCommerceDialog] = useState<'member' | 'recharge' | null>(null);
   const [detailProject, setDetailProject] = useState<Project | null>(null);
   const [keyword, setKeyword] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [sortBy, setSortBy] = useState<'updatedAt' | 'name'>('updatedAt');
+  const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProjects();
@@ -47,6 +50,37 @@ const ProjectsPage = () => {
   const handleOpen = (projectId: string, title: string) => {
     setProject({ id: projectId, title });
     navigate(`/workspace?projectId=${projectId}`);
+  };
+
+  const confirmDeleteProject = (project: Project) => {
+    Modal.confirm({
+      centered: true,
+      className: 'project-delete-confirm-dialog',
+      title: '\u786e\u8ba4\u5220\u9664\u9879\u76ee\uff1f',
+      content: `\u5220\u9664\u201c${project.name || '\u672a\u547d\u540d\u9879\u76ee'}\u201d\u540e\u65e0\u6cd5\u6062\u590d\uff0c\u8bf7\u786e\u8ba4\u4e0d\u518d\u9700\u8981\u8be5\u9879\u76ee\u540e\u518d\u64cd\u4f5c\u3002`,
+      okText: '\u5220\u9664',
+      cancelText: '\u53d6\u6d88',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        setDeletingProjectId(project.id);
+        try {
+          await deleteProject(project.id);
+          if (detailProject?.id === project.id) setDetailProject(null);
+          message.success('\u9879\u76ee\u5df2\u5220\u9664');
+        } finally {
+          setDeletingProjectId(null);
+        }
+      },
+    });
+  };
+
+  const handleProjectMenuClick = (project: Project, info: Parameters<NonNullable<MenuProps['onClick']>>[0]) => {
+    info.domEvent.stopPropagation();
+    if (info.key === 'detail') {
+      setDetailProject(project);
+      return;
+    }
+    if (info.key === 'delete') confirmDeleteProject(project);
   };
 
   const getStatusLabel = (status: string) => {
@@ -128,9 +162,33 @@ const ProjectsPage = () => {
                     >
                       <ExportOutlined />
                     </button>
-                    <button type="button" aria-label={`查看项目详情：${item.name}`} onClick={() => setDetailProject(item)}>
-                      <MoreOutlined />
-                    </button>
+                    <Dropdown
+                      trigger={['click']}
+                      placement="topRight"
+                      overlayClassName="project-card-more-dropdown"
+                      menu={{
+                        items: [
+                          { key: 'detail', label: '\u67e5\u770b\u8be6\u60c5' },
+                          { type: 'divider' },
+                          {
+                            key: 'delete',
+                            danger: true,
+                            disabled: deletingProjectId === item.id,
+                            label: deletingProjectId === item.id ? '\u5220\u9664\u4e2d...' : '\u5220\u9664\u9879\u76ee',
+                          },
+                        ],
+                        onClick: (info) => handleProjectMenuClick(item, info),
+                      }}
+                    >
+                      <button
+                        type="button"
+                        aria-label={`\u9879\u76ee\u66f4\u591a\u64cd\u4f5c\uff1a${item.name}`}
+                        aria-haspopup="menu"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <MoreOutlined />
+                      </button>
+                    </Dropdown>
                   </div>
                 </footer>
               </article>

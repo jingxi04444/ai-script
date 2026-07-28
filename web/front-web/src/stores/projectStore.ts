@@ -70,6 +70,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     await projectApi.delete(id);
     set((state) => ({
       projects: state.projects.filter((p) => p.id !== id),
+      total: Math.max(0, state.total - 1),
       currentProject: state.currentProject?.id === id ? null : state.currentProject,
     }));
   },

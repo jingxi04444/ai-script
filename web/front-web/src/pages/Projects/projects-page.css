@@ -1273,3 +1273,76 @@
     grid-auto-rows: 286px;
   }
 }
+
+.project-card-more-dropdown .ant-dropdown-menu {
+  min-width: 148px;
+  padding: 6px;
+  border: 1px solid #3a3f42;
+  border-radius: 10px;
+  background: #242729;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.36);
+}
+
+.project-card-more-dropdown .ant-dropdown-menu-item {
+  min-height: 36px;
+  border-radius: 7px;
+  color: #e7ebed;
+  font-weight: 650;
+}
+
+.project-card-more-dropdown .ant-dropdown-menu-item:hover {
+  background: rgba(255, 255, 255, 0.07) !important;
+}
+
+.project-card-more-dropdown .ant-dropdown-menu-item-danger,
+.project-card-more-dropdown .ant-dropdown-menu-item-danger .ant-dropdown-menu-title-content {
+  color: #ff7474 !important;
+}
+
+.project-card-more-dropdown .ant-dropdown-menu-item-danger:hover {
+  background: rgba(225, 65, 65, 0.14) !important;
+}
+
+.project-card-more-dropdown .ant-dropdown-menu-item-divider {
+  background: #3a3f42;
+}
+
+.project-delete-confirm-dialog .ant-modal-content {
+  border: 1px solid #3a3f42;
+  background: #242729;
+  color: #eef1f2;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.44);
+}
+
+.project-delete-confirm-dialog .ant-modal-confirm-title {
+  color: #f3f5f6;
+}
+
+.project-delete-confirm-dialog .ant-modal-confirm-content {
+  color: #aeb6ba;
+}
+
+html[data-color-mode='light'] .project-card-more-dropdown .ant-dropdown-menu,
+html[data-color-mode='light'] .project-delete-confirm-dialog .ant-modal-content {
+  border-color: #d8dee1;
+  background: #fff;
+  color: #1f262a;
+  box-shadow: 0 16px 38px rgba(38, 48, 54, 0.16);
+}
+
+html[data-color-mode='light'] .project-card-more-dropdown .ant-dropdown-menu-item,
+html[data-color-mode='light'] .project-delete-confirm-dialog .ant-modal-confirm-title {
+  color: #1f262a;
+}
+
+html[data-color-mode='light'] .project-card-more-dropdown .ant-dropdown-menu-item:hover {
+  background: #f2f5f6 !important;
+}
+
+html[data-color-mode='light'] .project-card-more-dropdown .ant-dropdown-menu-item-divider {
+  background: #e2e7e9;
+}
+
+html[data-color-mode='light'] .project-delete-confirm-dialog .ant-modal-confirm-content {
+  color: #566168;
+}
