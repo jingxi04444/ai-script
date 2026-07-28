@@ -27,4 +27,6 @@ public class AiScriptTemplate extends TenantBaseEntity {
     private Integer sortOrder;
     private Integer locked;
     private Integer status;
+    private String auditStatus;
+    private String publishStatus;
 }

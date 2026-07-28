@@ -4,6 +4,7 @@ import com.aiscript.common.api.PageResult;
 import com.aiscript.common.api.R;
 import com.aiscript.common.pagination.PageQuery;
 import com.aiscript.modules.script.dto.TemplateSaveDTO;
+import com.aiscript.modules.script.dto.TemplateStateDTO;
 import com.aiscript.modules.script.service.ScriptService;
 import com.aiscript.modules.script.vo.ScriptTemplateVO;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -46,6 +47,11 @@ public class AdminTemplateController {
     @PutMapping("/{id}")
     public R<ScriptTemplateVO> update(@PathVariable Integer id, @RequestBody TemplateSaveDTO payload) {
         return R.ok(scriptService.updateTemplate(id, payload));
+    }
+
+    @PutMapping("/{id}/state")
+    public R<ScriptTemplateVO> updateState(@PathVariable Integer id, @RequestBody TemplateStateDTO payload) {
+        return R.ok(scriptService.updateTemplateState(id, payload));
     }
 
     @DeleteMapping("/{id}")

@@ -60,7 +60,7 @@
 }
 
 .template-list .template-table-grid {
-  grid-template-columns: 64px minmax(100px, 0.8fr) minmax(180px, 1.5fr) minmax(110px, 0.9fr) 80px minmax(100px, 0.8fr) minmax(150px, 0.9fr);
+  grid-template-columns: 58px 100px minmax(170px, 1.3fr) 96px 66px 88px 96px 78px 92px minmax(380px, 2fr);
 }
 
 .template-list .template-reference-link {
@@ -89,6 +89,79 @@
 .template-list .table-btn {
   min-height: 32px;
   padding: 0 10px;
+}
+
+.template-list .table-btn.success {
+  border-color: rgba(100, 226, 105, 0.36);
+  color: #83e987;
+}
+
+.template-list .table-btn.warning {
+  border-color: rgba(245, 185, 75, 0.36);
+  color: #f1c36a;
+}
+
+.template-list .template-status-badge {
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.template-list .template-status-badge.audit-approved,
+.template-list .template-status-badge.publish-online,
+.template-list .template-status-badge.is-unlocked {
+  border-color: rgba(100, 226, 105, 0.28);
+  background: rgba(74, 189, 80, 0.1);
+  color: #91ed91;
+}
+
+.template-list .template-status-badge.audit-running {
+  border-color: rgba(77, 164, 255, 0.3);
+  background: rgba(77, 164, 255, 0.1);
+  color: #8bc1ff;
+}
+
+.template-list .template-status-badge.audit-rejected,
+.template-list .template-status-badge.is-locked {
+  border-color: rgba(255, 103, 103, 0.3);
+  background: rgba(255, 83, 83, 0.1);
+  color: #ff9797;
+}
+
+.template-list .template-status-badge.audit-draft,
+.template-list .template-status-badge.publish-offline {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.template-list .template-lock-field {
+  justify-content: flex-start;
+}
+
+.template-list .template-lock-toggle {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(9, 16, 20, 0.78);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+.template-list .template-lock-toggle.active {
+  border-color: rgba(255, 103, 103, 0.34);
+  color: #ff9797;
 }
 
 .template-list .pagination-bar {
@@ -207,6 +280,6 @@
 
   .template-list .table-head,
   .template-list .table-row {
-    min-width: 1050px;
+    min-width: 1450px;
   }
 }

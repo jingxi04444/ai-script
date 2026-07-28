@@ -178,6 +178,7 @@ const BriefDialog = ({
   const [editRichValues, setEditRichValues] = useState<BriefRichValues>(emptyBriefRichValues);
   const [saving, setSaving] = useState(false);
   const [shareLinks, setShareLinks] = useState<Partial<Record<BriefSharePermission, BriefShareResult>>>({});
+  const [selectedSharePermission, setSelectedSharePermission] = useState<BriefSharePermission>('read');
   const [sharing, setSharing] = useState(false);
 
   useEffect(() => {
@@ -274,6 +275,7 @@ const BriefDialog = ({
     setSelectedBriefId(brief.id);
     setSelectedVersionId(brief.versions?.[0]?.id || '');
     setSideTab('info');
+    setSelectedSharePermission('read');
     setIsEditing(false);
     setView('detail');
   };
@@ -307,6 +309,7 @@ const BriefDialog = ({
 
   const handleShareBrief = async (permission: BriefSharePermission) => {
     if (!currentBrief) return;
+    setSelectedSharePermission(permission);
     setSharing(true);
     try {
       const result = shareLinks[permission] || await briefApi.enableShare(currentBrief.id, permission);
@@ -694,9 +697,22 @@ const BriefDialog = ({
                         <LinkOutlined />
                         对方登录并打开链接后，这份 Brief 会自动出现在对方的“我的 Brief”，后续始终同步最新内容。
                       </p>
-                      <div className="brief-share-permissions" aria-label="分享权限链接">
+                      <div className="brief-share-permissions" role="radiogroup" aria-label="分享权限链接">
                         {sharePermissionOptions.map((option) => (
-                          <article className={shareLinks[option.value] ? 'active' : ''} key={option.value}>
+                          <article
+                            className={selectedSharePermission === option.value ? 'active' : ''}
+                            key={option.value}
+                            role="radio"
+                            aria-checked={selectedSharePermission === option.value}
+                            tabIndex={0}
+                            onClick={() => setSelectedSharePermission(option.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter' || event.key === ' ') {
+                                event.preventDefault();
+                                setSelectedSharePermission(option.value);
+                              }
+                            }}
+                          >
                             <div>
                               <span><i />{option.label}</span>
                               <small>{option.description}</small>

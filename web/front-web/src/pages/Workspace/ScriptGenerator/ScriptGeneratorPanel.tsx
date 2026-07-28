@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   FileTextOutlined,
@@ -27,16 +27,18 @@ import {
   InfoCircleOutlined,
   MessageOutlined,
   RobotOutlined,
+  PlusOutlined,
 } from '@ant-design/icons';
 import { message, Modal, Popover, Select, Upload } from 'antd';
 import { briefApi } from '../../../api/brief';
-import { fileApi } from '../../../api/asset';
+import { assetApi, fileApi } from '../../../api/asset';
 import { generationApi } from '../../../api/generation';
 import { scriptApi } from '../../../api/script';
 import { siteApi, type SiteConfig } from '../../../api/site';
 import { sourceApi } from '../../../api/source';
 import { useWorkspaceStore, type ScriptMode } from '../../../stores/workspaceStore';
 import type { Brief } from '../../../types/brief';
+import type { Asset } from '../../../types/asset';
 import type { Script, ScriptFormatOption, ScriptPolishMessage, ScriptTemplate, ScriptType } from '../../../types/script';
 import type { AnalysisDimension } from '../../../types/source';
 import './script-generator-panel.css';
@@ -46,6 +48,11 @@ interface ProductFrameUploadState {
   fileName?: string;
   objectKey?: string;
   extractedText?: string;
+}
+
+interface PolishMentionRange {
+  start: number;
+  end: number;
 }
 
 type TemplateCategory = '产品介绍' | '创意剧情' | '活动福利' | '测评' | '教程';
@@ -402,6 +409,10 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   const [resultDialogOpen, setResultDialogOpen] = useState(false);
   const [originalScriptContent, setOriginalScriptContent] = useState('');
   const [polishInput, setPolishInput] = useState('');
+  const [isManualEditing, setIsManualEditing] = useState(false);
+  const [polishMentionOpen, setPolishMentionOpen] = useState(false);
+  const [polishMentionQuery, setPolishMentionQuery] = useState('');
+  const [polishMentionRange, setPolishMentionRange] = useState<PolishMentionRange | null>(null);
   const [polishMessages, setPolishMessages] = useState<ScriptPolishMessage[]>([]);
   const [isPolishing, setIsPolishing] = useState(false);
   const [generatingType, setGeneratingType] = useState<ScriptType | null>(null);
@@ -416,6 +427,11 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   const [scriptDuration, setScriptDuration] = useState('30-40秒内');
   const [productFrame, setProductFrame] = useState<ProductFrameUploadState | null>(null);
   const [isProductFrameUploading, setIsProductFrameUploading] = useState(false);
+  const [frameLibraryOpen, setFrameLibraryOpen] = useState(false);
+  const [frameLibraryLoading, setFrameLibraryLoading] = useState(false);
+  const [frameLibraryLoaded, setFrameLibraryLoaded] = useState(false);
+  const [frameLibraryAssets, setFrameLibraryAssets] = useState<Asset[]>([]);
+  const polishInputRef = useRef<HTMLTextAreaElement | null>(null);
   const isDeepMode = analysisMode === 'deep';
 
   const clearEditScriptParam = () => {
@@ -427,6 +443,8 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
 
   const closeResultDialog = () => {
     setResultDialogOpen(false);
+    setIsManualEditing(false);
+    setPolishMentionOpen(false);
     clearEditScriptParam();
   };
 
@@ -521,6 +539,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     scriptApi.getById(editScriptId).then((script) => {
       setCurrentScript(script);
       setOriginalScriptContent(script.content || '');
+      setIsManualEditing(false);
       setPolishInput('');
       setPolishMessages([
         createPolishMessage('assistant', '我已读取原脚本。你可以直接告诉我“哪里不行、想怎么改”，例如：开场太平、卖点不突出、结尾转化弱。我会返回修改后的脚本并在右侧重新显示。'),
@@ -587,7 +606,20 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   const briefOptions = briefs.map((brief) => ({
     value: brief.id,
     label: `${brief.productName || brief.name}${brief.versions?.[0]?.label ? ` ${brief.versions[0].label}` : ''}`,
+    searchText: [
+      brief.productName,
+      brief.name,
+      brief.productModel,
+      brief.versions?.[0]?.label,
+    ].filter(Boolean).join(' ').toLowerCase(),
   }));
+  const filterBriefOption = (input: string, option?: (typeof briefOptions)[number]) => (
+    (option?.searchText || String(option?.label || '').toLowerCase()).includes(input.trim().toLowerCase())
+  );
+  const normalizedPolishMentionQuery = polishMentionQuery.trim().toLowerCase();
+  const polishMentionBriefs = briefOptions.filter((option) =>
+    !normalizedPolishMentionQuery || option.searchText.includes(normalizedPolishMentionQuery)
+  );
   const formatOptions = scriptFormats.map((item) => ({ value: item.code, label: item.name }));
   const originalScenarioCategories = parseOriginalScenarioPrompts(siteConfig.originalScenarioPrompts);
   const visibleOriginalScenarioCards = originalScenarioCategories.slice(0, 3);
@@ -613,7 +645,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     : ['镜头', '画面内容', '口播文案', '字幕/花字', '备注'];
   const rawStoryboardRows = storyboardTableLines.length
     ? storyboardTableLines.slice(2).map((line, index) => ({
-      key: `${index}-${line}`,
+      key: `storyboard-${index}`,
       cells: line.split('|').slice(1, -1).map((cell) => cell.trim()),
     })).filter((row) => row.cells.length > 1)
     : [];
@@ -731,40 +763,122 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     <div className={`${className} product-frame-field`}>
       <span className="product-frame-label">{label}</span>
       <div className="product-frame-control">
-        <Upload
-          accept={allowTable ? 'image/*,.xls,.xlsx,.csv' : 'image/*'}
-          beforeUpload={(file) => handleProductFrameUpload(file, allowTable)}
-          showUploadList={false}
+        <button
+          type="button"
+          className="product-frame-picker-trigger"
+          onClick={openFrameLibrary}
           disabled={isProductFrameUploading}
+          data-allow-table={allowTable}
         >
-          <button type="button" disabled={isProductFrameUploading}>
-            <UploadOutlined />
-            <strong>{isProductFrameUploading ? '上传中...' : productFrame?.fileName || '上传画面'}</strong>
-            <small>
-              {productFrame?.url
-                ? productFrame.extractedText ? '表格已解析，可用于脚本生成' : '已上传，可用于脚本生成'
-                : allowTable ? '支持 JPG / PNG / XLS / XLSX / CSV' : '支持 JPG / PNG'}
-            </small>
-          </button>
-        </Upload>
+          <FolderOutlined />
+          <span>
+            <strong>
+              {isProductFrameUploading
+                ? '上传并入库中…'
+                : productFrame?.fileName || '上传/选择画面'}
+            </strong>
+            <small>{allowTable ? 'JPG / PNG / XLS / XLSX / CSV' : 'JPG / PNG'}</small>
+          </span>
+          <RightOutlined />
+        </button>
         {productFrame && (
           <button
             type="button"
-            className="product-frame-remove"
-            aria-label="删除已上传的产品画面"
-            title="删除已上传的产品画面"
+            className="product-frame-current-remove"
+            aria-label="移除当前产品画面"
+            title="移除当前引用，文件库原文件仍会保留"
             onClick={() => {
               setProductFrame(null);
-              message.success('已删除产品画面');
+              message.success('已移除当前产品画面引用');
             }}
           >
             <DeleteOutlined />
-            <span>删除</span>
           </button>
         )}
       </div>
     </div>
   );
+
+  const loadFrameLibrary = async () => {
+    setFrameLibraryLoading(true);
+    try {
+      const page = await assetApi.list({ page: 1, pageSize: 200 });
+      setFrameLibraryAssets((page.list || []).filter((asset) =>
+        asset.category === 'product-frame-library' || asset.type === 'document'
+      ));
+      setFrameLibraryLoaded(true);
+    } catch {
+      setFrameLibraryAssets([]);
+      message.error('文件库加载失败');
+    } finally {
+      setFrameLibraryLoading(false);
+    }
+  };
+
+  const openFrameLibrary = () => {
+    setFrameLibraryOpen(true);
+    if (!frameLibraryLoaded) loadFrameLibrary();
+  };
+
+  const selectFrameAsset = (asset: Asset) => {
+    let extractedText = '';
+    if (asset.metadataJson) {
+      try {
+        extractedText = String((JSON.parse(asset.metadataJson) as { extractedText?: string }).extractedText || '');
+      } catch {
+        extractedText = '';
+      }
+    }
+    setProductFrame({
+      url: asset.previewUrl,
+      fileName: asset.name,
+      objectKey: asset.storageKey,
+      extractedText,
+    });
+    setFrameLibraryOpen(false);
+    message.success(`已选择文件：${asset.name}`);
+  };
+
+  const updatePolishMention = (value: string, cursorPosition: number) => {
+    const contentBeforeCursor = value.slice(0, cursorPosition);
+    const match = contentBeforeCursor.match(/@([^@\n]*)$/);
+    if (!match) {
+      setPolishMentionOpen(false);
+      setPolishMentionRange(null);
+      return;
+    }
+    setPolishMentionQuery(match[1]);
+    setPolishMentionRange({ start: cursorPosition - match[0].length, end: cursorPosition });
+    setPolishMentionOpen(true);
+  };
+
+  const insertPolishMention = (label: string, briefId: string) => {
+    const range = polishMentionRange || {
+      start: polishInput.length,
+      end: polishInput.length,
+    };
+    const mentionText = `@${label} `;
+    const nextValue = `${polishInput.slice(0, range.start)}${mentionText}${polishInput.slice(range.end)}`;
+    const nextCursor = range.start + mentionText.length;
+    setPolishInput(nextValue);
+    setSelectedBriefId(briefId);
+    message.success(`已调用产品 Brief：${label}`);
+    setPolishMentionOpen(false);
+    setPolishMentionRange(null);
+    window.setTimeout(() => {
+      polishInputRef.current?.focus();
+      polishInputRef.current?.setSelectionRange(nextCursor, nextCursor);
+    }, 0);
+  };
+
+  const selectFirstPolishMention = () => {
+    const firstBrief = polishMentionBriefs[0];
+    if (firstBrief) {
+      insertPolishMention(String(firstBrief.label), firstBrief.value);
+      return true;
+    }
+    return false;
+  };
 
   const handleProductFrameUpload = async (file: File, allowTable = false) => {
     const isImage = file.type.startsWith('image/');
@@ -775,14 +889,32 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     }
     setIsProductFrameUploading(true);
     try {
+      const currentProjectId = await ensureProjectId();
       const result = await fileApi.upload(file, 'product-frame');
+      const assetType = isTable ? 'document' : 'image';
+      await assetApi.create({
+        projectId: currentProjectId,
+        name: result.fileName || file.name,
+        type: assetType,
+        category: 'product-frame-library',
+        storageKey: result.objectKey,
+        previewUrl: result.url,
+        mimeType: result.contentType || file.type,
+        fileSizeBytes: result.size || file.size,
+        metadataJson: JSON.stringify({
+          extractedText: result.extractedText || '',
+          immutable: true,
+          source: 'script-product-frame',
+        }),
+      });
       setProductFrame({
         url: result.url,
         fileName: result.fileName || file.name,
         objectKey: result.objectKey,
         extractedText: result.extractedText,
       });
-      message.success(isTable ? '画面表格上传并解析成功' : '产品画面上传成功');
+      setFrameLibraryOpen(false);
+      message.success(isTable ? '画面表格已解析并存入文件库' : '产品画面已上传并存入文件库');
     } catch (error) {
       setProductFrame({ fileName: file.name });
       message.error(error instanceof Error ? error.message : '产品画面上传失败，已保留文件名');
@@ -816,6 +948,60 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     message.success('已复制到剪贴板');
   };
 
+  const updateStoryboardCell = (rowIndex: number, columnIndex: number, value: string) => {
+    if (!currentScript?.content || !storyboardTableLines.length) return;
+    const contentLines = currentScript.content.split('\n');
+    const tableLineIndexes = contentLines
+      .map((line, index) => ({ line: line.trim(), index }))
+      .filter((item) => item.line.startsWith('|') && item.line.endsWith('|'))
+      .map((item) => item.index);
+    const targetLineIndex = tableLineIndexes[rowIndex + 2];
+    if (targetLineIndex === undefined) return;
+    const nextCells = [...(storyboardRows[rowIndex]?.cells || [])];
+    nextCells[columnIndex] = value.replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');
+    contentLines[targetLineIndex] = `| ${nextCells.join(' | ')} |`;
+    setCurrentScript((script) => script ? {
+      ...script,
+      content: contentLines.join('\n'),
+      status: 'pending',
+      updatedAt: new Date().toISOString(),
+    } : script);
+  };
+
+  const appendStoryboardRow = () => {
+    if (!currentScript?.content || !storyboardTableLines.length) {
+      message.warning('当前内容不是分镜表格，暂时无法新增镜头行');
+      return;
+    }
+    const contentLines = currentScript.content.split('\n');
+    const tableLineIndexes = contentLines
+      .map((line, index) => ({ line: line.trim(), index }))
+      .filter((item) => item.line.startsWith('|') && item.line.endsWith('|'))
+      .map((item) => item.index);
+    const summaryRowIndex = storyboardRows.findIndex((row) =>
+      row.cells.some((cell) => /总计|总时长|总时间/.test(cell))
+    );
+    const insertionIndex = summaryRowIndex >= 0
+      ? tableLineIndexes[summaryRowIndex + 2]
+      : (tableLineIndexes[tableLineIndexes.length - 1] ?? contentLines.length - 1) + 1;
+    const nextCells = Array.from({ length: storyboardHeaders.length }, () => '');
+    const shotColumnIndex = storyboardHeaders.findIndex((header) => /镜号|镜头编号|^镜头$/.test(header));
+    if (shotColumnIndex >= 0) {
+      const regularRowCount = storyboardRows.filter((row) =>
+        !row.cells.some((cell) => /总计|总时长|总时间/.test(cell))
+      ).length;
+      nextCells[shotColumnIndex] = String(regularRowCount + 1);
+    }
+    contentLines.splice(insertionIndex, 0, `| ${nextCells.join(' | ')} |`);
+    setCurrentScript((script) => script ? {
+      ...script,
+      content: contentLines.join('\n'),
+      status: 'pending',
+      updatedAt: new Date().toISOString(),
+    } : script);
+    message.success('已新增一行，请填写新的镜头内容');
+  };
+
   const polishCurrentScript = async (quickInstruction?: string) => {
     if (!currentScript) return message.warning('请先选择脚本');
     const instruction = (quickInstruction || polishInput).trim();
@@ -828,8 +1014,13 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
       const result = await scriptApi.polish(currentScript.id, {
         instruction,
         content: currentScript.content || originalScriptContent || '',
+        briefId: selectedBriefId,
+        productImage: productFrame?.url,
+        productFrameFileName: productFrame?.fileName,
+        productFrameContent: productFrame?.extractedText,
       });
       setCurrentScript((script) => script ? { ...script, content: result.content, status: 'pending', updatedAt: new Date().toISOString() } : script);
+      setIsManualEditing(false);
       setPolishMessages((messages) => [...messages, createPolishMessage('assistant', result.summary || '已生成修改后的脚本，右侧已更新预览。确认后可保存脚本。')]);
       message.success('AI 已返回修改版，右侧已重新显示');
     } catch (error) {
@@ -843,6 +1034,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   const restoreOriginalScript = () => {
     if (!currentScript) return;
     setCurrentScript({ ...currentScript, content: originalScriptContent, status: 'pending', updatedAt: new Date().toISOString() });
+    setIsManualEditing(false);
     setPolishMessages((messages) => [...messages, createPolishMessage('assistant', '已恢复到进入润色时的原脚本内容。')]);
   };
 
@@ -923,6 +1115,8 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
         prompt,
       });
       setCurrentScript(script);
+      setOriginalScriptContent(script.content || '');
+      setIsManualEditing(false);
       setResultDialogOpen(true);
       message.success('脚本生成成功');
     } catch (error) {
@@ -936,6 +1130,8 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   const saveCurrentScript = async () => {
     if (!currentScript) return message.warning('请先生成脚本');
     await scriptApi.update(currentScript.id, currentScript);
+    setOriginalScriptContent(currentScript.content || '');
+    setIsManualEditing(false);
     message.success('脚本已保存');
   };
 
@@ -993,6 +1189,12 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
       placeholder={briefsLoading ? 'Brief 加载中…' : briefOptions.length ? '选择产品 Brief' : '当前项目暂无 Brief'}
       loading={briefsLoading}
       disabled={briefsLoading || !projectId}
+      showSearch
+      listHeight={360}
+      virtual={false}
+      popupClassName="brief-select-dropdown"
+      filterOption={filterBriefOption}
+      autoClearSearchValue
       suffixIcon={<DownOutlined />}
       options={briefOptions}
       onChange={setSelectedBriefId}
@@ -1298,7 +1500,9 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                   key={card.id}
                   role="button"
                   tabIndex={card.locked ? -1 : 0}
-                  className={card.id === selectedTemplate ? 'template-card active' : 'template-card'}
+                  aria-disabled={card.locked}
+                  title={card.locked ? '该模板暂未解锁' : card.name}
+                  className={`${card.id === selectedTemplate ? 'template-card active' : 'template-card'}${card.locked ? ' locked' : ''}`}
                   onClick={() => !card.locked && setSelectedTemplate(card.id)}
                   onKeyDown={(event) => {
                     if (card.locked) return;
@@ -1479,6 +1683,58 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
           </section>
         </div>
       )}
+      <Modal
+        open={frameLibraryOpen}
+        title="选择产品画面"
+        footer={null}
+        width={760}
+        centered
+        onCancel={() => setFrameLibraryOpen(false)}
+      >
+        <div className="product-frame-library-modal">
+          <section className="product-frame-source-section">
+            <div>
+              <strong>从设备上传</strong>
+              <p>上传后会自动存入“我的资产库 / 文件库”，原始文件不可修改或删除。</p>
+            </div>
+            <Upload
+              accept="image/*,.xls,.xlsx,.csv"
+              beforeUpload={(file) => handleProductFrameUpload(file, true)}
+              showUploadList={false}
+              disabled={isProductFrameUploading}
+            >
+              <button type="button" className="product-frame-device-upload" disabled={isProductFrameUploading}>
+                {isProductFrameUploading ? <LoadingOutlined spin /> : <UploadOutlined />}
+                {isProductFrameUploading ? '上传并入库中…' : '选择设备文件'}
+              </button>
+            </Upload>
+          </section>
+          <div className="product-frame-library-heading">
+            <div>
+              <strong>从文件库选择</strong>
+              <p>选择已上传的文件只会建立引用，不会修改原文件。</p>
+            </div>
+            {productFrame?.fileName && (
+              <span><LockOutlined />当前：{productFrame.fileName}</span>
+            )}
+          </div>
+          <div className="product-frame-library-grid">
+            {frameLibraryAssets.map((asset) => (
+              <button type="button" key={asset.id} onClick={() => selectFrameAsset(asset)}>
+                <span>{asset.type === 'image' ? <PictureOutlined /> : <FileTextOutlined />}</span>
+                <strong>{asset.name}</strong>
+                <small>{asset.mimeType || (asset.type === 'image' ? '图片文件' : '表格/文档')}</small>
+              </button>
+            ))}
+            {!frameLibraryAssets.length && (
+              <div className="product-frame-library-empty">
+                {frameLibraryLoading ? <LoadingOutlined spin /> : <FolderOutlined />}
+                <span>{frameLibraryLoading ? '正在加载文件库…' : '文件库暂无可用文件，请先从设备上传'}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </Modal>
       {resultDialogOpen && currentScript && (
         <div className="script-output-backdrop" role="dialog" aria-modal="true" aria-labelledby="script-output-title">
           <section className="script-output-modal">
@@ -1524,12 +1780,27 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
               <section className="polish-preview-panel">
                 <header>
                   <div>
-                    <span>修改后内容</span>
-                    <strong>左侧会随 AI 返回自动刷新</strong>
+                    <span>{isManualEditing ? '人工编辑中' : '脚本预览'}</span>
+                    <strong>{isManualEditing ? '全部字段均可修改，也可以新增镜头行' : '默认完整展示，AI 返回后自动刷新'}</strong>
                   </div>
-                  <button type="button" disabled={!originalScriptContent || isPolishing} onClick={restoreOriginalScript}>恢复原稿</button>
+                  <div className="polish-preview-actions">
+                    {isManualEditing && (
+                      <button type="button" disabled={isPolishing} onClick={appendStoryboardRow}>
+                        <PlusOutlined />新增一行
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className={isManualEditing ? 'active' : ''}
+                      disabled={isPolishing}
+                      onClick={() => setIsManualEditing((editing) => !editing)}
+                    >
+                      <EditOutlined />{isManualEditing ? '完成编辑' : '人工编辑'}
+                    </button>
+                    <button type="button" disabled={!originalScriptContent || isPolishing} onClick={restoreOriginalScript}>恢复原稿</button>
+                  </div>
                 </header>
-                <div className="polish-preview-scroll">
+                <div className={`polish-preview-scroll ${isManualEditing ? 'is-manual-editing' : ''}`}>
                   <section className="script-output-block script-storyboard-block">
                     <div className="script-storyboard-table-wrap">
                       <table className={`script-storyboard-table ${visibleStoryboardHeaders.length === 4 ? 'is-four-column' : ''} ${visibleStoryboardHeaders.length === 5 ? 'is-five-column' : ''}`}>
@@ -1546,11 +1817,20 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                           </tr>
                         </thead>
                         <tbody>
-                          {storyboardRows.length ? storyboardRows.map((row) => (
+                          {storyboardRows.length ? storyboardRows.map((row, rowIndex) => (
                             <tr key={row.key}>
                               {storyboardHeaders.map((header, index) => (
                                 <td key={`${row.key}-${header}`} className={storyboardColumnClass(header)}>
-                                  <span className="storyboard-cell-content">{storyboardCellText(row.cells[index], index)}</span>
+                                  {isManualEditing ? (
+                                    <textarea
+                                      className="storyboard-cell-editor"
+                                      aria-label={`编辑第 ${rowIndex + 1} 行${header}`}
+                                      value={storyboardCellText(row.cells[index], index)}
+                                      onChange={(event) => updateStoryboardCell(rowIndex, index, event.target.value)}
+                                    />
+                                  ) : (
+                                    <span className="storyboard-cell-content">{storyboardCellText(row.cells[index], index)}</span>
+                                  )}
                                 </td>
                               ))}
                             </tr>
@@ -1593,21 +1873,97 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                     <button key={item} type="button" disabled={isPolishing} onClick={() => polishCurrentScript(item)}>{item}</button>
                   ))}
                 </div>
-                <label className="polish-input-box">
+                <div className="polish-input-box">
+                  {polishMentionOpen && (
+                    <div className="polish-mention-menu">
+                      <header>
+                        <strong>调用产品 Brief</strong>
+                        <span>{polishMentionQuery ? `搜索“${polishMentionQuery}”` : '选择后会随本次修改要求发送给 AI'}</span>
+                      </header>
+                      <div className="polish-mention-scroll">
+                        <section>
+                          <h4><FileTextOutlined />当前项目 Brief（{briefOptions.length}）</h4>
+                          {polishMentionBriefs.map((option) => (
+                            <button
+                              type="button"
+                              key={`brief-${option.value}`}
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => insertPolishMention(String(option.label), option.value)}
+                            >
+                              <FileTextOutlined />
+                              <span><strong>{option.label}</strong><small>产品 Brief</small></span>
+                            </button>
+                          ))}
+                          {!polishMentionBriefs.length && <p>{briefsLoading ? 'Brief 加载中…' : '当前项目没有匹配的产品 Brief'}</p>}
+                        </section>
+                      </div>
+                    </div>
+                  )}
+                  <div className="polish-frame-reference">
+                    <button
+                      type="button"
+                      className={productFrame ? 'has-file' : ''}
+                      disabled={isPolishing || isProductFrameUploading}
+                      onClick={openFrameLibrary}
+                    >
+                      {isProductFrameUploading ? <LoadingOutlined spin /> : <FolderOutlined />}
+                      <span>
+                        <strong>
+                          {isProductFrameUploading
+                            ? '上传并入库中…'
+                            : productFrame?.fileName || '上传 / 选择产品画面'}
+                        </strong>
+                        <small>{productFrame ? '已引用该文件用于本次润色' : 'JPG / PNG / XLS / XLSX / CSV'}</small>
+                      </span>
+                    </button>
+                    {productFrame && (
+                      <button
+                        type="button"
+                        className="polish-frame-reference-remove"
+                        aria-label="移除当前产品画面"
+                        title="移除当前引用，文件库原文件仍会保留"
+                        disabled={isPolishing}
+                        onClick={() => {
+                          setProductFrame(null);
+                          message.success('已移除当前产品画面引用');
+                        }}
+                      >
+                        <DeleteOutlined />
+                      </button>
+                    )}
+                  </div>
                   <textarea
+                    ref={polishInputRef}
                     value={polishInput}
                     disabled={isPolishing}
-                    onChange={(event) => setPolishInput(event.target.value)}
+                    onBlur={() => {
+                      window.setTimeout(() => {
+                        if (!document.activeElement?.closest('.polish-mention-menu')) {
+                          setPolishMentionOpen(false);
+                        }
+                      }, 100);
+                    }}
+                    onChange={(event) => {
+                      const { value, selectionStart } = event.target;
+                      setPolishInput(value);
+                      updatePolishMention(value, selectionStart);
+                    }}
                     onKeyDown={(event) => {
+                      if (polishMentionOpen && event.key === 'Escape') {
+                        event.preventDefault();
+                        setPolishMentionOpen(false);
+                        return;
+                      }
                       if (event.key === 'Enter' && !event.shiftKey) {
                         event.preventDefault();
+                        if (polishMentionOpen && selectFirstPolishMention()) return;
                         polishCurrentScript();
                       }
                     }}
-                    placeholder="例如：这个脚本开头不行，太平了；把卖点说得更具体，结尾加购买引导。"
+                    placeholder="输入修改要求；键入 @ 可调用产品 Brief，例如：@九号平衡车 只选两个特色卖点重写第 2、3 个镜头。"
                   />
                   <button type="button" disabled={isPolishing || !polishInput.trim()} onClick={() => polishCurrentScript()}><SendOutlined />发送修改要求</button>
-                </label>
+                </div>
               </section>
             </article>
             <footer className="script-output-actions">

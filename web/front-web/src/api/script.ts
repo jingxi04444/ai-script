@@ -2,11 +2,51 @@ import { config } from '../config';
 import { mockScriptApi } from '../mock/script';
 import api from './request';
 import type { Script, ScriptFormatOption, ScriptTemplate, GenerateScriptParams, PolishScriptParams, PolishScriptResult } from '../types/script';
+import type { PaginatedResponse } from '../types/api';
+
+export interface ScriptPageParams {
+  projectId: string;
+  page: number;
+  pageSize: number;
+  keyword?: string;
+  type?: string;
+  status?: string;
+  sortBy?: 'updated' | 'product';
+}
 
 export const scriptApi = {
   getList: (projectId: string): Promise<Script[]> => {
     if (config.useMock) return mockScriptApi.getList(projectId);
     return api.get('/scripts', { params: { projectId } });
+  },
+
+  getPage: async (params: ScriptPageParams): Promise<PaginatedResponse<Script>> => {
+    if (config.useMock) {
+      const scripts = await mockScriptApi.getList(params.projectId);
+      const types = params.type?.split(',').filter(Boolean) || [];
+      const keyword = params.keyword?.trim().toLowerCase();
+      const filtered = scripts.filter((script) =>
+        (!keyword || script.name.toLowerCase().includes(keyword))
+        && (!types.length || types.includes(script.type))
+        && (!params.status || script.status === params.status)
+      );
+      if (params.sortBy === 'product') {
+        filtered.sort((a, b) => {
+          const productA = a.name.replace(/(?:爆款复刻|脚本模板库|AI原创).*$/, '').trim();
+          const productB = b.name.replace(/(?:爆款复刻|脚本模板库|AI原创).*$/, '').trim();
+          return productA.localeCompare(productB, 'zh-CN') || b.updatedAt.localeCompare(a.updatedAt);
+        });
+      }
+      const start = (params.page - 1) * params.pageSize;
+      return {
+        list: filtered.slice(start, start + params.pageSize),
+        total: filtered.length,
+        page: params.page,
+        pageSize: params.pageSize,
+        pages: Math.ceil(filtered.length / params.pageSize),
+      };
+    }
+    return api.get('/scripts/page', { params });
   },
 
   mineList: (): Promise<Script[]> => {

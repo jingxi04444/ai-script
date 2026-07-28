@@ -20,6 +20,9 @@ public final class AssetConvert {
         vo.setCategory(entity.getCategory());
         vo.setPreviewUrl(entity.getPreviewUrl());
         vo.setStorageKey(entity.getStorageKey());
+        vo.setMimeType(entity.getMimeType());
+        vo.setFileSizeBytes(entity.getFileSizeBytes());
+        vo.setMetadataJson(entity.getMetadataJson());
         vo.setStatus(entity.getStatus() != null && entity.getStatus() == 1 ? "enabled" : "disabled");
         return vo;
     }

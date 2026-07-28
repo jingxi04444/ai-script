@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CaretRightFilled, FileTextOutlined, FolderFilled, FormOutlined, LeftOutlined, MenuFoldOutlined, RightOutlined } from '@ant-design/icons';
+import { CaretRightFilled, FileTextOutlined, FolderFilled, FormOutlined, LeftOutlined, MenuFoldOutlined, PictureOutlined, RightOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { assetApi } from '../../api/asset';
 import { briefApi } from '../../api/brief';
@@ -13,7 +13,7 @@ import type { Script } from '../../types/script';
 import { formatDateTime } from '../../utils/format';
 import './assets-page.css';
 
-type LibraryView = 'briefs' | 'scripts' | 'materials' | 'works';
+type LibraryView = 'briefs' | 'scripts' | 'materials' | 'productFrames' | 'works';
 
 interface AssetFolder {
   key: string;
@@ -25,10 +25,11 @@ const LIBRARY_LABELS: Record<LibraryView, string> = {
   briefs: 'Brief库',
   scripts: '脚本库',
   materials: '素材库',
+  productFrames: '产品画面库',
   works: '我的作品',
 };
 
-const LIBRARY_ORDER: LibraryView[] = ['briefs', 'scripts', 'materials', 'works'];
+const LIBRARY_ORDER: LibraryView[] = ['briefs', 'scripts', 'materials', 'productFrames', 'works'];
 
 const AssetsPage = () => {
   const navigate = useNavigate();
@@ -38,6 +39,7 @@ const AssetsPage = () => {
     briefs: true,
     scripts: false,
     materials: false,
+    productFrames: false,
     works: false,
   });
   const [selectedFolderKey, setSelectedFolderKey] = useState<string | null>(
@@ -105,16 +107,27 @@ const AssetsPage = () => {
         { key: 'viral-scripts', name: '爆款脚本', count: viralScriptCount },
       ],
       materials: [
-        { key: 'scene', name: '场景库', count: countBy((asset) => asset.category === 'scene' || asset.type === 'image') },
+        { key: 'scene', name: '场景库', count: countBy((asset) =>
+          asset.category !== 'product-frame-library' && (asset.category === 'scene' || asset.type === 'image')
+        ) },
         { key: 'role', name: '角色库', count: countBy((asset) => asset.category === 'role') },
         { key: 'prop', name: '道具库', count: countBy((asset) => asset.category === 'prop') },
-        { key: 'document', name: '文件库', count: countBy((asset) => asset.type === 'document') },
+        { key: 'document', name: '文件库', count: countBy((asset) =>
+          asset.category !== 'product-frame-library' && asset.type === 'document'
+        ) },
         { key: 'pose', name: '姿势库', count: countBy((asset) => asset.category === 'pose') },
         { key: 'effect', name: '特效库', count: countBy((asset) => asset.category === 'effect' || asset.type === 'video') },
         { key: 'expression', name: '表情库', count: countBy((asset) => asset.category === 'expression') },
         { key: 'style', name: '风格库', count: countBy((asset) => asset.category === 'style') },
         { key: 'voice', name: '音色库', count: countBy((asset) => asset.category === 'voice') },
         { key: 'sound', name: '音效库', count: countBy((asset) => asset.type === 'audio') },
+      ],
+      productFrames: [
+        {
+          key: 'product-frames',
+          name: '我的产品画面',
+          count: countBy((asset) => asset.category === 'product-frame-library'),
+        },
       ],
       works: [
         { key: 'image', name: '图片作品', count: works.filter((asset) => asset.type === 'image').length },
@@ -224,6 +237,46 @@ const AssetsPage = () => {
             </button>
           ))}
           {!scripts.length && <p className="assets-record-empty">暂无脚本</p>}
+        </section>
+      );
+    }
+    if (activeView === 'materials' && selectedFolderKey === 'document') {
+      const fileAssets = assets.filter((asset) =>
+        asset.type === 'document' && asset.category !== 'product-frame-library'
+      );
+      return (
+        <section className="assets-record-grid" aria-label="文件库">
+          {fileAssets.map((asset) => (
+            <article className="assets-record-card" key={asset.id}>
+              <span className="assets-record-icon"><FileTextOutlined /></span>
+              <span className="assets-record-copy">
+                <strong>{asset.name}</strong>
+                <small>{asset.mimeType || (asset.type === 'image' ? '图片文件' : '文档/表格')}</small>
+                <em>{asset.category === 'product-frame-library' ? '原始文件 · 只读' : asset.status || '可用'}</em>
+              </span>
+            </article>
+          ))}
+          {!fileAssets.length && <p className="assets-record-empty">文件库暂无文件</p>}
+        </section>
+      );
+    }
+    if (activeView === 'productFrames' && selectedFolderKey === 'product-frames') {
+      const productFrameAssets = assets.filter((asset) => asset.category === 'product-frame-library');
+      return (
+        <section className="assets-record-grid" aria-label="我的产品画面">
+          {productFrameAssets.map((asset) => (
+            <article className="assets-record-card" key={asset.id}>
+              <span className="assets-record-icon">
+                {asset.type === 'image' ? <PictureOutlined /> : <FileTextOutlined />}
+              </span>
+              <span className="assets-record-copy">
+                <strong>{asset.name}</strong>
+                <small>{asset.mimeType || (asset.type === 'image' ? '图片文件' : '表格文件')}</small>
+                <em>原始文件 · 只读</em>
+              </span>
+            </article>
+          ))}
+          {!productFrameAssets.length && <p className="assets-record-empty">产品画面库暂无文件</p>}
         </section>
       );
     }

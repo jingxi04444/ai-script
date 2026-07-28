@@ -19,6 +19,9 @@ export interface Template {
   referenceDesc?: string;
   sortOrder?: number;
   status?: 'active' | 'disabled' | string;
+  auditStatus?: 'draft' | 'running' | 'approved' | 'rejected';
+  publishStatus?: 'online' | 'offline';
+  locked?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -45,6 +48,13 @@ export const templateApi = {
 
   update: (id: string, data: Partial<Template>): Promise<Template> => {
     return api.put(`/templates/${id}`, data);
+  },
+
+  updateState: (
+    id: string,
+    data: Pick<Partial<Template>, 'auditStatus' | 'publishStatus' | 'locked'>,
+  ): Promise<Template> => {
+    return api.put(`/templates/${id}/state`, data);
   },
 
   delete: (id: string): Promise<void> => {

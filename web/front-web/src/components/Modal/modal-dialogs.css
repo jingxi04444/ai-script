@@ -2679,8 +2679,14 @@
   border-radius: 9px;
   background: #111516;
   color: #c8d0d2;
+  cursor: pointer;
   text-align: left;
   transition: border-color 150ms ease, background 150ms ease;
+}
+
+.brief-share-permissions > article:focus-visible {
+  outline: 2px solid rgba(120, 223, 112, 0.55);
+  outline-offset: 2px;
 }
 
 .brief-share-permissions > article.active {

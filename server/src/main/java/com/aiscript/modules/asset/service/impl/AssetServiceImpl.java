@@ -32,6 +32,7 @@ import org.springframework.security.core.context.SecurityContextHolder;
 @Service
 public class AssetServiceImpl implements AssetService {
     private static final Integer DEFAULT_TENANT_ID = 1;
+    private static final String IMMUTABLE_FILE_CATEGORY = "product-frame-library";
     private final AiAssetMapper assetMapper;
     private final AiSellingPointAssetMapper sellingPointAssetMapper;
     private final AiViralAssetMapper viralAssetMapper;
@@ -79,6 +80,8 @@ public class AssetServiceImpl implements AssetService {
             entity.setUsageCount(0);
             entity.setStatus(1);
             entity.setSource("upload");
+        } else if (IMMUTABLE_FILE_CATEGORY.equals(entity.getCategory())) {
+            throw new BusinessException("文件库中的通用画面为原始资产，不支持修改");
         }
         entity.setProjectId(StringUtils.hasText(dto.getProjectId()) ? Integer.valueOf(dto.getProjectId()) : null);
         entity.setAssetName(dto.getName());
@@ -99,7 +102,11 @@ public class AssetServiceImpl implements AssetService {
 
     @Override
     public void deleteAsset(Integer id) {
-        assetMapper.deleteById(ownedAsset(id).getId());
+        AiAsset entity = ownedAsset(id);
+        if (IMMUTABLE_FILE_CATEGORY.equals(entity.getCategory())) {
+            throw new BusinessException("文件库中的通用画面为原始资产，不支持删除");
+        }
+        assetMapper.deleteById(entity.getId());
     }
 
     @Override

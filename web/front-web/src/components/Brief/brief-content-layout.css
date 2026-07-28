@@ -108,6 +108,20 @@
   padding-left: 22px;
 }
 
+html[data-color-mode='light'] .brief-content-layout {
+  --brief-content-border: #d8e0e3 !important;
+  --brief-content-surface: #ffffff !important;
+  --brief-content-panel: #f7f9f8 !important;
+  --brief-content-label: #3f4b51 !important;
+  --brief-content-text: #263136 !important;
+  color: var(--brief-content-text) !important;
+}
+
+html[data-color-mode='light'] .brief-content-overview,
+html[data-color-mode='light'] .brief-content-selling-grid {
+  box-shadow: 0 6px 18px rgba(38, 48, 54, 0.05);
+}
+
 @media (max-width: 900px) {
   .brief-content-overview,
   .brief-content-selling-grid {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, RefreshCcw, Save, Trash2 } from 'lucide-react';
+import { CheckCircle, LockKeyhole, Plus, RefreshCcw, Save, Send, Trash2, UnlockKeyhole, XCircle } from 'lucide-react';
 import { templateApi, type Template } from '../../api/template';
 import { DEFAULT_PAGE_SIZE, EmptyState, Modal, Pagination } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
@@ -84,7 +84,16 @@ const emptyForm: TemplateForm = {
   referenceUrl: '',
   referenceDesc: '',
   sortOrder: 0,
-  status: 'active',
+  auditStatus: 'draft',
+  publishStatus: 'offline',
+  locked: false,
+};
+
+const auditStatusLabels: Record<NonNullable<Template['auditStatus']>, string> = {
+  draft: '草稿',
+  running: '运行中',
+  approved: '审核通过',
+  rejected: '审核失败',
 };
 
 const TemplateListPage = () => {
@@ -211,6 +220,20 @@ const TemplateListPage = () => {
     }
   };
 
+  const updateState = async (
+    template: Template,
+    patch: Pick<Partial<Template>, 'auditStatus' | 'publishStatus' | 'locked'>,
+    successMessage: string,
+  ) => {
+    try {
+      const updated = await templateApi.updateState(template.id, patch);
+      setTemplates((current) => current.map((item) => item.id === updated.id ? updated : item));
+      notify(successMessage);
+    } catch {
+      notify('模板状态更新失败');
+    }
+  };
+
   const rows = useMemo(() => templates, [templates]);
 
   return (
@@ -253,7 +276,7 @@ const TemplateListPage = () => {
         <>
         <div className="admin-table">
           <div className="table-head template-table-grid">
-            <span>序号</span><span>模板来源</span><span>模板名称</span><span>参考链接</span><span>人数</span><span>标签</span><span>操作</span>
+            <span>序号</span><span>模板来源</span><span>模板名称</span><span>参考链接</span><span>人数</span><span>标签</span><span>审核状态</span><span>上下架</span><span>使用权限</span><span>操作</span>
           </div>
           {rows.map((template, index) => (
             <div className="table-row template-table-grid" key={template.id}>
@@ -265,7 +288,44 @@ const TemplateListPage = () => {
               ) : <span>-</span>}
               <span>{template.people || '-'}</span>
               <span className="template-tag">{template.difficulty || '-'}</span>
+              <span className={`template-status-badge audit-${template.auditStatus || 'draft'}`}>
+                {auditStatusLabels[template.auditStatus || 'draft']}
+              </span>
+              <span className={`template-status-badge publish-${template.publishStatus || 'offline'}`}>
+                {template.publishStatus === 'online' ? '已上架' : '已下架'}
+              </span>
+              <span className={`template-status-badge ${template.locked ? 'is-locked' : 'is-unlocked'}`}>
+                {template.locked ? <><LockKeyhole size={13} />已加锁</> : <><UnlockKeyhole size={13} />可使用</>}
+              </span>
               <div className="table-actions">
+                {template.auditStatus === 'running' ? (
+                  <>
+                    <button className="table-btn success" type="button" onClick={() => updateState(template, { auditStatus: 'approved' }, '模板审核已通过')}><CheckCircle size={14} />通过</button>
+                    <button className="table-btn danger" type="button" onClick={() => updateState(template, { auditStatus: 'rejected' }, '模板已标记为审核失败')}><XCircle size={14} />驳回</button>
+                  </>
+                ) : template.auditStatus !== 'approved' ? (
+                  <button className="table-btn" type="button" onClick={() => updateState(template, { auditStatus: 'running' }, '模板已提交审核')}><Send size={14} />提交审核</button>
+                ) : (
+                  <button
+                    className={`table-btn ${template.publishStatus === 'online' ? 'warning' : 'success'}`}
+                    type="button"
+                    onClick={() => updateState(
+                      template,
+                      { publishStatus: template.publishStatus === 'online' ? 'offline' : 'online' },
+                      template.publishStatus === 'online' ? '模板已下架' : '模板已上架',
+                    )}
+                  >
+                    {template.publishStatus === 'online' ? '下架' : '上架'}
+                  </button>
+                )}
+                <button
+                  className="table-btn"
+                  type="button"
+                  onClick={() => updateState(template, { locked: !template.locked }, template.locked ? '模板已解锁' : '模板已加锁')}
+                >
+                  {template.locked ? <UnlockKeyhole size={14} /> : <LockKeyhole size={14} />}
+                  {template.locked ? '解锁' : '加锁'}
+                </button>
                 <button className="table-btn" type="button" onClick={() => openEdit(template)}>编辑</button>
                 <button className="table-btn danger" type="button" onClick={() => setDeleteId(template.id)}><Trash2 size={15} />删除</button>
               </div>
@@ -296,6 +356,20 @@ const TemplateListPage = () => {
           <label className="field"><span>标签</span><input value={form.difficulty || ''} onChange={(e) => setForm({ ...form, difficulty: e.target.value })} /></label>
           <label className="field"><span>排序序号</span><input type="number" min="1" value={form.sortOrder ?? ''} onChange={(e) => setForm({ ...form, sortOrder: optionalNumberFromInput(e.target.value) })} /><small>数字越小越靠前；相同序号按修改时间倒序。</small></label>
           <label className="field"><span>URL 链接</span><input value={form.referenceUrl || ''} onChange={(e) => setForm({ ...form, referenceUrl: e.target.value })} placeholder="https://" /></label>
+          <label className="field template-lock-field">
+            <span>前台使用权限</span>
+            <button
+              className={`template-lock-toggle${form.locked ? ' active' : ''}`}
+              type="button"
+              role="switch"
+              aria-checked={Boolean(form.locked)}
+              onClick={() => setForm({ ...form, locked: !form.locked })}
+            >
+              {form.locked ? <LockKeyhole size={16} /> : <UnlockKeyhole size={16} />}
+              {form.locked ? '已加锁，前台不可使用' : '未加锁，前台可使用'}
+            </button>
+            <small>加锁模板仍在前台显示，但用户不能选择；后续可接入会员等级解锁。</small>
+          </label>
         </div>
         <label className="field" style={{ marginTop: 14 }}>
           <span>URL 内容描述</span>

@@ -31,6 +31,8 @@ export interface ScriptTemplate {
   sortOrder?: number;
   createdAt?: string;
   updatedAt?: string;
+  auditStatus?: 'draft' | 'running' | 'approved' | 'rejected';
+  publishStatus?: 'online' | 'offline';
   locked: boolean;
 }
 
@@ -72,6 +74,10 @@ export interface ScriptPolishMessage {
 export interface PolishScriptParams {
   instruction: string;
   content: string;
+  briefId?: string;
+  productImage?: string;
+  productFrameFileName?: string;
+  productFrameContent?: string;
 }
 
 export interface PolishScriptResult {

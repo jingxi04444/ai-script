@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import {
   SearchOutlined,
   DownOutlined,
@@ -29,9 +29,17 @@ const getCategoryTypeTones = (category: string) => {
     爆款复刻脚本: ['viral'],
     平台模板库脚本: ['template'],
     'AI 原创脚本': ['original'],
-    以产品维度的脚本: ['product', 'product-dimension'],
+    以产品维度的脚本: null,
   };
   return map[category] ?? null;
+};
+
+const getScriptProductGroup = (name: string) => {
+  const productName = name
+    .replace(/(?:爆款复刻|脚本模板库|AI原创).*$/i, '')
+    .replace(/20\d{6}.*$/, '')
+    .trim();
+  return productName || '其他产品';
 };
 
 interface StoryboardPanelProps {
@@ -44,6 +52,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
   const [viewMode, setViewMode] = useState<'list' | 'card'>('list');
   const [currentPage, setCurrentPage] = useState(1);
   const [scripts, setScripts] = useState<Script[]>([]);
+  const [totalScripts, setTotalScripts] = useState(0);
   const [searchText, setSearchText] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -52,10 +61,42 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
   const [renameDraft, setRenameDraft] = useState('');
   const pageSize = viewMode === 'card' ? 6 : 10;
 
+  const categoryTypeTones = getCategoryTypeTones(activeCategory);
+  const requestedType = typeFilter !== 'all'
+    ? (!categoryTypeTones || categoryTypeTones.includes(typeFilter) ? typeFilter : '__none__')
+    : categoryTypeTones?.join(',');
+
   useEffect(() => {
-    if (!projectId) return;
-    scriptApi.getList(projectId).then(setScripts).catch(() => message.warning('脚本列表加载失败'));
-  }, [projectId]);
+    if (!projectId) {
+      setScripts([]);
+      setTotalScripts(0);
+      return;
+    }
+    let disposed = false;
+    setScripts([]);
+    const timer = window.setTimeout(() => {
+      scriptApi.getPage({
+        projectId,
+        page: currentPage,
+        pageSize,
+        keyword: searchText.trim() || undefined,
+        type: requestedType || undefined,
+        status: statusFilter === 'all' ? undefined : statusFilter,
+        sortBy: activeCategory === '以产品维度的脚本' ? 'product' : 'updated',
+      }).then((result) => {
+        if (disposed) return;
+        setScripts(result.list || []);
+        setTotalScripts(result.total || 0);
+        if (result.pages && currentPage > result.pages) setCurrentPage(result.pages);
+      }).catch(() => {
+        if (!disposed) message.warning('脚本列表加载失败');
+      });
+    }, 250);
+    return () => {
+      disposed = true;
+      window.clearTimeout(timer);
+    };
+  }, [activeCategory, currentPage, pageSize, projectId, requestedType, searchText, statusFilter]);
 
   const apiItems = scripts.map((script) => {
     const typeTone = script.type as string;
@@ -68,25 +109,12 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
       status: script.status === 'done' ? '已完成' : script.status === 'pending' ? '待润色' : '草稿',
       statusTone: script.status,
       content: script.content || script.name,
+      productGroup: getScriptProductGroup(script.name),
     };
   });
   const allItems = apiItems;
-  const categoryTypeTones = getCategoryTypeTones(activeCategory);
-  const categoryItems = categoryTypeTones
-    ? allItems.filter((item) => categoryTypeTones.includes(item.typeTone))
-    : allItems;
-  const filteredItems = categoryItems.filter((item) => {
-    const matchesSearch = !searchText.trim() || item.name.toLowerCase().includes(searchText.trim().toLowerCase());
-    const matchesType = typeFilter === 'all' || item.typeTone === typeFilter;
-    const matchesStatus = statusFilter === 'all' || item.statusTone === statusFilter;
-    return matchesSearch && matchesType && matchesStatus;
-  });
-
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
-  const paginatedItems = filteredItems.slice(
-    (currentPage - 1) * pageSize,
-    currentPage * pageSize
-  );
+  const totalPages = Math.max(1, Math.ceil(totalScripts / pageSize));
+  const paginatedItems = allItems;
 
   const previewScript = async (id: string) => {
     const currentItem = allItems.find((script) => script.id === id);
@@ -119,9 +147,14 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
     message.success('已返回脚本生成器，可继续编辑润色');
   };
 
-  const copyScript = async (text: string) => {
-    if (navigator.clipboard) await navigator.clipboard.writeText(text);
-    message.success('脚本内容已复制');
+  const copyScript = async (id: string) => {
+    try {
+      const script = await scriptApi.getById(id);
+      if (navigator.clipboard) await navigator.clipboard.writeText(script.content || '');
+      message.success('脚本内容已复制');
+    } catch {
+      message.error('脚本内容加载失败');
+    }
   };
 
   const startRenameScript = (id: string, name: string) => {
@@ -217,10 +250,13 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
       <section className="storyboard-library-summary">
         <div>
           <h2>{activeCategory}</h2>
-          <p>{activeCategory}共 {filteredItems.length} 篇，按更新时间倒序展示。</p>
+          <p>
+            {activeCategory}共 {totalScripts} 篇，
+            {activeCategory === '以产品维度的脚本' ? '按产品分组，组内按更新时间倒序展示。' : '按更新时间倒序展示。'}
+          </p>
         </div>
         <div className="storyboard-summary-actions">
-          <span>{filteredItems.length} 篇脚本</span>
+          <span>{totalScripts} 篇脚本</span>
           <div className="storyboard-view-toggle">
             <button className={viewMode === 'list' ? 'active' : ''} onClick={() => { setViewMode('list'); setCurrentPage(1); }}>
               <UnorderedListOutlined />列表
@@ -270,8 +306,17 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
               <span>状态</span>
               <span>操作</span>
             </div>
-            {paginatedItems.length ? paginatedItems.map((item) => (
-              <article className="storyboard-table-row" key={item.id}>
+            {paginatedItems.length ? paginatedItems.map((item, index) => (
+              <Fragment key={item.id}>
+                {activeCategory === '以产品维度的脚本'
+                  && (index === 0 || paginatedItems[index - 1].productGroup !== item.productGroup)
+                  && (
+                    <div className="storyboard-product-group">
+                      <span>{item.productGroup}</span>
+                      <small>产品脚本</small>
+                    </div>
+                  )}
+                <article className="storyboard-table-row">
                 {renamingScriptId === item.id ? (
                   <input
                     autoFocus
@@ -302,10 +347,11 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
                 <div className="storyboard-row-actions">
                   <button onClick={() => previewScript(item.id)}><EyeOutlined />预览</button>
                   <button onClick={() => polishScript(item.id)}><EditOutlined />继续润色</button>
-                  <button onClick={() => copyScript(item.content)}><CopyOutlined />复制</button>
+                  <button onClick={() => copyScript(item.id)}><CopyOutlined />复制</button>
                   <button onClick={() => message.info(`更多操作：${item.name}`)}><MoreOutlined />更多</button>
                 </div>
-              </article>
+                </article>
+              </Fragment>
             )) : (
               <div className="storyboard-empty-state">
                 <FileTextOutlined />
@@ -316,8 +362,17 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
           </div>
         ) : (
           <div className="storyboard-card-view">
-            {paginatedItems.length ? paginatedItems.map((item) => (
-              <article className={`storyboard-script-card ${item.typeTone}`} key={item.id}>
+            {paginatedItems.length ? paginatedItems.map((item, index) => (
+              <Fragment key={item.id}>
+                {activeCategory === '以产品维度的脚本'
+                  && (index === 0 || paginatedItems[index - 1].productGroup !== item.productGroup)
+                  && (
+                    <div className="storyboard-product-group card-group">
+                      <span>{item.productGroup}</span>
+                      <small>产品脚本</small>
+                    </div>
+                  )}
+                <article className={`storyboard-script-card ${item.typeTone}`}>
                 <em className={`script-type ${item.typeTone}`}>{item.type}</em>
                 <div className="storyboard-card-art"><span /><b /><i /></div>
                 <h3>{item.name}</h3>
@@ -326,10 +381,11 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
                 <div className="storyboard-card-actions">
                   <button onClick={() => previewScript(item.id)}><EyeOutlined />预览</button>
                   <button onClick={() => polishScript(item.id)}><EditOutlined />继续润色</button>
-                  <button onClick={() => copyScript(item.content)}><CopyOutlined />复制</button>
+                  <button onClick={() => copyScript(item.id)}><CopyOutlined />复制</button>
                   <button onClick={() => message.info(`更多操作：${item.name}`)}><MoreOutlined />更多</button>
                 </div>
-              </article>
+                </article>
+              </Fragment>
             )) : (
               <div className="storyboard-empty-state card-empty">
                 <FileTextOutlined />
@@ -341,7 +397,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
         )}
 
         <footer className="storyboard-pagination">
-          <span>共 {filteredItems.length} 条</span>
+          <span>共 {totalScripts} 条</span>
           <div>
             <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}><LeftOutlined /></button>
             {Array.from({ length: totalPages }, (_, i) => (

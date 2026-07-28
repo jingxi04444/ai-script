@@ -41,6 +41,8 @@ public final class ScriptConvert {
         vo.setReferenceDesc(template.getReferenceDesc());
         vo.setSortOrder(template.getSortOrder());
         vo.setStatus(template.getStatus() != null && template.getStatus() == 1 ? "active" : "disabled");
+        vo.setAuditStatus(template.getAuditStatus());
+        vo.setPublishStatus(template.getPublishStatus());
         vo.setLocked(template.getLocked() != null && template.getLocked() == 1);
         vo.setCreatedAt(template.getCreateTime() == null ? null : template.getCreateTime().toString());
         vo.setUpdatedAt(template.getUpdateTime() == null ? null : template.getUpdateTime().toString());

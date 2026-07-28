@@ -15,10 +15,12 @@ import com.aiscript.modules.script.dto.GenerateScriptDTO;
 import com.aiscript.modules.script.dto.PolishScriptDTO;
 import com.aiscript.modules.script.dto.ScriptSaveDTO;
 import com.aiscript.modules.script.dto.TemplateSaveDTO;
+import com.aiscript.modules.script.dto.TemplateStateDTO;
 import com.aiscript.modules.script.entity.AiScriptTemplate;
 import com.aiscript.modules.script.mapper.AiScriptTemplateMapper;
 import com.aiscript.modules.script.service.ScriptService;
 import com.aiscript.modules.script.vo.PolishScriptVO;
+import com.aiscript.modules.script.vo.ScriptListVO;
 import com.aiscript.modules.script.vo.ScriptTemplateVO;
 import com.aiscript.modules.script.vo.ScriptVO;
 import com.aiscript.modules.storyboard.entity.AiStoryboardScript;
@@ -39,6 +41,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Service;
@@ -93,6 +96,37 @@ public class ScriptServiceImpl implements ScriptService {
             .stream()
             .map(ScriptConvert::toScriptVO)
             .toList();
+    }
+
+    @Override
+    public PageResult<ScriptListVO> page(PageQuery query, Integer projectId, String type, String status, String sortBy) {
+        List<String> scriptTypes = StringUtils.hasText(type)
+            ? Arrays.stream(type.split(","))
+                .map(String::trim)
+                .filter(StringUtils::hasText)
+                .distinct()
+                .toList()
+            : List.of();
+        String keyword = StringUtils.hasText(query.getKeyword()) ? query.getKeyword().trim() : null;
+        String normalizedStatus = StringUtils.hasText(status) ? status.trim() : null;
+        Page<ScriptListVO> page = new Page<>(query.getPage(), query.getPageSize());
+        IPage<ScriptListVO> result = scriptMapper.selectScriptPage(
+            page,
+            currentTenantId(),
+            currentUserId(),
+            projectId,
+            keyword,
+            scriptTypes,
+            normalizedStatus,
+            "product".equals(sortBy) ? "product" : "updated"
+        );
+        return new PageResult<>(
+            result.getRecords(),
+            result.getTotal(),
+            result.getCurrent(),
+            result.getSize(),
+            result.getPages()
+        );
     }
 
     @Override
@@ -170,16 +204,44 @@ public class ScriptServiceImpl implements ScriptService {
         }
 
         String instruction = dto.getInstruction().trim();
+        AiBrief brief = null;
+        if (StringUtils.hasText(dto.getBriefId())) {
+            try {
+                brief = briefMapper.selectOne(new LambdaQueryWrapper<AiBrief>()
+                    .eq(AiBrief::getId, Integer.valueOf(dto.getBriefId()))
+                    .eq(AiBrief::getTenantId, currentTenantId())
+                    .last("LIMIT 1"));
+            } catch (NumberFormatException ignored) {
+                brief = null;
+            }
+        }
+        String referenceContext = List.of(
+            brief == null ? "" : "【本次重新调用的产品 Brief】\n" + buildProductInfo(brief),
+            StringUtils.hasText(dto.getProductFrameFileName())
+                ? "【本次引用的画面文件】\n文件名：" + dto.getProductFrameFileName()
+                : "",
+            StringUtils.hasText(dto.getProductFrameContent())
+                ? "【画面表格解析内容】\n" + dto.getProductFrameContent()
+                : "",
+            StringUtils.hasText(dto.getProductImage())
+                ? "【画面/截图】已随请求附加，请结合图片中真实可见的信息修改脚本。"
+                : ""
+        ).stream().filter(StringUtils::hasText).reduce((a, b) -> a + "\n\n" + b).orElse("");
         Map<String, String> variables = new HashMap<>();
-        variables.put("instruction", instruction);
+        variables.put("instruction", StringUtils.hasText(referenceContext)
+            ? instruction + "\n\n" + referenceContext
+            : instruction);
         variables.put("content", sourceContent);
+        variables.put("referenceContext", referenceContext);
         PromptRenderService.RenderedPrompt renderedPrompt = promptRenderService.render(
             "script_polish",
-            "你是专业商业短视频脚本编辑。请严格依据用户的修改要求润色原脚本，保持原脚本的输出格式和表格列结构，只输出修改后的完整脚本，不要解释修改过程，不要添加 Markdown 代码块。",
-            "请按修改要求重写原脚本。\n\n【修改要求】\n{{instruction}}\n\n【原脚本】\n{{content}}",
+            "你是专业商业短视频脚本编辑。请严格依据用户的修改要求，以及本次重新提供的产品 Brief、画面表格或截图润色原脚本。用户要求重新选择卖点时，只能从 Brief 和画面中的真实信息选择。保持原脚本的输出格式和表格列结构，只输出修改后的完整脚本，不要解释修改过程，不要添加 Markdown 代码块。",
+            "请按修改要求重写原脚本。\n\n【修改要求】\n{{instruction}}\n\n{{referenceContext}}\n\n【原脚本】\n{{content}}",
             variables
         );
-        String polishedContent = llmClient.chat(renderedPrompt.getSystemPrompt(), renderedPrompt.getUserPrompt());
+        String polishedContent = StringUtils.hasText(dto.getProductImage())
+            ? llmClient.chatWithImages(renderedPrompt.getSystemPrompt(), renderedPrompt.getUserPrompt(), List.of(dto.getProductImage()))
+            : llmClient.chat(renderedPrompt.getSystemPrompt(), renderedPrompt.getUserPrompt());
         if (!StringUtils.hasText(polishedContent) || "{}".equals(polishedContent.trim())) {
             throw new BusinessException("AI 未返回有效的润色内容，请稍后重试");
         }
@@ -215,6 +277,8 @@ public class ScriptServiceImpl implements ScriptService {
     public List<ScriptTemplateVO> enabledTemplates() {
         return templateMapper.selectList(new LambdaQueryWrapper<AiScriptTemplate>()
                 .eq(AiScriptTemplate::getStatus, 1)
+                .eq(AiScriptTemplate::getAuditStatus, "approved")
+                .eq(AiScriptTemplate::getPublishStatus, "online")
                 .orderByAsc(AiScriptTemplate::getSortOrder)
                 .orderByDesc(AiScriptTemplate::getUpdateTime)
                 .orderByAsc(AiScriptTemplate::getId))
@@ -259,6 +323,9 @@ public class ScriptServiceImpl implements ScriptService {
     public ScriptTemplateVO createTemplate(TemplateSaveDTO dto) {
         AiScriptTemplate template = new AiScriptTemplate();
         fillTemplate(template, dto);
+        template.setAuditStatus("draft");
+        template.setPublishStatus("offline");
+        template.setStatus(0);
         templateMapper.insert(template);
         return ScriptConvert.toTemplateVO(template);
     }
@@ -271,6 +338,42 @@ public class ScriptServiceImpl implements ScriptService {
             throw new BusinessException("模板不存在");
         }
         fillTemplate(template, dto);
+        templateMapper.updateById(template);
+        return ScriptConvert.toTemplateVO(template);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ScriptTemplateVO updateTemplateState(Integer id, TemplateStateDTO dto) {
+        AiScriptTemplate template = templateMapper.selectById(id);
+        if (template == null) {
+            throw new BusinessException("模板不存在");
+        }
+        if (StringUtils.hasText(dto.getAuditStatus())) {
+            String auditStatus = dto.getAuditStatus();
+            if (!List.of("draft", "running", "approved", "rejected").contains(auditStatus)) {
+                throw new BusinessException("模板审核状态无效");
+            }
+            template.setAuditStatus(auditStatus);
+            if (!"approved".equals(auditStatus)) {
+                template.setPublishStatus("offline");
+                template.setStatus(0);
+            }
+        }
+        if (StringUtils.hasText(dto.getPublishStatus())) {
+            String publishStatus = dto.getPublishStatus();
+            if (!List.of("online", "offline").contains(publishStatus)) {
+                throw new BusinessException("模板上下架状态无效");
+            }
+            if ("online".equals(publishStatus) && !"approved".equals(template.getAuditStatus())) {
+                throw new BusinessException("模板审核通过后才能上架");
+            }
+            template.setPublishStatus(publishStatus);
+            template.setStatus("online".equals(publishStatus) ? 1 : 0);
+        }
+        if (dto.getLocked() != null) {
+            template.setLocked(Boolean.TRUE.equals(dto.getLocked()) ? 1 : 0);
+        }
         templateMapper.updateById(template);
         return ScriptConvert.toTemplateVO(template);
     }
@@ -478,6 +581,12 @@ public class ScriptServiceImpl implements ScriptService {
             if (template == null) {
                 return "模板要求：按标准短视频分镜脚本生成。";
             }
+            if (!"approved".equals(template.getAuditStatus()) || !"online".equals(template.getPublishStatus())) {
+                throw new BusinessException("该模板尚未审核通过或已下架");
+            }
+            if (template.getLocked() != null && template.getLocked() == 1) {
+                throw new BusinessException("该模板暂未解锁");
+            }
             return "模板要求：参考模板《" + template.getTemplateName() + "》；分类：" + nullToEmpty(template.getCategory())
                 + "；适用演员/账号：" + nullToEmpty(template.getActor())
                 + "；适用人群：" + nullToEmpty(template.getPeople())
@@ -559,7 +668,8 @@ public class ScriptServiceImpl implements ScriptService {
         template.setReferenceUrl(dto.getReferenceUrl());
         template.setReferenceDesc(dto.getReferenceDesc());
         template.setSortOrder(dto.getSortOrder() == null ? 0 : dto.getSortOrder());
-        template.setLocked(0);
-        template.setStatus("disabled".equals(dto.getStatus()) ? 0 : 1);
+        if (dto.getLocked() != null || template.getLocked() == null) {
+            template.setLocked(Boolean.TRUE.equals(dto.getLocked()) ? 1 : 0);
+        }
     }
 }

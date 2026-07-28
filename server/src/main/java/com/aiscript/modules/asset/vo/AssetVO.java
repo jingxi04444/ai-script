@@ -11,5 +11,8 @@ public class AssetVO {
     private String category;
     private String previewUrl;
     private String storageKey;
+    private String mimeType;
+    private Long fileSizeBytes;
+    private String metadataJson;
     private String status;
 }

@@ -20,4 +20,5 @@ public class TemplateSaveDTO {
     private String referenceDesc;
     private Integer sortOrder;
     private String status;
+    private Boolean locked;
 }

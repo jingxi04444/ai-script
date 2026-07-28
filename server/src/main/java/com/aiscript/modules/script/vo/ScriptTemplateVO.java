@@ -21,6 +21,8 @@ public class ScriptTemplateVO {
     private String referenceDesc;
     private Integer sortOrder;
     private String status;
+    private String auditStatus;
+    private String publishStatus;
     private Boolean locked;
     private String createdAt;
     private String updatedAt;

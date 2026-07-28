@@ -8,6 +8,9 @@ export interface Asset {
   category?: string;
   previewUrl?: string;
   storageKey?: string;
+  mimeType?: string;
+  fileSizeBytes?: number;
+  metadataJson?: string;
   status?: string;
 }
 

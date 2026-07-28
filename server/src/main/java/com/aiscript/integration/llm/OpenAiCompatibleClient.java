@@ -31,6 +31,15 @@ public class OpenAiCompatibleClient implements LlmClient {
 
     @Override
     public String chat(String systemPrompt, String userPrompt) {
+        return sendChat(systemPrompt, userPrompt, List.of());
+    }
+
+    @Override
+    public String chatWithImages(String systemPrompt, String userPrompt, List<String> imageUrls) {
+        return sendChat(systemPrompt, userPrompt, imageUrls == null ? List.of() : imageUrls);
+    }
+
+    private String sendChat(String systemPrompt, String userPrompt, List<String> imageUrls) {
         SysApiProviderConfig provider = providerConfigService.firstEnabled("llm");
         if (provider == null || !StringUtils.hasText(provider.getEndpointUrl())) {
             throw new BusinessException("未配置LLM Provider");
@@ -39,9 +48,21 @@ public class OpenAiCompatibleClient implements LlmClient {
         String model = String.valueOf(config.getOrDefault("model", "gpt-4o-mini"));
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
+        Object userContent = userPrompt == null ? "" : userPrompt;
+        if (!imageUrls.isEmpty()) {
+            List<Map<String, Object>> contentParts = new java.util.ArrayList<>();
+            contentParts.add(Map.of("type", "text", "text", userContent));
+            imageUrls.stream()
+                .filter(StringUtils::hasText)
+                .forEach(url -> contentParts.add(Map.of(
+                    "type", "image_url",
+                    "image_url", Map.of("url", url)
+                )));
+            userContent = contentParts;
+        }
         payload.put("messages", List.of(
-                Map.of("role", "system", "content", systemPrompt == null ? "" : systemPrompt),
-                Map.of("role", "user", "content", userPrompt == null ? "" : userPrompt)
+            Map.of("role", "system", "content", systemPrompt == null ? "" : systemPrompt),
+            Map.of("role", "user", "content", userContent)
         ));
         Object thinking = normalizeThinking(config.get("thinking"));
         if (thinking != null) {

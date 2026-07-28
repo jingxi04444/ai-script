@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiscript.modules.storyboard.mapper.AiStoryboardScriptMapper">
+
+    <select id="selectScriptPage"
+            resultType="com.aiscript.modules.script.vo.ScriptListVO">
+        SELECT
+            id,
+            script_name AS name,
+            project_id AS project_id,
+            script_type AS type,
+            status,
+            create_time AS created_at,
+            update_time AS updated_at
+        FROM ai_storyboard_script
+        WHERE deleted = 0
+          AND tenant_id = #{tenantId}
+          AND create_by = #{creatorId}
+          AND project_id = #{projectId}
+        <if test="keyword != null and keyword != ''">
+            AND script_name LIKE CONCAT('%', #{keyword}, '%')
+        </if>
+        <if test="scriptTypes != null and !scriptTypes.isEmpty()">
+            AND script_type IN
+            <foreach collection="scriptTypes" item="scriptType" open="(" separator="," close=")">
+                #{scriptType}
+            </foreach>
+        </if>
+        <if test="status != null and status != ''">
+            AND status = #{status}
+        </if>
+        <choose>
+            <when test="sortBy == 'product'">
+                ORDER BY
+                    TRIM(
+                        CASE
+                            WHEN LOCATE('爆款复刻', script_name) &gt; 0 THEN LEFT(script_name, LOCATE('爆款复刻', script_name) - 1)
+                            WHEN LOCATE('脚本模板库', script_name) &gt; 0 THEN LEFT(script_name, LOCATE('脚本模板库', script_name) - 1)
+                            WHEN LOCATE('AI原创', script_name) &gt; 0 THEN LEFT(script_name, LOCATE('AI原创', script_name) - 1)
+                            ELSE script_name
+                        END
+                    ) ASC,
+                    update_time DESC,
+                    id DESC
+            </when>
+            <otherwise>
+                ORDER BY update_time DESC, id DESC
+            </otherwise>
+        </choose>
+    </select>
+
+</mapper>

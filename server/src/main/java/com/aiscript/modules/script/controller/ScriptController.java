@@ -1,11 +1,14 @@
 package com.aiscript.modules.script.controller;
 
+import com.aiscript.common.api.PageResult;
 import com.aiscript.common.api.R;
+import com.aiscript.common.pagination.PageQuery;
 import com.aiscript.modules.script.dto.GenerateScriptDTO;
 import com.aiscript.modules.script.dto.PolishScriptDTO;
 import com.aiscript.modules.script.dto.ScriptSaveDTO;
 import com.aiscript.modules.script.service.ScriptService;
 import com.aiscript.modules.script.vo.PolishScriptVO;
+import com.aiscript.modules.script.vo.ScriptListVO;
 import com.aiscript.modules.script.vo.ScriptTemplateVO;
 import com.aiscript.modules.script.vo.ScriptVO;
 import jakarta.validation.Valid;
@@ -32,6 +35,19 @@ public class ScriptController {
     @GetMapping
     public R<List<ScriptVO>> list(@RequestParam Integer projectId) {
         return R.ok(scriptService.list(projectId));
+    }
+
+    @GetMapping("/page")
+    public R<PageResult<ScriptListVO>> page(
+        @Valid PageQuery query,
+        @RequestParam Integer projectId,
+        @RequestParam(required = false) String type,
+        @RequestParam(required = false) String status,
+        @RequestParam(required = false) String sortBy
+    ) {
+        return R.ok(sortBy == null
+            ? scriptService.page(query, projectId, type, status)
+            : scriptService.page(query, projectId, type, status, sortBy));
     }
 
     @GetMapping("/mine")

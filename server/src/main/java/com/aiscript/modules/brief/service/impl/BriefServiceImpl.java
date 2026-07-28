@@ -303,26 +303,22 @@ public class BriefServiceImpl implements BriefService {
         ResolvedShareLink resolved = resolveShareLink(token);
         AiBrief brief = resolved.brief();
         Integer viewerId = currentUserIdOrNull();
-        if (viewerId != null) {
-            if (viewerId.equals(brief.getCreateBy())) {
-                throw new BusinessException("不能使用自己创建的 Brief 分享链接");
-            }
+        boolean owner = viewerId != null && viewerId.equals(brief.getCreateBy());
+        if (viewerId != null && !owner) {
             upsertCollaborator(brief, viewerId, resolved.permission(), "link");
         }
-        return toVOWithVersions(brief, resolved.permission());
+        return toVOWithVersions(brief, owner ? "manage" : resolved.permission());
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BriefVO updateByShareToken(String token, Integer projectId, BriefSaveDTO dto) {
         ResolvedShareLink resolved = resolveShareLink(token);
-        if ("read".equals(resolved.permission())) {
-            throw new BusinessException("当前分享链接仅可阅读，不能修改 Brief");
-        }
         Integer userId = requireCurrentUserId();
         AiBrief brief = resolved.brief();
-        if (userId.equals(brief.getCreateBy())) {
-            throw new BusinessException("不能使用自己创建的 Brief 分享链接");
+        boolean owner = userId.equals(brief.getCreateBy());
+        if (!owner && "read".equals(resolved.permission())) {
+            throw new BusinessException("当前分享链接仅可阅读，不能修改 Brief");
         }
         ensureOwnedProject(projectId);
         Long referenceCount = projectBriefRefMapper.selectCount(new LambdaQueryWrapper<AiProjectBriefRef>()
@@ -332,12 +328,14 @@ public class BriefServiceImpl implements BriefService {
         if (referenceCount == 0) {
             throw new BusinessException("请先将共享 Brief 加入所选项目");
         }
-        upsertCollaborator(brief, userId, resolved.permission(), "link");
+        if (!owner) {
+            upsertCollaborator(brief, userId, resolved.permission(), "link");
+        }
         fillPartial(brief, dto);
         brief.setVersionNo(brief.getVersionNo() == null ? 1 : brief.getVersionNo() + 1);
         briefMapper.updateById(brief);
         saveVersion(brief, "share-link-update");
-        return toVOWithVersions(brief, resolved.permission());
+        return toVOWithVersions(brief, owner ? "manage" : resolved.permission());
     }
 
     @Override
@@ -345,11 +343,9 @@ public class BriefServiceImpl implements BriefService {
     public BriefVO linkToProject(Integer id, Integer projectId) {
         AiBrief brief = getBrief(id);
         Integer userId = requireCurrentUserId();
-        if (userId.equals(brief.getCreateBy())) {
-            throw new BusinessException("不能将自己创建的 Brief 作为共享 Brief 加入项目");
-        }
+        boolean owner = userId.equals(brief.getCreateBy());
         ensureOwnedProject(projectId);
-        if (!hasCollaboratorPermission(brief.getId(), userId, "read", "edit", "manage")) {
+        if (!owner && !hasCollaboratorPermission(brief.getId(), userId, "read", "edit", "manage")) {
             throw new BusinessException("请先通过有效分享链接访问该 Brief");
         }
 

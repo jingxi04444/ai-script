@@ -663,14 +663,16 @@ CREATE TABLE ai_script_template (
   reference_desc TEXT DEFAULT NULL COMMENT 'URL内容描述',
   sort_order INT NOT NULL DEFAULT 0 COMMENT '展示排序序号，越小越靠前',
   locked TINYINT NOT NULL DEFAULT 0 COMMENT '是否锁定',
-  status TINYINT NOT NULL DEFAULT 1 COMMENT '状态：0禁用 1启用',
+  status TINYINT NOT NULL DEFAULT 1 COMMENT '兼容状态：0下架 1上架',
+  audit_status VARCHAR(20) NOT NULL DEFAULT 'approved' COMMENT '审核状态：draft草稿/running运行中/approved审核通过/rejected审核失败',
+  publish_status VARCHAR(16) NOT NULL DEFAULT 'online' COMMENT '上架状态：online上架/offline下架',
   create_by INT DEFAULT NULL COMMENT '创建人',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   update_by INT DEFAULT NULL COMMENT '更新人',
   update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
   PRIMARY KEY (id),
-  KEY idx_ai_script_template_category (category, status),
+  KEY idx_ai_script_template_category (category, audit_status, publish_status),
   KEY idx_ai_script_template_sort (status, sort_order, update_time),
   KEY idx_ai_script_template_tenant (tenant_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='脚本模板表';
@@ -700,7 +702,8 @@ CREATE TABLE ai_storyboard_script (
   UNIQUE KEY uk_ai_storyboard_script_share (share_token),
   KEY idx_ai_storyboard_script_project (project_id),
   KEY idx_ai_storyboard_script_tenant_status (tenant_id, status),
-  KEY idx_ai_storyboard_script_creator (tenant_id, create_by, update_time)
+  KEY idx_ai_storyboard_script_creator (tenant_id, create_by, update_time),
+  KEY idx_ai_storyboard_script_project_creator_updated (tenant_id, create_by, project_id, update_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='分镜脚本主表';
 
 DROP TABLE IF EXISTS ai_script_version;

@@ -9,4 +9,8 @@ public class PolishScriptDTO {
     private String instruction;
 
     private String content;
+    private String briefId;
+    private String productImage;
+    private String productFrameFileName;
+    private String productFrameContent;
 }

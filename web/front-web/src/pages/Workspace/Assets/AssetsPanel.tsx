@@ -239,7 +239,9 @@ const AssetsPanel = ({ projectId, ensureProjectId }: AssetsPanelProps) => {
                 <span>{asset.type}</span>
                 <strong>{asset.name}</strong>
                 <small>{asset.status || 'ready'}</small>
-                <button aria-label="删除素材" onClick={() => removeAsset(asset.id)}><DeleteOutlined /></button>
+                {asset.category === 'product-frame-library'
+                  ? <small>原始文件 · 只读</small>
+                  : <button aria-label="删除素材" onClick={() => removeAsset(asset.id)}><DeleteOutlined /></button>}
               </article>
             ))}
             {!assets.length && <p className="empty-hint">暂无项目素材</p>}

@@ -3,14 +3,19 @@ package com.aiscript.modules.script.controller;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.aiscript.common.api.PageResult;
 import com.aiscript.common.exception.GlobalExceptionHandler;
+import com.aiscript.common.pagination.PageQuery;
 import com.aiscript.modules.script.dto.PolishScriptDTO;
 import com.aiscript.modules.script.service.ScriptService;
 import com.aiscript.modules.script.vo.PolishScriptVO;
+import com.aiscript.modules.script.vo.ScriptListVO;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -51,5 +56,28 @@ class ScriptControllerTest {
                 .content("{\"instruction\":\" \",\"content\":\"原脚本\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(40000));
+    }
+
+    @Test
+    void scriptPageAcceptsBackendPaginationAndFilters() throws Exception {
+        ScriptListVO item = new ScriptListVO();
+        item.setId("17");
+        item.setName("分页脚本");
+        when(scriptService.page(any(PageQuery.class), eq(9), eq("viral"), eq("draft")))
+            .thenReturn(new PageResult<>(List.of(item), 12L, 2L, 10L, 2L));
+
+        mockMvc.perform(get("/api/scripts/page")
+                .param("projectId", "9")
+                .param("page", "2")
+                .param("pageSize", "10")
+                .param("keyword", "脚本")
+                .param("type", "viral")
+                .param("status", "draft"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value(0))
+            .andExpect(jsonPath("$.data.total").value(12))
+            .andExpect(jsonPath("$.data.page").value(2))
+            .andExpect(jsonPath("$.data.list[0].content").doesNotExist())
+            .andExpect(jsonPath("$.data.list[0].name").value("分页脚本"));
     }
 }

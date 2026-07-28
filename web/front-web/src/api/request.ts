@@ -87,4 +87,43 @@ api.interceptors.response.use(
   }
 );
 
+const pendingGetRequests = new Map<string, ReturnType<typeof api.get>>();
+const originalGet = api.get.bind(api);
+
+const serializeGetParams = (params: unknown) => {
+  if (params instanceof URLSearchParams) return params.toString();
+  if (!params) return '';
+  try {
+    return JSON.stringify(params);
+  } catch {
+    return String(params);
+  }
+};
+
+api.get = ((url: string, requestConfig = {}) => {
+  // React StrictMode 会在开发环境重复执行挂载阶段的 effect。
+  // 合并仍在进行中的同 URL、同参数 GET，请求完成后立即释放，不做结果缓存。
+  if (requestConfig.signal) return originalGet(url, requestConfig);
+  const token = localStorage.getItem(TOKEN_KEY) || '';
+  const requestKey = [
+    token,
+    requestConfig.baseURL || api.defaults.baseURL || '',
+    url,
+    serializeGetParams(requestConfig.params),
+    requestConfig.responseType || '',
+  ].join('::');
+  const pendingRequest = pendingGetRequests.get(requestKey);
+  if (pendingRequest) return pendingRequest;
+
+  const request = originalGet(url, requestConfig);
+  pendingGetRequests.set(requestKey, request);
+  const clearPendingRequest = () => {
+    if (pendingGetRequests.get(requestKey) === request) {
+      pendingGetRequests.delete(requestKey);
+    }
+  };
+  request.then(clearPendingRequest, clearPendingRequest);
+  return request;
+}) as typeof api.get;
+
 export default api;
