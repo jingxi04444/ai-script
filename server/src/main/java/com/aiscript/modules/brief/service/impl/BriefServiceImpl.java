@@ -367,6 +367,22 @@ public class BriefServiceImpl implements BriefService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public void unlinkFromProject(Integer id, Integer projectId) {
+        AiBrief brief = getBrief(id);
+        Integer userId = requireCurrentUserId();
+        boolean owner = userId.equals(brief.getCreateBy());
+        ensureOwnedProject(projectId);
+        if (!owner && !hasCollaboratorPermission(brief.getId(), userId, "read", "edit", "manage")) {
+            throw new BusinessException("没有权限撤回该 Brief 的项目关联");
+        }
+        projectBriefRefMapper.delete(new LambdaQueryWrapper<AiProjectBriefRef>()
+            .eq(AiProjectBriefRef::getTenantId, currentTenantId())
+            .eq(AiProjectBriefRef::getProjectId, projectId)
+            .eq(AiProjectBriefRef::getBriefId, brief.getId()));
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public BriefEditRequestVO requestEditByShareToken(String token, BriefEditRequestDTO dto) {
         ResolvedShareLink resolved = resolveShareLink(token);
         AiBrief brief = resolved.brief();

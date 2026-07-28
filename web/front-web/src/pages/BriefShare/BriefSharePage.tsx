@@ -1,7 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { message, Select } from 'antd';
-import { CloseOutlined, EditOutlined, FolderAddOutlined, LinkOutlined, SaveOutlined } from '@ant-design/icons';
+import {
+  CloseOutlined,
+  EditOutlined,
+  FolderAddOutlined,
+  LinkOutlined,
+  RollbackOutlined,
+  SaveOutlined,
+} from '@ant-design/icons';
 import { briefApi } from '../../api/brief';
 import { projectApi } from '../../api/project';
 import BriefContentLayout from '../../components/Brief/BriefContentLayout';
@@ -230,10 +237,31 @@ const BriefSharePage = () => {
     setLinkingProject(true);
     try {
       await briefApi.linkToProject(brief.id, projectId);
+      const nextSearchParams = new URLSearchParams(searchParams);
+      nextSearchParams.set('projectId', projectId);
+      navigate(`${window.location.pathname}?${nextSearchParams.toString()}`, { replace: true });
       message.success('已关联到项目，后续将持续同步同一份 Brief');
     } catch (error) {
       setSelectedProjectId(previousProjectId);
       message.error(getErrorMessage(error, '加入项目失败，请确认分享链接和项目权限'));
+    } finally {
+      setLinkingProject(false);
+    }
+  };
+
+  const unlinkBriefFromProject = async () => {
+    if (!brief || !selectedProjectId) return;
+    setLinkingProject(true);
+    try {
+      await briefApi.unlinkFromProject(brief.id, selectedProjectId);
+      setSelectedProjectId(undefined);
+      const nextSearchParams = new URLSearchParams(searchParams);
+      nextSearchParams.delete('projectId');
+      const nextQuery = nextSearchParams.toString();
+      navigate(`${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}`, { replace: true });
+      message.success('已撤回关联，该 Brief 不再填充到刚才选择的项目');
+    } catch (error) {
+      message.error(getErrorMessage(error, '撤回关联失败，请稍后重试'));
     } finally {
       setLinkingProject(false);
     }
@@ -250,8 +278,10 @@ const BriefSharePage = () => {
     <main className="brief-share-page">
       <section className={`brief-share-shell ${isEditing ? 'is-editing' : ''}`}>
         <header className="brief-share-topbar">
-          <div>
+          <div className="brief-share-heading-meta">
             <span><LinkOutlined />分享的 Brief</span>
+          </div>
+          <div className="brief-share-centered-title">
             {isEditing ? (
               <input
                 aria-label="产品名称"
@@ -261,8 +291,13 @@ const BriefSharePage = () => {
                   productName: event.target.value,
                 }))}
               />
-            ) : <h1>{displayBrief.name}</h1>}
-            <p>{isEditing ? editValues.slogan || '产品 Brief' : displayBrief.slogan || '产品 Brief'}{selectedVersion ? ` · ${selectedVersion.label}` : ''}</p>
+            ) : (
+              <h3 className="brief-share-main-title">
+                {displayBrief.productName || displayBrief.name}
+                {selectedVersion ? ` ${selectedVersion.label}` : ''}
+              </h3>
+            )}
+            {isEditing && selectedVersion ? <strong>{selectedVersion.label}</strong> : null}
           </div>
           <div className="brief-share-actions">
             <em>{permissionLabel}</em>
@@ -285,6 +320,11 @@ const BriefSharePage = () => {
                 notFoundContent={projectsLoading ? '正在加载…' : '暂无可用项目，请先创建项目'}
               />
             </div>
+            {selectedProjectId ? (
+              <button type="button" onClick={() => { void unlinkBriefFromProject(); }} disabled={linkingProject}>
+                <RollbackOutlined />撤回关联
+              </button>
+            ) : null}
             {canEdit ? (
               isEditing ? (
                 <>

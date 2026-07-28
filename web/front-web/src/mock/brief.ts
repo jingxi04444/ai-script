@@ -35,7 +35,14 @@ const mockBriefs: Brief[] = [
 ];
 
 const mockDetectionState = new Map<string, boolean>();
-const mockShareLinks = new Map<string, BriefShareResult>();
+const mockShareLinks = new Map<string, BriefShareResult>([
+  ['b1:read', {
+    briefId: 'b1',
+    shareToken: 'mock-share-b1-read',
+    shareUrl: '/brief-share/mock-share-b1-read',
+    permission: 'read',
+  }],
+]);
 const mockProjectBriefRefs = new Map<string, Set<string>>();
 
 const formatNow = () => new Intl.DateTimeFormat('zh-CN', {
@@ -206,6 +213,13 @@ export const mockBriefApi = {
     mockProjectBriefRefs.set(projectId, references);
     return unwrapApiResponse(createSuccessResponse(brief));
   },
+
+  unlinkFromProject: async (briefId: string, projectId: string) => {
+    await delay(180);
+    mockProjectBriefRefs.get(projectId)?.delete(briefId);
+    return unwrapApiResponse(createSuccessResponse(undefined));
+  },
+
   delete: async (_id: string) => {
     await delay(300);
   },

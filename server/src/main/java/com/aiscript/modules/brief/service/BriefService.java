@@ -34,6 +34,8 @@ public interface BriefService {
 
     BriefVO linkToProject(Integer id, Integer projectId);
 
+    void unlinkFromProject(Integer id, Integer projectId);
+
     BriefEditRequestVO requestEditByShareToken(String token, BriefEditRequestDTO dto);
 
     List<BriefEditRequestVO> editRequests(Integer briefId);

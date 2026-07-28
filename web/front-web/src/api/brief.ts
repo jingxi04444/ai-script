@@ -121,6 +121,11 @@ export const briefApi = {
   linkToProject: (briefId: string, projectId: string): Promise<Brief> =>
     config.useMock ? mockBriefApi.linkToProject(briefId, projectId) : api.post(`/briefs/${briefId}/link`, null, { params: { projectId } }),
 
+  unlinkFromProject: (briefId: string, projectId: string): Promise<void> =>
+    config.useMock
+      ? mockBriefApi.unlinkFromProject(briefId, projectId)
+      : api.delete(`/briefs/${briefId}/link`, { params: { projectId } }),
+
   detect: (briefId: string, data?: Partial<Brief>): Promise<BriefDetectionReport> => {
     if (config.useMock) return mockBriefApi.score(briefId);
     return api.post(`/briefs/${briefId}/ai/detect`, data || {}, { timeout: 180000 });

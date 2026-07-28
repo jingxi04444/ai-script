@@ -146,6 +146,12 @@ public class BriefController {
         return R.ok(briefService.linkToProject(id, projectId));
     }
 
+    @DeleteMapping("/{id}/link")
+    public R<Void> unlinkFromProject(@PathVariable Integer id, @RequestParam Integer projectId) {
+        briefService.unlinkFromProject(id, projectId);
+        return R.ok();
+    }
+
     @DeleteMapping("/{id}")
     public R<Void> delete(@PathVariable Integer id) {
         briefService.delete(id);
