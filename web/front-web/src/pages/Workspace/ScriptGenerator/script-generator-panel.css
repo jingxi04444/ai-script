@@ -3605,3 +3605,328 @@
     min-height: 34px;
   }
 }
+
+/* Light-mode corrections for script generation modes and product-frame controls. */
+.product-frame-field {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  color: #dfe7e9;
+  font-size: 11px;
+  font-weight: 760;
+}
+
+.product-frame-label {
+  min-width: 0;
+  color: inherit;
+  white-space: nowrap;
+}
+
+.product-frame-control {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.product-frame-control .ant-upload-wrapper,
+.product-frame-control .ant-upload {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.product-frame-remove {
+  flex: 0 0 auto;
+  min-width: 58px;
+  height: 32px;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid rgba(239, 91, 91, 0.42);
+  border-radius: 7px;
+  background: rgba(205, 62, 62, 0.1);
+  color: #ff8585;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.product-frame-remove:hover {
+  border-color: rgba(255, 112, 112, 0.72);
+  background: rgba(205, 62, 62, 0.18);
+}
+
+.product-frame-control > .product-frame-remove {
+  width: auto !important;
+  min-width: 58px !important;
+  height: 32px !important;
+  min-height: 32px !important;
+  padding: 0 9px !important;
+  border: 1px solid rgba(239, 91, 91, 0.42) !important;
+  background: rgba(205, 62, 62, 0.1) !important;
+  color: #ff8585 !important;
+}
+
+.script-config-fields .product-frame-field {
+  align-self: end;
+}
+
+.script-config-fields .product-frame-control {
+  height: 28px;
+}
+
+.script-config-fields .product-frame-remove {
+  min-width: 32px;
+  width: 32px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0;
+}
+
+.script-config-fields .product-frame-remove span {
+  display: none;
+}
+
+.template-config-grid .product-frame-field {
+  flex: 0 0 280px;
+  grid-template-columns: max-content minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+}
+
+.original-config-grid .product-frame-field {
+  grid-template-rows: 18px 42px;
+  gap: 8px;
+  align-items: end;
+}
+
+.original-config-grid .product-frame-control,
+.original-config-grid .product-frame-control .ant-upload,
+.original-config-grid .product-frame-control .ant-upload button {
+  height: 42px;
+}
+
+html[data-color-mode='light'] .script-workspace-main :where(
+  .script-generator-workspace,
+  .script-template-page,
+  .original-script-page,
+  .original-main-card,
+  .template-toolbar-panel,
+  .template-gallery-panel,
+  .template-config-panel,
+  .script-config-panel,
+  .original-config-section
+) {
+  background: transparent !important;
+  color: #1f262a !important;
+  box-shadow: none !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main :where(
+  .script-config-panel,
+  .original-prompt-box
+) {
+  border-color: #d4dcdf !important;
+  background: #fff !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main :where(
+  .template-category-tabs button,
+  .template-count-label,
+  .selected-template-strip strong,
+  .template-config-grid label,
+  .original-hero-copy h3,
+  .original-config-section h3,
+  .original-config-grid label,
+  .product-frame-label,
+  .script-config-panel h3,
+  .script-config-fields label,
+  .script-config-fields label > span
+) {
+  color: #1f262a !important;
+  -webkit-text-fill-color: #1f262a !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main .template-category-tabs button.active {
+  color: #2f8a37 !important;
+  -webkit-text-fill-color: #2f8a37 !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main :where(
+  .template-page-status,
+  .original-hero-copy p,
+  .script-config-panel p
+) {
+  color: #566168 !important;
+  -webkit-text-fill-color: #566168 !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main .template-card {
+  border-color: #cfd7da !important;
+  background: #fff !important;
+  color: #1f262a !important;
+  box-shadow: 0 8px 20px rgba(38, 48, 54, 0.08) !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main .template-card.active {
+  border-color: #54c85e !important;
+  background: #f7fff7 !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main :where(
+  .template-card-head span,
+  .template-title-row h3,
+  .template-info-icon.anticon,
+  .template-card.active .template-info-icon.anticon,
+  .template-meta,
+  .template-meta span,
+  .template-meta b,
+  .template-meta strong
+) {
+  color: #273136 !important;
+  -webkit-text-fill-color: #273136 !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main .template-card-head span {
+  border-color: #cfd7da !important;
+  background: #f6f8f9 !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main :where(
+  .template-filter-actions .ant-select,
+  .template-filter-actions .ant-select-selector,
+  .template-search,
+  .template-config-grid .ant-select,
+  .template-config-grid .ant-select-selector,
+  .template-config-grid .ant-select-content,
+  .script-config-fields .ant-select,
+  .script-config-fields .ant-select-selector,
+  .script-config-fields .ant-select-content,
+  .original-scenario-select .ant-select,
+  .original-scenario-select .ant-select-selector,
+  .original-config-grid .ant-select,
+  .original-config-grid .ant-select-selector
+) {
+  border-color: #cbd5d9 !important;
+  background: #f7f9fa !important;
+  color: #1f262a !important;
+  -webkit-text-fill-color: #1f262a !important;
+  box-shadow: none !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main :where(
+  .template-filter-actions .ant-select-selection-item,
+  .template-filter-actions .ant-select-arrow,
+  .template-filter-actions .ant-select-suffix,
+  .template-search input,
+  .template-search .anticon,
+  .template-config-grid .ant-select-selection-item,
+  .template-config-grid .ant-select-selection-placeholder,
+  .template-config-grid .ant-select-arrow,
+  .template-config-grid .ant-select-suffix,
+  .script-config-fields .ant-select-selection-item,
+  .script-config-fields .ant-select-selection-placeholder,
+  .script-config-fields .ant-select-arrow,
+  .script-config-fields .ant-select-suffix,
+  .original-scenario-select .ant-select-selection-item,
+  .original-scenario-select .ant-select-arrow,
+  .original-scenario-select .anticon,
+  .original-config-grid .ant-select-selection-item,
+  .original-config-grid .ant-select-selection-placeholder,
+  .original-config-grid .ant-select-arrow,
+  .original-config-grid .ant-select-suffix,
+  .original-config-grid .anticon
+) {
+  color: #1f262a !important;
+  -webkit-text-fill-color: #1f262a !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main .original-scenario-item {
+  border-color: #d2dade !important;
+  background: #f7f9fa !important;
+  color: #1f262a !important;
+  box-shadow: none !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main .original-scenario-item.active,
+html[data-color-mode='light'] .script-workspace-main .original-scenario-item:hover {
+  border-color: #54c85e !important;
+  background: #f1fbf2 !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main .original-scenario-copy strong {
+  color: #1f262a !important;
+  -webkit-text-fill-color: #1f262a !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main .original-scenario-copy p {
+  color: #566168 !important;
+  -webkit-text-fill-color: #566168 !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main :where(
+  .original-prompt-box textarea,
+  .original-inspiration-button,
+  .original-prompt-meta span
+) {
+  color: #1f262a !important;
+  -webkit-text-fill-color: #1f262a !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main :where(
+  .product-frame-upload .ant-upload button,
+  .template-upload-field .ant-upload button,
+  .original-upload-field .ant-upload button
+) {
+  border-color: #bfcbd0 !important;
+  background: #f7f9fa !important;
+  color: #1f262a !important;
+  -webkit-text-fill-color: #1f262a !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main :where(
+  .product-frame-upload .ant-upload button strong,
+  .product-frame-upload .ant-upload button small,
+  .product-frame-upload .ant-upload button .anticon,
+  .template-upload-field .ant-upload button strong,
+  .template-upload-field .ant-upload button small,
+  .template-upload-field .ant-upload button .anticon,
+  .original-upload-field .ant-upload button strong,
+  .original-upload-field .ant-upload button small,
+  .original-upload-field .ant-upload button .anticon
+) {
+  color: #273136 !important;
+  -webkit-text-fill-color: #273136 !important;
+}
+
+html[data-color-mode='light'] .script-workspace-main .product-frame-remove {
+  border-color: #e0a3a3 !important;
+  background: #fff5f5 !important;
+  color: #a93636 !important;
+  -webkit-text-fill-color: #a93636 !important;
+}
+
+html[data-color-mode='light'] .ant-select-dropdown .ant-select-item-option {
+  color: #1f262a !important;
+  -webkit-text-fill-color: #1f262a !important;
+}
+
+html[data-color-mode='light'] .ant-select-dropdown .ant-select-item-option-selected,
+html[data-color-mode='light'] .ant-select-dropdown .ant-select-item-option-active {
+  background: #eaf6eb !important;
+  color: #1f262a !important;
+  -webkit-text-fill-color: #1f262a !important;
+}
+
+html[data-color-mode='light'] .ant-select-dropdown .ant-select-item-option-content {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+html[data-color-mode='light'] body .script-workspace-main .original-config-grid .ant-select .ant-select-selector .ant-select-selection-item,
+html[data-color-mode='light'] body .script-workspace-main .template-config-grid .ant-select .ant-select-selector .ant-select-selection-item,
+html[data-color-mode='light'] body .script-workspace-main .script-config-fields .ant-select .ant-select-selector .ant-select-selection-item {
+  color: #1f262a !important;
+  -webkit-text-fill-color: #1f262a !important;
+}

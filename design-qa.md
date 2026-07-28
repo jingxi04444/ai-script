@@ -219,3 +219,28 @@ final result: passed
 - 系统提示：提示框背景 `rgba(255, 255, 255, 0.98)`；文字 `rgb(31, 38, 42)`。
 - 覆盖范围：检测加载态、检测结果卡片、警告/建议/示例区、操作按钮、消息/通知/确认/警告提示框。
 - 结论：通过。浅色模式下主要与次要文字均与白色表面形成清晰对比，未再出现白字叠白底。
+---
+
+## 2026-07-28 Script modes light-theme corrections
+
+- Source visual truth: `codex-clipboard-498be733-6edb-4fb6-84fb-cade233943db.jpg`, `codex-clipboard-e686ad68-d1a9-4820-823a-c204b927eb99.jpg`, and `codex-clipboard-bd48a462-0c7b-4d9f-89ba-efa4fcf52fc2.jpg`.
+- Implementation screenshot: `C:/Java/ai/ai-script/qa-light-script-modes.png`.
+- Viewport: 1600 x 900.
+- State: light mode fixture using the production ScriptGenerator and Storyboard class names and CSS.
+
+**Verified results**
+
+- Template card surface: `rgb(255, 255, 255)`; metadata: `rgb(39, 49, 54)`.
+- AI original category surface: `rgb(247, 249, 250)`; title: `rgb(31, 38, 42)`.
+- Script-config select surface: `rgb(247, 249, 250)`; selected text: `rgb(31, 38, 42)`.
+- Product-frame removal action: pale red surface with dark red text and a visible delete action after upload.
+- Storyboard/polish script name: `rgb(31, 38, 42)`.
+- Production front-end build completed successfully.
+
+**Comparison history**
+
+- Pass 1 found a remaining global Ant Select rule overriding selected text to white.
+- Pass 2 raised the component-level light selector specificity and verified the selected text as dark.
+- Reference and implementation screenshots were inspected together; no remaining P0, P1, or P2 contrast issue was found in the scoped states.
+
+final result: passed

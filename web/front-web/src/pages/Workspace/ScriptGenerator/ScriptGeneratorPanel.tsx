@@ -728,25 +728,42 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   };
 
   const renderProductFrameUpload = (className: string, label: string, allowTable = true) => (
-    <label className={className}>
-      <span>{label}</span>
-      <Upload
-        accept={allowTable ? 'image/*,.xls,.xlsx,.csv' : 'image/*'}
-        beforeUpload={(file) => handleProductFrameUpload(file, allowTable)}
-        showUploadList={false}
-        disabled={isProductFrameUploading}
-      >
-        <button type="button" disabled={isProductFrameUploading}>
-          <UploadOutlined />
-          <strong>{isProductFrameUploading ? '上传中...' : productFrame?.fileName || '上传画面'}</strong>
-          <small>
-            {productFrame?.url
-              ? productFrame.extractedText ? '表格已解析，可用于脚本生成' : '已上传，可用于脚本生成'
-              : allowTable ? '支持 JPG / PNG / XLS / XLSX / CSV' : '支持 JPG / PNG'}
-          </small>
-        </button>
-      </Upload>
-    </label>
+    <div className={`${className} product-frame-field`}>
+      <span className="product-frame-label">{label}</span>
+      <div className="product-frame-control">
+        <Upload
+          accept={allowTable ? 'image/*,.xls,.xlsx,.csv' : 'image/*'}
+          beforeUpload={(file) => handleProductFrameUpload(file, allowTable)}
+          showUploadList={false}
+          disabled={isProductFrameUploading}
+        >
+          <button type="button" disabled={isProductFrameUploading}>
+            <UploadOutlined />
+            <strong>{isProductFrameUploading ? '上传中...' : productFrame?.fileName || '上传画面'}</strong>
+            <small>
+              {productFrame?.url
+                ? productFrame.extractedText ? '表格已解析，可用于脚本生成' : '已上传，可用于脚本生成'
+                : allowTable ? '支持 JPG / PNG / XLS / XLSX / CSV' : '支持 JPG / PNG'}
+            </small>
+          </button>
+        </Upload>
+        {productFrame && (
+          <button
+            type="button"
+            className="product-frame-remove"
+            aria-label="删除已上传的产品画面"
+            title="删除已上传的产品画面"
+            onClick={() => {
+              setProductFrame(null);
+              message.success('已删除产品画面');
+            }}
+          >
+            <DeleteOutlined />
+            <span>删除</span>
+          </button>
+        )}
+      </div>
+    </div>
   );
 
   const handleProductFrameUpload = async (file: File, allowTable = false) => {

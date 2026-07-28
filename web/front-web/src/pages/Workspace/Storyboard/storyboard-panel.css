@@ -1153,3 +1153,35 @@
   white-space: pre-wrap;
   scrollbar-color: rgba(116, 255, 120, 0.35) rgba(255, 255, 255, 0.04);
 }
+
+/* Keep script names and list metadata readable in light mode. */
+html[data-color-mode='light'] .storyboard-workspace-main :where(
+  .storyboard-script-name-button,
+  .storyboard-script-name-button span,
+  .storyboard-table-row strong,
+  .storyboard-script-card h3,
+  .storyboard-script-name-input
+) {
+  color: #1f262a !important;
+  -webkit-text-fill-color: #1f262a !important;
+}
+
+html[data-color-mode='light'] .storyboard-workspace-main .storyboard-script-name-input {
+  border-color: #8fcf96 !important;
+  background: #fff !important;
+}
+
+html[data-color-mode='light'] .storyboard-workspace-main :where(
+  .storyboard-table-head,
+  .storyboard-table-head b,
+  .storyboard-table-row,
+  .storyboard-table-row time,
+  .storyboard-script-card time
+) {
+  color: #4f5a60 !important;
+  -webkit-text-fill-color: #4f5a60 !important;
+}
+
+html[data-color-mode='light'] .storyboard-workspace-main .storyboard-script-name-button .anticon:last-child {
+  color: #647178 !important;
+}
