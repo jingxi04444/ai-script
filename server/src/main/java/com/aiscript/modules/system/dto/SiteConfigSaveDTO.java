@@ -6,4 +6,6 @@ public class SiteConfigSaveDTO {
     public String viralSimpleAnalysisExample;
     public String viralDeepAnalysisExample;
     public String originalScenarioPrompts;
+    public String homeVisualConfig;
+    public String scriptVisualConfig;
 }

@@ -22,12 +22,21 @@ interface HomeRailProps {
   onRecharge?: () => void;
 }
 
-const homeNavItems = [
-  { icon: 'home', label: '首页' },
-  { icon: 'clapper', label: '创作大厅' },
-  { icon: 'expert', label: '专家市场' },
-  { icon: 'folder', label: '我的项目' },
-  { icon: 'assets', label: '资产管理' },
+type HomeNavKey = 'home' | 'create' | 'expert' | 'projects' | 'assets';
+
+interface HomeNavItem {
+  key: HomeNavKey;
+  icon: string;
+  label: string;
+  iconUrl?: string;
+}
+
+const defaultHomeNavItems: HomeNavItem[] = [
+  { key: 'home', icon: 'home', label: '首页' },
+  { key: 'create', icon: 'clapper', label: '创作大厅' },
+  { key: 'expert', icon: 'expert', label: '专家市场' },
+  { key: 'projects', icon: 'folder', label: '我的项目' },
+  { key: 'assets', icon: 'assets', label: '资产管理' },
 ];
 
 const HomeRail = ({ activeLabel, onCreate, onHome, onProjects, onAssets, onMember, onRecharge }: HomeRailProps) => {
@@ -35,6 +44,7 @@ const HomeRail = ({ activeLabel, onCreate, onHome, onProjects, onAssets, onMembe
   const logout = useAuthStore((state) => state.logout);
   const [balance, setBalance] = useState<number | null>(null);
   const [homeLogoUrl, setHomeLogoUrl] = useState(() => siteApi.getCachedConfig()?.homeLogoUrl || '');
+  const [homeNavItems, setHomeNavItems] = useState<HomeNavItem[]>(defaultHomeNavItems);
   const [profileOpen, setProfileOpen] = useState(false);
   const [fallbackCommerceDialog, setFallbackCommerceDialog] = useState<'member' | 'recharge' | null>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode>(getStoredThemeMode);
@@ -50,27 +60,68 @@ const HomeRail = ({ activeLabel, onCreate, onHome, onProjects, onAssets, onMembe
   }, []);
 
   useEffect(() => {
-    siteApi.getConfig()
-      .then((config) => setHomeLogoUrl(config.homeLogoUrl || ''))
-      .catch(() => setHomeLogoUrl(''));
+    let active = true;
+
+    const loadVisualConfig = (force = false) => {
+      siteApi.getConfig({ force })
+        .then((config) => {
+          if (!active) return;
+        setHomeLogoUrl(config.homeLogoUrl || '');
+        if (!config.homeVisualConfig?.trim()) {
+          setHomeNavItems(defaultHomeNavItems);
+          return;
+        }
+        try {
+          const parsed = JSON.parse(config.homeVisualConfig) as { navItems?: Array<Partial<HomeNavItem> & { key?: string }> };
+          const configuredItems = new Map((parsed.navItems || []).map((item) => [item.key, item]));
+          setHomeNavItems(defaultHomeNavItems.map((item) => ({
+            ...item,
+            ...configuredItems.get(item.key),
+            key: item.key,
+            icon: item.icon,
+          })));
+        } catch {
+          setHomeNavItems(defaultHomeNavItems);
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        setHomeLogoUrl('');
+        setHomeNavItems(defaultHomeNavItems);
+      });
+    };
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') loadVisualConfig(true);
+    };
+
+    loadVisualConfig();
+    window.addEventListener('focus', refreshWhenVisible);
+    document.addEventListener('visibilitychange', refreshWhenVisible);
+
+    return () => {
+      active = false;
+      window.removeEventListener('focus', refreshWhenVisible);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
   }, []);
 
-  const handleNavClick = (label: string) => {
-    if (label === '创作大厅') {
+  const handleNavClick = (key: HomeNavKey) => {
+    if (key === 'create') {
       if (onCreate) {
         onCreate();
         return;
       }
       navigate('/workspace');
-    } else if (label === '专家市场') {
+    } else if (key === 'expert') {
       message.info('专家市场即将开放');
-    } else if (label === '首页') {
+    } else if (key === 'home') {
       onHome?.();
       navigate('/home');
-    } else if (label === '我的项目') {
+    } else if (key === 'projects') {
       onProjects?.();
       navigate('/projects');
-    } else if (label === '资产管理') {
+    } else if (key === 'assets') {
       if (onAssets) {
         onAssets();
       } else {
@@ -155,11 +206,13 @@ const HomeRail = ({ activeLabel, onCreate, onHome, onProjects, onAssets, onMembe
       <nav aria-label="首页导航">
         {homeNavItems.map((item) => (
           <button
-            key={item.label}
-            className={item.label === activeLabel ? 'active' : ''}
-            onClick={() => handleNavClick(item.label)}
+            key={item.key}
+            className={item.label === activeLabel || defaultHomeNavItems.find((candidate) => candidate.key === item.key)?.label === activeLabel ? 'active' : ''}
+            onClick={() => handleNavClick(item.key)}
           >
-            <span className={`rail-icon ${item.icon}`} />
+            {item.iconUrl
+              ? <img className="rail-icon rail-custom-icon" src={item.iconUrl} alt="" />
+              : <span className={`rail-icon ${item.icon}`} />}
             <strong>{item.label}</strong>
           </button>
         ))}

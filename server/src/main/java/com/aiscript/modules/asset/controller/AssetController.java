@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api")
@@ -37,6 +38,14 @@ public class AssetController {
     @PostMapping("/assets")
     public R<AssetVO> createAsset(@RequestBody AssetSaveDTO dto) {
         return R.ok(assetService.saveAsset(null, dto));
+    }
+
+    @PostMapping("/product-frame-assets/upload")
+    public R<AssetVO> uploadProductFrame(
+        @RequestParam("file") MultipartFile file,
+        @RequestParam(required = false) String projectId
+    ) {
+        return R.ok(assetService.uploadProductFrame(file, projectId));
     }
 
     @PutMapping("/assets/{id}")

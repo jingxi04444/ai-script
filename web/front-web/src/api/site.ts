@@ -17,6 +17,8 @@ export interface SiteConfig {
   viralSimpleAnalysisExample?: string;
   viralDeepAnalysisExample?: string;
   originalScenarioPrompts?: string;
+  homeVisualConfig?: string;
+  scriptVisualConfig?: string;
 }
 
 let siteConfigCache: SiteConfig | null = null;
@@ -24,17 +26,18 @@ let siteConfigRequest: Promise<SiteConfig> | null = null;
 
 export const siteApi = {
   getCachedConfig: (): SiteConfig | null => siteConfigCache,
-  getConfig: (): Promise<SiteConfig> => {
-    if (siteConfigCache) return Promise.resolve(siteConfigCache);
-    if (siteConfigRequest) return siteConfigRequest;
+  getConfig: (options?: { force?: boolean }): Promise<SiteConfig> => {
+    const force = Boolean(options?.force);
+    if (!force && siteConfigCache) return Promise.resolve(siteConfigCache);
+    if (!force && siteConfigRequest) return siteConfigRequest;
 
-    const request = (api.get('/site-config') as Promise<SiteConfig>)
+    const request = (api.get('/site-config', { params: force ? { _: Date.now() } : undefined }) as Promise<SiteConfig>)
       .then((config) => {
         siteConfigCache = config;
         return config;
       })
       .finally(() => {
-        siteConfigRequest = null;
+        if (siteConfigRequest === request) siteConfigRequest = null;
       });
     siteConfigRequest = request;
     return request;

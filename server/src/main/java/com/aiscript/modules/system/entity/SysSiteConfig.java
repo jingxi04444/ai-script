@@ -15,5 +15,7 @@ public class SysSiteConfig extends BaseEntity {
     private String frontViralSimpleAnalysisExample;
     private String frontViralDeepAnalysisExample;
     private String frontOriginalScenarioPrompts;
+    private String frontHomeVisualConfig;
+    private String frontScriptVisualConfig;
     private Integer status;
 }

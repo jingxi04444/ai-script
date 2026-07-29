@@ -7,6 +7,8 @@ public class SiteConfigVO {
     public String viralSimpleAnalysisExample;
     public String viralDeepAnalysisExample;
     public String originalScenarioPrompts;
+    public String homeVisualConfig;
+    public String scriptVisualConfig;
     public Integer status;
     public String createdAt;
     public String updatedAt;

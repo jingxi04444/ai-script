@@ -8,11 +8,14 @@ import com.aiscript.modules.asset.dto.ViralAssetSaveDTO;
 import com.aiscript.modules.asset.vo.AssetVO;
 import com.aiscript.modules.asset.vo.SellingPointAssetVO;
 import com.aiscript.modules.asset.vo.ViralAssetVO;
+import org.springframework.web.multipart.MultipartFile;
 
 public interface AssetService {
     PageResult<AssetVO> assetPage(PageQuery query, String projectId, String type);
 
     AssetVO saveAsset(Integer id, AssetSaveDTO dto);
+
+    AssetVO uploadProductFrame(MultipartFile file, String projectId);
 
     void deleteAsset(Integer id);
 

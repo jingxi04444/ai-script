@@ -281,8 +281,12 @@ const TemplateListPage = () => {
           {rows.map((template, index) => (
             <div className="table-row template-table-grid" key={template.id}>
               <span>{(page - 1) * pageSize + index + 1}</span>
-              <span>{template.templateSource || '平台模板'}</span>
-              <strong>{template.name || '-'}</strong>
+              <span className="template-source-cell" title={template.templateSource || '平台模板'}>
+                {template.templateSource || '平台模板'}
+              </span>
+              <strong className="template-name-cell" title={template.name || '-'}>
+                {template.name || '-'}
+              </strong>
               {template.referenceUrl ? (
                 <a className="template-reference-link" href={template.referenceUrl} target="_blank" rel="noreferrer">查看链接</a>
               ) : <span>-</span>}
@@ -297,7 +301,7 @@ const TemplateListPage = () => {
               <span className={`template-status-badge ${template.locked ? 'is-locked' : 'is-unlocked'}`}>
                 {template.locked ? <><LockKeyhole size={13} />已加锁</> : <><UnlockKeyhole size={13} />可使用</>}
               </span>
-              <div className="table-actions">
+              <div className="table-actions template-row-actions">
                 {template.auditStatus === 'running' ? (
                   <>
                     <button className="table-btn success" type="button" onClick={() => updateState(template, { auditStatus: 'approved' }, '模板审核已通过')}><CheckCircle size={14} />通过</button>
@@ -408,11 +412,11 @@ const TemplateListPage = () => {
           <textarea value={form.emotionTurningPoints || ''} onChange={(e) => setForm({ ...form, emotionTurningPoints: e.target.value })} placeholder="提炼情绪从痛点、共鸣、信任到行动的变化" />
         </label>
         <label className="field" style={{ marginTop: 14 }}>
-          <span>前5秒钩子话术提炼</span>
+          <span>前5秒钩子</span>
           <textarea value={form.firstFiveSecondsHook || ''} onChange={(e) => setForm({ ...form, firstFiveSecondsHook: e.target.value })} placeholder="提炼开头 5 秒吸引注意的话术模式" />
         </label>
         <label className="field" style={{ marginTop: 14 }}>
-          <span>结构模型公式</span>
+          <span>模型公式</span>
           <textarea value={form.structureFormula || ''} onChange={(e) => setForm({ ...form, structureFormula: e.target.value })} placeholder="例如：痛点开场 -> 场景放大 -> 产品解决 -> 效果展示 -> 行动引导" />
         </label>
         <label className="field" style={{ marginTop: 14 }}>

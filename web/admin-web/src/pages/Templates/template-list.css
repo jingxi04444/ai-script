@@ -60,7 +60,32 @@
 }
 
 .template-list .template-table-grid {
-  grid-template-columns: 58px 100px minmax(170px, 1.3fr) 96px 66px 88px 96px 78px 92px minmax(380px, 2fr);
+  width: 100%;
+  min-width: 1368px;
+  grid-template-columns: 50px 105px 220px 90px 55px 95px 105px 80px 100px minmax(350px, 1fr);
+}
+
+.template-list .template-table-grid > * {
+  min-width: 0;
+}
+
+.template-list .template-source-cell,
+.template-list .template-name-cell {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-list .template-row-actions {
+  justify-content: flex-start;
+  gap: 6px;
+  overflow: visible;
+}
+
+.template-list .template-row-actions .table-btn {
+  flex: 0 0 auto;
 }
 
 .template-list .template-reference-link {
@@ -280,6 +305,6 @@
 
   .template-list .table-head,
   .template-list .table-row {
-    min-width: 1450px;
+    min-width: 1368px;
   }
 }

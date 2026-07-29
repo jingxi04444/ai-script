@@ -176,6 +176,21 @@ Region endpoint such as `https://oss-cn-hangzhou.aliyuncs.com` is also supported
 
 File upload endpoint: `/api/files/upload`.
 
+## Product Frame OCR
+
+Product-frame image uploads use Alibaba Cloud traditional OCR `RecognizeBasic` by default. Table files continue to use the built-in spreadsheet parser. Configure OCR credentials independently from OSS credentials:
+
+```bash
+OCR_ENABLED=true
+OCR_PROVIDER=aliyun
+ALIYUN_OCR_ACCESS_KEY_ID=your-ocr-access-key-id
+ALIYUN_OCR_ACCESS_KEY_SECRET=your-ocr-access-key-secret
+ALIYUN_OCR_ENDPOINT=ocr-api.cn-hangzhou.aliyuncs.com
+ALIYUN_OCR_REGION_ID=cn-hangzhou
+```
+
+Alibaba Cloud failures can fall back to local Tesseract. Set `OCR_FALLBACK_TO_TESSERACT=false` when the deployment must use Alibaba Cloud OCR only.
+
 ## Operation Logs
 
 Non-GET controller requests are recorded into `sys_operation_log` through an AOP aspect.

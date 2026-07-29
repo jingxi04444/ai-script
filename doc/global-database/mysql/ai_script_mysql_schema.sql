@@ -170,6 +170,30 @@ CREATE TABLE sys_operation_log (
 -- 2. 系统配置、Provider、Prompt、导入模板
 -- =========================
 
+DROP TABLE IF EXISTS sys_config_item;
+CREATE TABLE sys_config_item (
+  id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  parent_id INT DEFAULT NULL COMMENT '父节点ID，空表示根节点',
+  node_type VARCHAR(16) NOT NULL DEFAULT 'item' COMMENT '节点类型：group分组/item配置项',
+  group_code VARCHAR(80) NOT NULL COMMENT '所属配置模块编码',
+  config_key VARCHAR(160) NOT NULL COMMENT '全局唯一配置键，使用点分层级命名',
+  config_name VARCHAR(120) NOT NULL COMMENT '配置项显示名称',
+  config_value LONGTEXT DEFAULT NULL COMMENT '配置值',
+  value_type VARCHAR(20) NOT NULL DEFAULT 'string' COMMENT '值类型：string/text/number/boolean/json/image',
+  description VARCHAR(500) DEFAULT NULL COMMENT '配置说明',
+  sort_order INT NOT NULL DEFAULT 0 COMMENT '同级排序',
+  status TINYINT NOT NULL DEFAULT 1 COMMENT '状态：0禁用 1启用',
+  create_by INT DEFAULT NULL COMMENT '创建人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_sys_config_item_key (config_key),
+  KEY idx_sys_config_item_parent_sort (parent_id, sort_order),
+  KEY idx_sys_config_item_group_status (group_code, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='树形字典配置项';
+
 DROP TABLE IF EXISTS sys_site_config;
 CREATE TABLE sys_site_config (
   id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
@@ -179,6 +203,8 @@ CREATE TABLE sys_site_config (
   front_viral_simple_analysis_example TEXT DEFAULT NULL COMMENT '前台爆款复刻简易文案解析案例',
   front_viral_deep_analysis_example TEXT DEFAULT NULL COMMENT '前台爆款复刻深度拉片解析案例',
   front_original_scenario_prompts JSON DEFAULT NULL COMMENT '前台AI原创脚本场景与提示词配置',
+  front_home_visual_config JSON DEFAULT NULL COMMENT '前台主页导航、快捷模块与作品视觉配置',
+  front_script_visual_config JSON DEFAULT NULL COMMENT '前台脚本生成器图标与文案视觉配置',
   status TINYINT NOT NULL DEFAULT 1 COMMENT '状态：0禁用 1启用',
   create_by INT DEFAULT NULL COMMENT '创建人',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -187,7 +213,7 @@ CREATE TABLE sys_site_config (
   deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
   PRIMARY KEY (id),
   UNIQUE KEY uk_sys_site_config_code (config_code)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='站点展示配置表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='旧版站点展示配置表（兼容读取，新增配置统一写入sys_config_item）';
 
 DROP TABLE IF EXISTS sys_home_banner;
 CREATE TABLE sys_home_banner (

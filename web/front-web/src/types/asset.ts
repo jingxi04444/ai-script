@@ -11,6 +11,8 @@ export interface Asset {
   mimeType?: string;
   fileSizeBytes?: number;
   metadataJson?: string;
+  extractedText?: string;
+  updatedExisting?: boolean;
   status?: string;
 }
 

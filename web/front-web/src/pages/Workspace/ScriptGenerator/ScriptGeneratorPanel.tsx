@@ -31,7 +31,7 @@ import {
 } from '@ant-design/icons';
 import { message, Modal, Popover, Select, Upload } from 'antd';
 import { briefApi } from '../../../api/brief';
-import { assetApi, fileApi } from '../../../api/asset';
+import { assetApi } from '../../../api/asset';
 import { generationApi } from '../../../api/generation';
 import { scriptApi } from '../../../api/script';
 import { siteApi, type SiteConfig } from '../../../api/site';
@@ -44,6 +44,7 @@ import type { AnalysisDimension } from '../../../types/source';
 import './script-generator-panel.css';
 
 interface ProductFrameUploadState {
+  assetId?: string;
   url?: string;
   fileName?: string;
   objectKey?: string;
@@ -301,7 +302,24 @@ const templateCards: TemplateCard[] = [
   { id: '24', name: '保养教程型', actor: '女', people: '1人', popularity: '中', difficulty: '新手', locked: true, category: '教程', popularityScore: 75, updatedOrder: 1 },
 ];
 
-const modeEntryCards: Array<{ mode: ScriptMode; title: string; subtitle: string; description: string; accent: string; icon: ReactNode }> = [
+interface ScriptEntryCard {
+  mode: ScriptMode;
+  title: string;
+  subtitle: string;
+  description: string;
+  accent: string;
+  icon: ReactNode;
+  iconUrl?: string;
+}
+
+interface ScriptVisualConfig {
+  assistantTitle?: string;
+  assistantSubtitle?: string;
+  assistantIconUrl?: string;
+  modeItems?: Array<{ key: string; label?: string; description?: string; iconUrl?: string }>;
+}
+
+const modeEntryCards: ScriptEntryCard[] = [
   {
     mode: 'viral',
     title: '爆款链接复刻',
@@ -336,40 +354,24 @@ const modeEntryCards: Array<{ mode: ScriptMode; title: string; subtitle: string;
   },
 ];
 
+const parseScriptVisualConfig = (value?: string): ScriptVisualConfig => {
+  if (!value?.trim()) return {};
+  try {
+    return JSON.parse(value) as ScriptVisualConfig;
+  } catch {
+    return {};
+  }
+};
+
 interface TemplateSpecFields {
-  description: string;
   firstFiveSecondsHook: string;
   modelFormula: string;
 }
 
-const splitTemplateSpecFields = (card: TemplateCard): TemplateSpecFields => {
-  const source = (card.referenceDesc || '')
-    .replace(/<br\s*\/?\s*>/gi, '\n')
-    .replace(/\r\n?/g, '\n')
-    .trim();
-  const hookLabel = /前\s*5\s*秒钩子\s*[：:]/.exec(source);
-  const formulaLabel = /模型公式\s*[：:]/.exec(source);
-  const labelIndexes = [hookLabel?.index, formulaLabel?.index].filter((index): index is number => index !== undefined);
-  const descriptionEnd = labelIndexes.length ? Math.min(...labelIndexes) : source.length;
-  const description = source.slice(0, descriptionEnd).trim();
-
-  const embeddedHook = hookLabel
-    ? source.slice(
-      hookLabel.index + hookLabel[0].length,
-      formulaLabel && formulaLabel.index > hookLabel.index ? formulaLabel.index : source.length,
-    ).trim()
-    : '';
-  const embeddedFormula = formulaLabel
-    ? source.slice(
-      formulaLabel.index + formulaLabel[0].length,
-      hookLabel && hookLabel.index > formulaLabel.index ? hookLabel.index : source.length,
-    ).trim()
-    : '';
-
+const getTemplateSpecFields = (card: TemplateCard): TemplateSpecFields => {
   return {
-    description,
-    firstFiveSecondsHook: card.firstFiveSecondsHook?.trim() || embeddedHook,
-    modelFormula: card.structureFormula?.trim() || card.modelFormula?.trim() || embeddedFormula,
+    firstFiveSecondsHook: card.firstFiveSecondsHook?.trim() || '',
+    modelFormula: card.structureFormula?.trim() || card.modelFormula?.trim() || '',
   };
 };
 
@@ -433,6 +435,19 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   const [frameLibraryAssets, setFrameLibraryAssets] = useState<Asset[]>([]);
   const polishInputRef = useRef<HTMLTextAreaElement | null>(null);
   const isDeepMode = analysisMode === 'deep';
+  const scriptVisualConfig = parseScriptVisualConfig(siteConfig.scriptVisualConfig);
+  const visualModeItems = new Map((scriptVisualConfig.modeItems || []).map((item) => [item.key, item]));
+  const visibleModeEntryCards = modeEntryCards.map((card) => {
+    const visual = visualModeItems.get(card.mode);
+    return {
+      ...card,
+      title: visual?.label?.trim() || card.title,
+      description: visual?.description?.trim() || card.description,
+      iconUrl: visual?.iconUrl,
+    };
+  });
+  const assistantTitle = scriptVisualConfig.assistantTitle?.trim() || '铼河AI脚本生成器';
+  const assistantSubtitle = scriptVisualConfig.assistantSubtitle?.trim() || '你可以选择不同的创作方式，我来帮你完成脚本';
 
   const clearEditScriptParam = () => {
     if (!searchParams.has('editScriptId')) return;
@@ -740,21 +755,15 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   const visibleDeepAnalysisItems = deepAnalysisItems.slice(0, 6);
 
   const templateSpecContent = (card: TemplateCard) => {
-    const spec = splitTemplateSpecFields(card);
-    const hasDescriptionSection = Boolean(card.referenceDesc || spec.firstFiveSecondsHook || spec.modelFormula);
+    const spec = getTemplateSpecFields(card);
+    const hasTemplateSpec = Boolean(spec.firstFiveSecondsHook || spec.modelFormula);
     return (
       <div className="template-spec-popover">
         <strong>{card.name} 模板说明</strong>
         {card.referenceUrl ? <p><b>参考链接：</b><a href={card.referenceUrl} target="_blank" rel="noreferrer">{card.referenceUrl}</a></p> : null}
-        {hasDescriptionSection ? (
-          <p className="template-spec-description">
-            <b>内容描述</b>
-            {spec.description ? <span>{spec.description}</span> : null}
-          </p>
-        ) : null}
         {spec.firstFiveSecondsHook ? <p className="template-spec-line"><b>前5秒钩子</b><span>：{spec.firstFiveSecondsHook}</span></p> : null}
         {spec.modelFormula ? <p className="template-spec-line"><b>模型公式</b><span>：{spec.modelFormula}</span></p> : null}
-        {!card.referenceUrl && !hasDescriptionSection ? <p>后台暂未维护参考链接/说明</p> : null}
+        {!card.referenceUrl && !hasTemplateSpec ? <p>后台暂未维护参考链接、前5秒钩子或模型公式</p> : null}
       </div>
     );
   };
@@ -772,7 +781,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
         >
           <FolderOutlined />
           <span>
-            <strong>
+            <strong title={productFrame?.fileName || undefined}>
               {isProductFrameUploading
                 ? '上传并入库中…'
                 : productFrame?.fileName || '上传/选择画面'}
@@ -803,9 +812,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     setFrameLibraryLoading(true);
     try {
       const page = await assetApi.list({ page: 1, pageSize: 200 });
-      setFrameLibraryAssets((page.list || []).filter((asset) =>
-        asset.category === 'product-frame-library' || asset.type === 'document'
-      ));
+      setFrameLibraryAssets((page.list || []).filter((asset) => asset.category === 'product-frame-library'));
       setFrameLibraryLoaded(true);
     } catch {
       setFrameLibraryAssets([]);
@@ -830,10 +837,11 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
       }
     }
     setProductFrame({
+      assetId: asset.id,
       url: asset.previewUrl,
       fileName: asset.name,
       objectKey: asset.storageKey,
-      extractedText,
+      extractedText: asset.extractedText || extractedText,
     });
     setFrameLibraryOpen(false);
     message.success(`已选择文件：${asset.name}`);
@@ -890,31 +898,25 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     setIsProductFrameUploading(true);
     try {
       const currentProjectId = await ensureProjectId();
-      const result = await fileApi.upload(file, 'product-frame');
-      const assetType = isTable ? 'document' : 'image';
-      await assetApi.create({
-        projectId: currentProjectId,
-        name: result.fileName || file.name,
-        type: assetType,
-        category: 'product-frame-library',
-        storageKey: result.objectKey,
-        previewUrl: result.url,
-        mimeType: result.contentType || file.type,
-        fileSizeBytes: result.size || file.size,
-        metadataJson: JSON.stringify({
-          extractedText: result.extractedText || '',
-          immutable: true,
-          source: 'script-product-frame',
-        }),
-      });
+      const result = await assetApi.uploadProductFrame(file, currentProjectId);
       setProductFrame({
-        url: result.url,
-        fileName: result.fileName || file.name,
-        objectKey: result.objectKey,
+        assetId: result.id,
+        url: result.previewUrl,
+        fileName: result.name || file.name,
+        objectKey: result.storageKey,
         extractedText: result.extractedText,
       });
+      setFrameLibraryLoaded(false);
       setFrameLibraryOpen(false);
-      message.success(isTable ? '画面表格已解析并存入文件库' : '产品画面已上传并存入文件库');
+      message.success(
+        result.updatedExisting
+          ? '检测到同名文件，已重新解析并更新产品画面库'
+          : isTable
+            ? '画面表格已解析并存入产品画面库'
+            : result.extractedText
+              ? '产品画面文字已识别并存入产品画面库'
+              : '产品画面已上传，未识别到文字',
+      );
     } catch (error) {
       setProductFrame({ fileName: file.name });
       message.error(error instanceof Error ? error.message : '产品画面上传失败，已保留文件名');
@@ -1015,6 +1017,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
         instruction,
         content: currentScript.content || originalScriptContent || '',
         briefId: selectedBriefId,
+        productFrameAssetId: productFrame?.assetId,
         productImage: productFrame?.url,
         productFrameFileName: productFrame?.fileName,
         productFrameContent: productFrame?.extractedText,
@@ -1107,6 +1110,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
         format: scriptFormat,
         formatRequirement: selectedScriptFormat?.formatRequirement,
         productFrame: productFrame?.url || productFrame?.fileName,
+        productFrameAssetId: productFrame?.assetId,
         productImage: productFrame?.url,
         productFrameFileName: productFrame?.fileName,
         productFrameContent: productFrame?.extractedText,
@@ -1240,18 +1244,22 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     return (
       <section className="script-generator-page script-generator-entry-page">
         <header className="script-entry-hero">
-          <div className="script-entry-avatar" aria-hidden="true">铼</div>
+          <div className={`script-entry-avatar ${scriptVisualConfig.assistantIconUrl ? 'has-image' : ''}`} aria-hidden="true">
+            {scriptVisualConfig.assistantIconUrl ? <img src={scriptVisualConfig.assistantIconUrl} alt="" /> : '铼'}
+          </div>
           <div className="script-entry-copy">
-            <h2>铼河AI脚本生成器</h2>
-            <p>你可以选择不同的创作方式，我来帮你完成脚本</p>
+            <h2>{assistantTitle}</h2>
+            <p>{assistantSubtitle}</p>
           </div>
         </header>
 
         <section className="script-entry-grid" aria-label="脚本生成器入口">
-          {modeEntryCards.map((card) => (
+          {visibleModeEntryCards.map((card) => (
             <button key={card.mode} type="button" className={`script-entry-card ${card.accent}`} onClick={() => handleModeSelect(card.mode)}>
               <span className="script-entry-card-head">
-                <span className="script-entry-card-icon" aria-hidden="true">{card.icon}</span>
+                <span className={`script-entry-card-icon ${card.iconUrl ? 'has-image' : ''}`} aria-hidden="true">
+                  {card.iconUrl ? <img src={card.iconUrl} alt="" /> : card.icon}
+                </span>
                 <strong>{card.title}</strong>
               </span>
               <p>{card.description}</p>
@@ -1582,10 +1590,12 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
       {activeMode === 'original' && (
         <section className="original-script-page">
           <section className="original-hero-card">
-            <div className="original-hero-avatar" aria-hidden="true" />
+            <div className={`original-hero-avatar ${scriptVisualConfig.assistantIconUrl ? 'has-image' : ''}`} aria-hidden="true">
+              {scriptVisualConfig.assistantIconUrl && <img src={scriptVisualConfig.assistantIconUrl} alt="" />}
+            </div>
             <div className="original-hero-copy">
-              <h3>铼河AI智能脚本</h3>
-              <p>你可以选择不同的创作方式，我来帮你完成脚本</p>
+              <h3>{assistantTitle}</h3>
+              <p>{assistantSubtitle}</p>
             </div>
           </section>
 
@@ -1908,7 +1918,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                     >
                       {isProductFrameUploading ? <LoadingOutlined spin /> : <FolderOutlined />}
                       <span>
-                        <strong>
+                        <strong title={productFrame?.fileName || undefined}>
                           {isProductFrameUploading
                             ? '上传并入库中…'
                             : productFrame?.fileName || '上传 / 选择产品画面'}

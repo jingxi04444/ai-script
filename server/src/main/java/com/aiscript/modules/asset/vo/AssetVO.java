@@ -14,5 +14,7 @@ public class AssetVO {
     private String mimeType;
     private Long fileSizeBytes;
     private String metadataJson;
+    private String extractedText;
+    private Boolean updatedExisting;
     private String status;
 }

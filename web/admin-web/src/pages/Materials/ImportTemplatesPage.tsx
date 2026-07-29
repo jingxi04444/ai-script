@@ -4,7 +4,11 @@ import { systemApi, type ImportTemplate } from '../../api/system';
 import { DEFAULT_PAGE_SIZE, EmptyState, Modal, PageHeader, Pagination, SectionCard } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
 
-const ImportTemplatesPage = () => {
+interface ImportTemplatesPageProps {
+  briefMode?: boolean;
+}
+
+const ImportTemplatesPage = ({ briefMode = false }: ImportTemplatesPageProps) => {
   const { notify } = useAdminShell();
   const [templates, setTemplates] = useState<ImportTemplate[]>([]);
   const [loading, setLoading] = useState(false);
@@ -17,7 +21,11 @@ const ImportTemplatesPage = () => {
   const load = async () => {
     setLoading(true);
     try {
-      const data = await systemApi.getImportTemplates({ page, pageSize });
+      const data = await systemApi.getImportTemplates({
+        page,
+        pageSize,
+        templateType: briefMode ? 'selling_point' : undefined,
+      });
       setTemplates(data.list || []);
       setTotal(data.total || 0);
     } catch {
@@ -31,7 +39,7 @@ const ImportTemplatesPage = () => {
 
   useEffect(() => {
     load();
-  }, [page, pageSize]);
+  }, [briefMode, page, pageSize]);
 
   const remove = async () => {
     if (!deleteId) return;
@@ -65,12 +73,12 @@ const ImportTemplatesPage = () => {
   return (
     <div className="page-stack">
       <PageHeader
-        title="导入模板"
-        description="单独管理卖点、爆款脚本等导入模板文件。"
+        title={briefMode ? '卖点 Brief 导入模板' : '导入模板'}
+        description={briefMode ? '管理产品卖点 Brief 批量导入时下载和使用的模板文件。' : '单独管理卖点、爆款脚本等导入模板文件。'}
         actions={<button className="toolbar-btn" type="button" onClick={() => { setPage(1); if (page === 1) load(); }}><RefreshCcw size={16} />刷新</button>}
       />
 
-      <SectionCard title="导入模板列表" description="对接 /system/import-templates。" action={<span className="status-badge purple">{rows.length} 条</span>}>
+      <SectionCard title={briefMode ? '卖点 Brief 模板' : '导入模板列表'} description={briefMode ? '这里只展示 templateType= selling_point 的导入模板。' : '对接 /system/import-templates。'} action={<span className="status-badge purple">{rows.length} 条</span>}>
         {rows.length ? (
           <>
           <div className="admin-table">
@@ -97,7 +105,7 @@ const ImportTemplatesPage = () => {
           <Pagination page={page} pageSize={pageSize} total={total} onChange={setPage} onPageSizeChange={(size) => { setPage(1); setPageSize(size); }} />
           </>
         ) : (
-          <EmptyState title={loading ? '加载中...' : '暂无导入模板'} description="导入模板独立展示，避免和 Prompt/脚本模板混在一起。" icon={<UploadCloud size={22} />} />
+          <EmptyState title={loading ? '加载中...' : briefMode ? '暂无卖点 Brief 导入模板' : '暂无导入模板'} description={briefMode ? '请先在全部导入模板中创建 selling_point 类型模板，再回到这里上传文件。' : '导入模板独立展示，避免和 Prompt/脚本模板混在一起。'} icon={<UploadCloud size={22} />} />
         )}
       </SectionCard>
 

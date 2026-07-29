@@ -3,6 +3,8 @@ package com.aiscript.modules.asset.service.impl;
 import com.aiscript.common.api.PageResult;
 import com.aiscript.common.exception.BusinessException;
 import com.aiscript.common.pagination.PageQuery;
+import com.aiscript.common.util.JsonUtils;
+import com.aiscript.framework.storage.StorageClient;
 import com.aiscript.framework.tenant.TenantContext;
 import com.aiscript.modules.asset.convert.AssetConvert;
 import com.aiscript.modules.asset.dto.AssetSaveDTO;
@@ -15,6 +17,7 @@ import com.aiscript.modules.asset.mapper.AiAssetMapper;
 import com.aiscript.modules.asset.mapper.AiSellingPointAssetMapper;
 import com.aiscript.modules.asset.mapper.AiViralAssetMapper;
 import com.aiscript.modules.asset.service.AssetService;
+import com.aiscript.modules.asset.service.ProductFrameContentExtractor;
 import com.aiscript.modules.asset.vo.AssetVO;
 import com.aiscript.modules.asset.vo.SellingPointAssetVO;
 import com.aiscript.modules.asset.vo.ViralAssetVO;
@@ -22,12 +25,18 @@ import com.aiscript.security.LoginUser;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import java.io.IOException;
+import java.time.LocalDate;
 import java.util.List;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.multipart.MultipartFile;
 
 @Service
 public class AssetServiceImpl implements AssetService {
@@ -36,15 +45,80 @@ public class AssetServiceImpl implements AssetService {
     private final AiAssetMapper assetMapper;
     private final AiSellingPointAssetMapper sellingPointAssetMapper;
     private final AiViralAssetMapper viralAssetMapper;
+    private final StorageClient storageClient;
+    private final ProductFrameContentExtractor productFrameContentExtractor;
 
     public AssetServiceImpl(
         AiAssetMapper assetMapper,
         AiSellingPointAssetMapper sellingPointAssetMapper,
-        AiViralAssetMapper viralAssetMapper
+        AiViralAssetMapper viralAssetMapper,
+        StorageClient storageClient,
+        ProductFrameContentExtractor productFrameContentExtractor
     ) {
         this.assetMapper = assetMapper;
         this.sellingPointAssetMapper = sellingPointAssetMapper;
         this.viralAssetMapper = viralAssetMapper;
+        this.storageClient = storageClient;
+        this.productFrameContentExtractor = productFrameContentExtractor;
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public AssetVO uploadProductFrame(MultipartFile file, String projectId) {
+        if (file == null || file.isEmpty() || !StringUtils.hasText(file.getOriginalFilename())) {
+            throw new BusinessException("请选择需要上传的产品画面文件");
+        }
+        Integer parsedProjectId = StringUtils.hasText(projectId) ? parseProjectId(projectId) : null;
+        String filename = file.getOriginalFilename().trim();
+        String extractedText = productFrameContentExtractor.extract(file);
+        String suffix = filename.contains(".") ? filename.substring(filename.lastIndexOf(".")) : "";
+        String objectKey = "product-frame/" + LocalDate.now() + "/"
+            + UUID.randomUUID().toString().replace("-", "") + suffix;
+        try {
+            objectKey = storageClient.putObject(objectKey, file.getInputStream(), file.getSize(), file.getContentType());
+        } catch (IOException ex) {
+            throw new BusinessException("产品画面文件读取失败：" + ex.getMessage());
+        }
+
+        AiAsset entity = assetMapper.selectOne(new LambdaQueryWrapper<AiAsset>()
+            .eq(AiAsset::getTenantId, currentTenantId())
+            .eq(AiAsset::getOwnerId, currentUserId())
+            .eq(AiAsset::getCategory, IMMUTABLE_FILE_CATEGORY)
+            .eq(AiAsset::getAssetName, filename)
+            .orderByDesc(AiAsset::getUpdateTime)
+            .last("LIMIT 1"));
+        boolean created = entity == null;
+        if (created) {
+            entity = new AiAsset();
+            entity.setTenantId(currentTenantId());
+            entity.setOwnerId(currentUserId());
+            entity.setUsageCount(0);
+            entity.setStatus(1);
+            entity.setSource("upload");
+        }
+        entity.setProjectId(parsedProjectId);
+        entity.setAssetName(filename);
+        entity.setAssetType(productFrameContentExtractor.isTableFile(filename) ? "document" : "image");
+        entity.setCategory(IMMUTABLE_FILE_CATEGORY);
+        entity.setStorageKey(objectKey);
+        entity.setPreviewUrl(storageClient.presignedUrl(objectKey));
+        entity.setMimeType(file.getContentType());
+        entity.setFileSizeBytes(file.getSize());
+        Map<String, Object> metadata = new LinkedHashMap<>();
+        metadata.put("extractedText", StringUtils.hasText(extractedText) ? extractedText : "");
+        metadata.put("immutable", true);
+        metadata.put("source", "script-product-frame");
+        metadata.put("parseType", productFrameContentExtractor.isTableFile(filename) ? "table" : "ocr");
+        entity.setMetadataJson(JsonUtils.toJson(metadata));
+        if (created) {
+            assetMapper.insert(entity);
+        } else {
+            assetMapper.updateById(entity);
+        }
+        AssetVO result = AssetConvert.toAssetVO(entity);
+        result.setExtractedText(extractedText);
+        result.setUpdatedExisting(!created);
+        return result;
     }
 
     @Override
@@ -241,6 +315,14 @@ public class AssetServiceImpl implements AssetService {
 
     private Integer currentTenantId() {
         return TenantContext.getTenantId() == null ? DEFAULT_TENANT_ID : TenantContext.getTenantId();
+    }
+
+    private Integer parseProjectId(String projectId) {
+        try {
+            return Integer.valueOf(projectId);
+        } catch (NumberFormatException ex) {
+            throw new BusinessException("项目参数错误");
+        }
     }
 
     private Integer currentUserId() {

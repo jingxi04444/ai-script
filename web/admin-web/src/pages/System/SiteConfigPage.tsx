@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
-import { ArrowDown, ArrowUp, ChevronRight, FileText, FolderTree, Image, Plus, RefreshCcw, Save, Trash2, UploadCloud } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { ArrowDown, ArrowUp, ChevronRight, FileText, FolderTree, Plus, RefreshCcw, Save, Trash2 } from 'lucide-react';
 import { systemApi, type SiteConfig } from '../../api/system';
-import { uploadApi } from '../../api/upload';
 import { PageHeader, SectionCard } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
 import './site-config-page.css';
@@ -22,7 +21,7 @@ interface OriginalScenarioCategory {
   children: OriginalScenarioPrompt[];
 }
 
-type SiteConfigTab = 'logo' | 'analysis' | 'prompt';
+type SiteConfigTab = 'analysis' | 'prompt';
 type PromptTreeSelection = { kind: 'category'; categoryId: string } | { kind: 'child'; categoryId: string; childId: string };
 
 const defaultOriginalScenarioPrompts: OriginalScenarioPrompt[] = [
@@ -117,14 +116,16 @@ const stringifyOriginalScenarioPrompts = (list: OriginalScenarioCategory[]) => J
       })),
   })));
 
-const SiteConfigPage = () => {
+interface SiteConfigPageProps {
+  promptOnly?: boolean;
+}
+
+const SiteConfigPage = ({ promptOnly = false }: SiteConfigPageProps) => {
   const { notify } = useAdminShell();
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [config, setConfig] = useState<SiteConfig>({});
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [activeTab, setActiveTab] = useState<SiteConfigTab>('logo');
+  const [activeTab, setActiveTab] = useState<SiteConfigTab>(promptOnly ? 'prompt' : 'analysis');
   const [expandedCategoryIds, setExpandedCategoryIds] = useState<string[]>(defaultOriginalScenarioCategories.map((item) => item.id));
   const [selectedPromptNode, setSelectedPromptNode] = useState<PromptTreeSelection>({ kind: 'category', categoryId: defaultOriginalScenarioCategories[0].id });
   const [originalScenarioCategories, setOriginalScenarioCategories] = useState<OriginalScenarioCategory[]>(defaultOriginalScenarioCategories);
@@ -178,28 +179,6 @@ const SiteConfigPage = () => {
     } finally {
       setSaving(false);
     }
-  };
-
-  const upload = async (file?: File) => {
-    if (!file) return;
-    setUploading(true);
-    try {
-      const result = await uploadApi.uploadFile(file);
-      const nextConfig = { ...config, homeLogoUrl: result.url, homeLogoKey: result.objectKey };
-      setConfig(nextConfig);
-      await save(nextConfig);
-    } catch {
-      notify('图片上传失败');
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = '';
-    }
-  };
-
-  const clearLogo = async () => {
-    const nextConfig = { ...config, homeLogoUrl: '', homeLogoKey: '' };
-    setConfig(nextConfig);
-    await save(nextConfig);
   };
 
   const syncOriginalScenarioCategories = (nextList: OriginalScenarioCategory[]) => {
@@ -280,55 +259,16 @@ const SiteConfigPage = () => {
 
   return (
     <div className="page-stack site-config-page">
-      <PageHeader
-        title="站点配置"
-        description="配置用户端首页品牌图标和前台展示文案。"
+      {!promptOnly ? <PageHeader
+        title="业务配置"
+        description="维护爆款解析案例和 AI 智能脚本分类提示词。页面图标、图片和展示文案统一在“页面视觉”中维护。"
         actions={<button className="toolbar-btn" type="button" onClick={load}><RefreshCcw size={16} />{loading ? '加载中' : '刷新'}</button>}
-      />
+      /> : null}
 
-      <div className="site-config-tabs" role="tablist" aria-label="站点配置导航">
-        <button type="button" role="tab" aria-selected={activeTab === 'logo'} className={`site-config-tab ${activeTab === 'logo' ? 'active' : ''}`} onClick={() => setActiveTab('logo')}>首页图标</button>
+      {!promptOnly ? <div className="site-config-tabs" role="tablist" aria-label="业务配置导航">
         <button type="button" role="tab" aria-selected={activeTab === 'analysis'} className={`site-config-tab ${activeTab === 'analysis' ? 'active' : ''}`} onClick={() => setActiveTab('analysis')}>爆款解析案例</button>
-        <button type="button" role="tab" aria-selected={activeTab === 'prompt'} className={`site-config-tab ${activeTab === 'prompt' ? 'active' : ''}`} onClick={() => setActiveTab('prompt')}>AI原创提示词</button>
-      </div>
-
-      {activeTab === 'logo' ? (
-      <SectionCard title="首页图标" description="上传图片后会自动保存 homeLogoUrl / homeLogoKey。" action={<span className="status-badge blue">Site Config</span>}>
-        <div className="site-config-grid">
-          <div className="site-logo-preview">
-            {config.homeLogoUrl ? (
-              <img src={config.homeLogoUrl} alt="首页左侧顶部图标预览" />
-            ) : (
-              <div className="site-logo-empty">
-                <div className="site-logo-empty-icon"><Image size={22} /></div>
-                <strong>暂无图标</strong>
-                <span>上传图片或手动填写 URL 后保存。</span>
-              </div>
-            )}
-          </div>
-
-          <div className="site-config-form">
-            <label className="form-field">
-              <span>图标 URL</span>
-              <input value={config.homeLogoUrl || ''} onChange={(event) => setConfig({ ...config, homeLogoUrl: event.target.value })} placeholder="https://..." />
-            </label>
-            <label className="form-field">
-              <span>文件 Object Key</span>
-              <input value={config.homeLogoKey || ''} onChange={(event) => setConfig({ ...config, homeLogoKey: event.target.value })} placeholder="上传后自动填充" />
-            </label>
-
-            <div className="site-config-actions site-config-actions-inline">
-              <label className="toolbar-btn upload-btn">
-                <UploadCloud size={16} />{uploading ? '上传中' : '上传图片'}
-                <input ref={fileInputRef} type="file" hidden accept="image/*" onChange={(event) => upload(event.target.files?.[0])} />
-              </label>
-              <button className="toolbar-btn" type="button" onClick={() => save()} disabled={saving}><Save size={16} />{saving ? '保存中' : '保存'}</button>
-              <button className="toolbar-btn danger" type="button" onClick={clearLogo}><Trash2 size={16} />清空</button>
-            </div>
-          </div>
-        </div>
-      </SectionCard>
-      ) : null}
+        <button type="button" role="tab" aria-selected={activeTab === 'prompt'} className={`site-config-tab ${activeTab === 'prompt' ? 'active' : ''}`} onClick={() => setActiveTab('prompt')}>AI智能脚本管理</button>
+      </div> : null}
 
       {activeTab === 'analysis' ? (
       <SectionCard title="爆款复刻解析案例" description="维护用户端步骤2爆款复刻页面中“可查看解析案例”的悬停展示内容。" action={<span className="status-badge green">Viral Analysis</span>}>
@@ -357,9 +297,9 @@ const SiteConfigPage = () => {
       ) : null}
 
       {activeTab === 'prompt' ? (
-      <SectionCard title="AI原创脚本分类提示词" description="顶部卡片是大类，下拉框是当前大类的子类。生成时会自动合并两级通用提示词。" action={<span className="status-badge green">Original Prompts</span>}>
+      <SectionCard title="AI智能脚本管理" description="管理 AI 智能脚本的大类、子类及两级通用提示词，生成时会自动合并使用。" action={<span className="status-badge green">AI Script</span>}>
         <div className="original-prompt-tree-layout">
-          <aside className="original-prompt-tree" aria-label="AI原创提示词分类树">
+          <aside className="original-prompt-tree" aria-label="AI智能脚本分类树">
             <div className="original-prompt-tree-title">
               <FolderTree size={17} />
               <strong>分类结构</strong>

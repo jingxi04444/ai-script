@@ -1,5 +1,6 @@
 package com.aiscript.modules.asset.convert;
 
+import com.aiscript.common.util.JsonUtils;
 import com.aiscript.modules.asset.entity.AiAsset;
 import com.aiscript.modules.asset.entity.AiSellingPointAsset;
 import com.aiscript.modules.asset.entity.AiViralAsset;
@@ -23,6 +24,8 @@ public final class AssetConvert {
         vo.setMimeType(entity.getMimeType());
         vo.setFileSizeBytes(entity.getFileSizeBytes());
         vo.setMetadataJson(entity.getMetadataJson());
+        Object extractedText = JsonUtils.toMap(entity.getMetadataJson()).get("extractedText");
+        vo.setExtractedText(extractedText instanceof String text ? text : null);
         vo.setStatus(entity.getStatus() != null && entity.getStatus() == 1 ? "enabled" : "disabled");
         return vo;
     }

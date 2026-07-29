@@ -57,6 +57,7 @@ export interface GenerateScriptParams {
   format?: string;
   formatRequirement?: string;
   productFrame?: string;
+  productFrameAssetId?: string;
   productImage?: string;
   productFrameFileName?: string;
   productFrameContent?: string;
@@ -75,6 +76,7 @@ export interface PolishScriptParams {
   instruction: string;
   content: string;
   briefId?: string;
+  productFrameAssetId?: string;
   productImage?: string;
   productFrameFileName?: string;
   productFrameContent?: string;

@@ -23,6 +23,7 @@ import BriefDialog from '../../components/Modal/BriefDialog';
 import BriefDetectionDialog from '../../components/Modal/BriefDetectionDialog';
 import UploadDialog from '../../components/Modal/UploadDialog';
 import { projectApi } from '../../api/project';
+import { siteApi } from '../../api/site';
 import { useWorkspaceStore, steps, type ScriptMode, type StepKey } from '../../stores/workspaceStore';
 import SellingPointsPanel from './SellingPoints/SellingPointsPanel';
 import type { SellingPointsPanelRef } from './SellingPoints/SellingPointsPanel';
@@ -36,6 +37,12 @@ import './workspace-page.css';
 
 const isWorkspaceStep = (value: string | null): value is StepKey => !!value && steps.some((step) => step.id === value);
 const isScriptMode = (value: string | null): value is ScriptMode => value === 'viral' || value === 'template' || value === 'original' || value === 'mine' || value === 'product' || value === 'product-dimension';
+
+interface ScriptModeVisual {
+  key: ScriptMode;
+  headerLabel?: string;
+  iconUrl?: string;
+}
 
 const WorkspacePage = () => {
   const navigate = useNavigate();
@@ -64,6 +71,7 @@ const WorkspacePage = () => {
   const [uploadDialog, setUploadDialog] = useState(false);
   const [briefRefreshKey, setBriefRefreshKey] = useState(0);
   const [isSavingTitle, setIsSavingTitle] = useState(false);
+  const [scriptModeVisuals, setScriptModeVisuals] = useState<ScriptModeVisual[]>([]);
   const sellingPointsRef = useRef<SellingPointsPanelRef>(null);
   const isSavingTitleRef = useRef(false);
   const activeIndex = steps.findIndex((s) => s.id === activeStep);
@@ -83,6 +91,19 @@ const WorkspacePage = () => {
     activeStep === 'selling-points' ? 'selling-workspace-main' : '',
     activeStep === 'storyboard' ? 'storyboard-workspace-main' : '',
   ].filter(Boolean).join(' ');
+  const activeScriptModeVisual = scriptModeVisuals.find((item) => item.key === activeScriptMode);
+
+  useEffect(() => {
+    siteApi.getConfig().then((config) => {
+      if (!config.scriptVisualConfig?.trim()) return;
+      try {
+        const parsed = JSON.parse(config.scriptVisualConfig) as { modeItems?: ScriptModeVisual[] };
+        setScriptModeVisuals(Array.isArray(parsed.modeItems) ? parsed.modeItems : []);
+      } catch {
+        setScriptModeVisuals([]);
+      }
+    }).catch(() => setScriptModeVisuals([]));
+  }, []);
   const saveProjectTitle = async () => {
     if (isSavingTitleRef.current) return;
     const nextTitle = titleDraft.trim();
@@ -356,10 +377,10 @@ const WorkspacePage = () => {
             <>
               {activeScriptMode ? (
                 <div className="script-mode-nav script-mode-nav-single" aria-label="当前创作方式">
-                  {activeScriptMode === 'viral' && <button className="active" type="button"><CrownOutlined /><span>爆款复刻</span></button>}
-                  {activeScriptMode === 'template' && <button className="active" type="button"><FileTextOutlined /><span>脚本模板库</span></button>}
-                  {activeScriptMode === 'original' && <button className="active" type="button"><HighlightOutlined /><span>AI原创</span></button>}
-                  {activeScriptMode === 'mine' && <button className="active" type="button"><FolderOutlined /><span>我的模板库</span></button>}
+                  {activeScriptMode === 'viral' && <button className="active" type="button">{activeScriptModeVisual?.iconUrl ? <img src={activeScriptModeVisual.iconUrl} alt="" /> : <CrownOutlined />}<span>{activeScriptModeVisual?.headerLabel || '爆款复刻'}</span></button>}
+                  {activeScriptMode === 'template' && <button className="active" type="button">{activeScriptModeVisual?.iconUrl ? <img src={activeScriptModeVisual.iconUrl} alt="" /> : <FileTextOutlined />}<span>{activeScriptModeVisual?.headerLabel || '脚本模板库'}</span></button>}
+                  {activeScriptMode === 'original' && <button className="active" type="button">{activeScriptModeVisual?.iconUrl ? <img src={activeScriptModeVisual.iconUrl} alt="" /> : <HighlightOutlined />}<span>{activeScriptModeVisual?.headerLabel || 'AI原创'}</span></button>}
+                  {activeScriptMode === 'mine' && <button className="active" type="button">{activeScriptModeVisual?.iconUrl ? <img src={activeScriptModeVisual.iconUrl} alt="" /> : <FolderOutlined />}<span>{activeScriptModeVisual?.headerLabel || '我的模板库'}</span></button>}
                   {(activeScriptMode === 'product' || activeScriptMode === 'product-dimension') && <button className="active" type="button"><FileTextOutlined /><span>产品维度脚本</span></button>}
                 </div>
               ) : (

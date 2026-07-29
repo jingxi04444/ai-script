@@ -4,6 +4,7 @@ import { providerApi, type Provider } from '../../api/provider';
 import { DEFAULT_PAGE_SIZE, EmptyState, Modal, PageHeader, Pagination, SectionCard, StatusBadge } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
 import { optionalNumberFromInput } from '../../utils/form';
+import './models-page.css';
 
 type ThinkingMode = 'default' | 'enabled' | 'disabled';
 type ReasoningEffort = 'default' | 'high' | 'max';
@@ -157,7 +158,7 @@ const ModelsPage = () => {
   const rows = useMemo(() => providers, [providers]);
 
   return (
-    <div className="page-stack">
+    <div className="page-stack models-page">
       <PageHeader
         title="大模型管理"
         description="管理 Provider、模型路由和基础接入信息。"
@@ -173,19 +174,19 @@ const ModelsPage = () => {
       <SectionCard title="Provider 列表" description="对接 /api/admin/providers。">
         {rows.length ? (
           <>
-          <div className="admin-table">
-            <div className="table-head" style={{ gridTemplateColumns: '1fr 0.8fr 0.8fr 1fr 0.7fr 0.8fr 0.8fr' }}>
+          <div className="admin-table models-provider-table">
+            <div className="table-head models-provider-grid">
               <span>名称</span><span>平台</span><span>类型</span><span>地址</span><span>Key</span><span>状态</span><span>操作</span>
             </div>
             {rows.map((provider) => (
-              <div className="table-row" style={{ gridTemplateColumns: '1fr 0.8fr 0.8fr 1fr 0.7fr 0.8fr 0.8fr' }} key={provider.id}>
-                <strong>{provider.providerName || '-'}</strong>
-                <span>{provider.platform || '-'}</span>
-                <span>{provider.providerType || '-'}</span>
-                <span>{provider.endpointUrl || '-'}</span>
+              <div className="table-row models-provider-grid" key={provider.id}>
+                <strong className="models-provider-name" title={provider.providerName || '-'}>{provider.providerName || '-'}</strong>
+                <span className="models-provider-platform" title={provider.platform || '-'}>{provider.platform || '-'}</span>
+                <span className="models-provider-type" title={provider.providerType || '-'}>{provider.providerType || '-'}</span>
+                <span className="models-provider-endpoint" title={provider.endpointUrl || '-'}>{provider.endpointUrl || '-'}</span>
                 <StatusBadge tone={provider.apiKeyConfigured ? 'blue' : 'gray'}>{provider.apiKeyConfigured ? '已配置' : '未配置'}</StatusBadge>
                 <StatusBadge tone={String(provider.status) === '0' ? 'gray' : 'green'}>{String(provider.status) === '0' ? '禁用' : '启用'}</StatusBadge>
-                <div className="table-actions">
+                <div className="table-actions models-provider-actions">
                   <button className="table-btn" type="button" onClick={() => openEdit(provider)}>编辑</button>
                   <button className="table-btn danger" type="button" onClick={() => setDeleteId(provider.id)}><Trash2 size={16} /></button>
                 </div>

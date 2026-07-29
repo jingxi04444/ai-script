@@ -10,6 +10,7 @@ public class PolishScriptDTO {
 
     private String content;
     private String briefId;
+    private String productFrameAssetId;
     private String productImage;
     private String productFrameFileName;
     private String productFrameContent;

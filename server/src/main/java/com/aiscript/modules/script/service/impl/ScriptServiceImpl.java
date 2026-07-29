@@ -6,6 +6,8 @@ import com.aiscript.common.pagination.PageQuery;
 import com.aiscript.common.util.JsonUtils;
 import com.aiscript.framework.tenant.TenantContext;
 import com.aiscript.integration.llm.LlmClient;
+import com.aiscript.modules.asset.entity.AiAsset;
+import com.aiscript.modules.asset.mapper.AiAssetMapper;
 import com.aiscript.modules.brief.entity.AiBrief;
 import com.aiscript.modules.brief.mapper.AiBriefMapper;
 import com.aiscript.modules.generation.entity.AiGenerationTask;
@@ -60,6 +62,7 @@ public class ScriptServiceImpl implements ScriptService {
     private final AiStoryboardShotMapper shotMapper;
     private final AiGenerationTaskMapper generationTaskMapper;
     private final AiBriefMapper briefMapper;
+    private final AiAssetMapper assetMapper;
     private final SysScriptFormatConfigMapper scriptFormatMapper;
     private final LlmClient llmClient;
     private final PromptRenderService promptRenderService;
@@ -71,6 +74,7 @@ public class ScriptServiceImpl implements ScriptService {
         AiStoryboardShotMapper shotMapper,
         AiGenerationTaskMapper generationTaskMapper,
         AiBriefMapper briefMapper,
+        AiAssetMapper assetMapper,
         SysScriptFormatConfigMapper scriptFormatMapper,
         LlmClient llmClient,
         PromptRenderService promptRenderService
@@ -81,6 +85,7 @@ public class ScriptServiceImpl implements ScriptService {
         this.shotMapper = shotMapper;
         this.generationTaskMapper = generationTaskMapper;
         this.briefMapper = briefMapper;
+        this.assetMapper = assetMapper;
         this.scriptFormatMapper = scriptFormatMapper;
         this.llmClient = llmClient;
         this.promptRenderService = promptRenderService;
@@ -149,6 +154,7 @@ public class ScriptServiceImpl implements ScriptService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ScriptVO generate(GenerateScriptDTO dto) {
+        hydrateProductFrame(dto);
         AiGenerationTask task = createGenerationTask(dto);
         String generatedContent = generateContent(dto, task);
         AiStoryboardScript script = new AiStoryboardScript();
@@ -197,6 +203,7 @@ public class ScriptServiceImpl implements ScriptService {
     @Override
     public PolishScriptVO polish(Integer id, PolishScriptDTO dto) {
         AiStoryboardScript script = ownedScript(id);
+        hydrateProductFrame(dto);
 
         String sourceContent = StringUtils.hasText(dto.getContent()) ? dto.getContent().trim() : script.getContentText();
         if (!StringUtils.hasText(sourceContent)) {
@@ -221,10 +228,10 @@ public class ScriptServiceImpl implements ScriptService {
                 ? "【本次引用的画面文件】\n文件名：" + dto.getProductFrameFileName()
                 : "",
             StringUtils.hasText(dto.getProductFrameContent())
-                ? "【画面表格解析内容】\n" + dto.getProductFrameContent()
+                ? "【画面 OCR / 表格解析文字】\n" + dto.getProductFrameContent()
                 : "",
-            StringUtils.hasText(dto.getProductImage())
-                ? "【画面/截图】已随请求附加，请结合图片中真实可见的信息修改脚本。"
+            StringUtils.hasText(dto.getProductImage()) && !StringUtils.hasText(dto.getProductFrameContent())
+                ? "【画面文件说明】图片已上传，但未识别到可用文字。不要臆测图片中的物体、场景或卖点。"
                 : ""
         ).stream().filter(StringUtils::hasText).reduce((a, b) -> a + "\n\n" + b).orElse("");
         Map<String, String> variables = new HashMap<>();
@@ -235,13 +242,11 @@ public class ScriptServiceImpl implements ScriptService {
         variables.put("referenceContext", referenceContext);
         PromptRenderService.RenderedPrompt renderedPrompt = promptRenderService.render(
             "script_polish",
-            "你是专业商业短视频脚本编辑。请严格依据用户的修改要求，以及本次重新提供的产品 Brief、画面表格或截图润色原脚本。用户要求重新选择卖点时，只能从 Brief 和画面中的真实信息选择。保持原脚本的输出格式和表格列结构，只输出修改后的完整脚本，不要解释修改过程，不要添加 Markdown 代码块。",
+            "你是专业商业短视频脚本编辑。请严格依据用户的修改要求，以及本次重新提供的产品 Brief、画面 OCR 文字或表格解析文字润色原脚本。用户要求重新选择卖点时，只能从 Brief 和已解析文字中的真实信息选择，不能推测图片里未提供的视觉内容。保持原脚本的输出格式和表格列结构，只输出修改后的完整脚本，不要解释修改过程，不要添加 Markdown 代码块。",
             "请按修改要求重写原脚本。\n\n【修改要求】\n{{instruction}}\n\n{{referenceContext}}\n\n【原脚本】\n{{content}}",
             variables
         );
-        String polishedContent = StringUtils.hasText(dto.getProductImage())
-            ? llmClient.chatWithImages(renderedPrompt.getSystemPrompt(), renderedPrompt.getUserPrompt(), List.of(dto.getProductImage()))
-            : llmClient.chat(renderedPrompt.getSystemPrompt(), renderedPrompt.getUserPrompt());
+        String polishedContent = llmClient.chat(renderedPrompt.getSystemPrompt(), renderedPrompt.getUserPrompt());
         if (!StringUtils.hasText(polishedContent) || "{}".equals(polishedContent.trim())) {
             throw new BusinessException("AI 未返回有效的润色内容，请稍后重试");
         }
@@ -450,7 +455,7 @@ public class ScriptServiceImpl implements ScriptService {
         variables.put("structureAnalysis", dto.getStructureAnalysis() == null ? "" : dto.getStructureAnalysis());
         PromptRenderService.RenderedPrompt renderedPrompt = promptRenderService.render(
             scriptGenerateSceneCode(dto.getType()),
-            "你是专业商业短视频脚本策划，只输出最终可拍摄脚本，不输出解释、假设、占位符或使用说明。",
+            "你是专业商业短视频脚本策划，只输出最终可拍摄脚本，不输出解释、假设、占位符或使用说明。上传图片只提供 OCR 识别文字，不代表已识别图片中的物体或场景；不得推测 OCR 文字之外的视觉信息。",
             "请根据下方内容信息，按平台配置的脚本生成规范输出最终脚本。不要输出解释、变量说明、假设说明或占位符。",
             variables
         );
@@ -533,7 +538,7 @@ public class ScriptServiceImpl implements ScriptService {
                 "脚本格式要求：\n" + formatInfo.requirement(),
                 "脚本时长：" + nullToEmpty(dto.getDuration()),
                 "上传画面文件：" + nullToEmpty(dto.getProductFrameFileName()),
-                "上传画面表格内容：\n" + nullToEmpty(dto.getProductFrameContent()),
+                "上传画面 OCR / 表格解析文字：\n" + nullToEmpty(dto.getProductFrameContent()),
                 "用户补充要求：\n" + nullToEmpty(userPrompt)
             ).stream().filter(line -> !line.endsWith("：\n") && !line.endsWith("：")).toList().stream().reduce((a, b) -> a + "\n\n" + b).orElse("");
         }
@@ -546,7 +551,7 @@ public class ScriptServiceImpl implements ScriptService {
             "脚本格式要求：\n" + formatInfo.requirement(),
             "脚本时长：" + nullToEmpty(dto.getDuration()),
             "上传画面文件：" + nullToEmpty(dto.getProductFrameFileName()),
-            "上传画面表格内容：\n" + nullToEmpty(dto.getProductFrameContent()),
+            "上传画面 OCR / 表格解析文字：\n" + nullToEmpty(dto.getProductFrameContent()),
             "模板信息：\n" + nullToEmpty(templateText),
             "参考链接：" + nullToEmpty(dto.getReferenceUrl()),
             "参考视频文案：\n" + nullToEmpty(dto.getReferenceCopy()),
@@ -570,6 +575,59 @@ public class ScriptServiceImpl implements ScriptService {
             "其他要求：" + nullToEmpty(brief.getOtherRequirements()),
             "完整 Brief：" + nullToEmpty(brief.getBriefContent())
         ).stream().filter(line -> !line.endsWith("：")).toList().stream().reduce((a, b) -> a + "\n" + b).orElse("");
+    }
+
+    private void hydrateProductFrame(GenerateScriptDTO dto) {
+        ProductFrameReference reference = productFrameReference(dto.getProductFrameAssetId());
+        if (reference == null) {
+            return;
+        }
+        dto.setProductFrameFileName(reference.fileName());
+        dto.setProductFrameContent(reference.extractedText());
+        dto.setProductImage(reference.previewUrl());
+        dto.setProductFrame(reference.previewUrl());
+    }
+
+    private void hydrateProductFrame(PolishScriptDTO dto) {
+        ProductFrameReference reference = productFrameReference(dto.getProductFrameAssetId());
+        if (reference == null) {
+            return;
+        }
+        dto.setProductFrameFileName(reference.fileName());
+        dto.setProductFrameContent(reference.extractedText());
+        dto.setProductImage(reference.previewUrl());
+    }
+
+    private ProductFrameReference productFrameReference(String assetId) {
+        if (!StringUtils.hasText(assetId)) {
+            return null;
+        }
+        final Integer parsedAssetId;
+        try {
+            parsedAssetId = Integer.valueOf(assetId);
+        } catch (NumberFormatException ex) {
+            throw new BusinessException("产品画面资产参数错误");
+        }
+        AiAsset asset = assetMapper.selectOne(new LambdaQueryWrapper<AiAsset>()
+            .eq(AiAsset::getId, parsedAssetId)
+            .eq(AiAsset::getTenantId, currentTenantId())
+            .eq(AiAsset::getOwnerId, currentUserId())
+            .eq(AiAsset::getCategory, "product-frame-library")
+            .last("LIMIT 1"));
+        if (asset == null) {
+            throw new BusinessException("产品画面资产不存在或无权使用");
+        }
+        Object extractedText = JsonUtils.toMap(asset.getMetadataJson()).get("extractedText");
+        asset.setUsageCount((asset.getUsageCount() == null ? 0 : asset.getUsageCount()) + 1);
+        assetMapper.updateById(asset);
+        return new ProductFrameReference(
+            asset.getAssetName(),
+            extractedText instanceof String text ? text : "",
+            asset.getPreviewUrl()
+        );
+    }
+
+    private record ProductFrameReference(String fileName, String extractedText, String previewUrl) {
     }
 
     private String templateInstruction(String templateId) {

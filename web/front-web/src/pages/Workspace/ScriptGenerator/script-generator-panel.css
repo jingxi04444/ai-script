@@ -159,6 +159,20 @@
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
+.script-entry-avatar.has-image {
+  padding: 0;
+  overflow: hidden;
+}
+
+.script-entry-avatar img,
+.script-entry-card-icon img,
+.original-hero-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
 .script-entry-copy span {
   display: block;
   margin-bottom: 10px;
@@ -235,6 +249,10 @@
   background: linear-gradient(180deg, rgba(49, 54, 59, 0.96), rgba(28, 31, 35, 0.98));
   color: #f3f7f8;
   font-size: 24px;
+}
+
+.script-entry-card-icon.has-image {
+  padding: 4px;
 }
 
 .script-entry-card.gold .script-entry-card-icon {
@@ -3047,17 +3065,6 @@
   white-space: pre-wrap;
 }
 
-.template-spec-description b,
-.template-spec-description span {
-  display: block;
-}
-
-.template-spec-description span strong {
-  display: inline;
-  margin-bottom: 0;
-  font-size: inherit;
-}
-
 .template-spec-line {
   display: flex;
   align-items: flex-start;
@@ -3385,6 +3392,15 @@
     radial-gradient(circle at 48% 42%, #1d1718 0 42%, transparent 43%),
     linear-gradient(180deg, #202426, #121516);
   position: relative;
+}
+
+.original-hero-avatar.has-image {
+  background: transparent;
+  overflow: hidden;
+}
+
+.original-hero-avatar.has-image::after {
+  display: none;
 }
 
 .original-hero-avatar::after {
@@ -3962,7 +3978,8 @@
 }
 
 .product-frame-picker-trigger {
-  width: 100%;
+  flex: 1 1 auto;
+  width: auto;
   min-width: 0;
   height: 100%;
   display: grid;
@@ -4011,10 +4028,12 @@
 }
 
 .product-frame-current-remove {
-  flex: 0 0 34px;
-  width: 34px;
-  min-width: 34px;
-  height: 100%;
+  flex: 0 0 28px;
+  width: 28px;
+  min-width: 28px;
+  height: 28px;
+  min-height: 28px;
+  align-self: center;
   display: grid;
   place-items: center;
   padding: 0;
@@ -4022,6 +4041,18 @@
   border-radius: 8px;
   background: rgba(205, 62, 62, 0.08);
   color: #ef7777;
+  font-size: 13px;
+}
+
+/* Keep the compact remove action from inheriting the wide upload-button rules
+   used by the template and original-script layouts. */
+.product-frame-control > .product-frame-current-remove {
+  flex: 0 0 28px !important;
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  min-height: 28px !important;
+  padding: 0 !important;
 }
 
 .product-frame-current-remove:hover {

@@ -20,10 +20,26 @@ app:
   storage:
     provider: ${STORAGE_PROVIDER:aliyun-oss}
     endpoint: ${STORAGE_ENDPOINT:oss-cn-hangzhou.aliyuncs.com}
-    bucket: ${STORAGE_BUCKET:datalefoss}
+    bucket: ${STORAGE_BUCKET:rxbtanhua}
     access-key: ${STORAGE_ACCESS_KEY:}
     secret-key: ${STORAGE_SECRET_KEY:}
     region: ${STORAGE_REGION:cn-hangzhou}
     public-base-url: ${STORAGE_PUBLIC_BASE_URL:}
     local-path: ${STORAGE_LOCAL_PATH:/opt/ai-script/uploads}
-
+  ocr:
+    enabled: ${OCR_ENABLED:true}
+    provider: ${OCR_PROVIDER:aliyun}
+    fallback-to-tesseract: ${OCR_FALLBACK_TO_TESSERACT:true}
+    command: ${OCR_COMMAND:tesseract}
+    language: ${OCR_LANGUAGE:chi_sim+eng}
+    page-segmentation-mode: ${OCR_PAGE_SEGMENTATION_MODE:6}
+    timeout-seconds: ${OCR_TIMEOUT_SECONDS:30}
+    max-text-length: ${OCR_MAX_TEXT_LENGTH:30000}
+    aliyun:
+      access-key-id: ${STORAGE_ACCESS_KEY:}
+      access-key-secret: ${STORAGE_SECRET_KEY:}
+      endpoint: ocr-api.cn-hangzhou.aliyuncs.com
+      region-id: cn-hangzhou
+      connect-timeout-millis: ${ALIYUN_OCR_CONNECT_TIMEOUT_MILLIS:5000}
+      read-timeout-millis: ${ALIYUN_OCR_READ_TIMEOUT_MILLIS:30000}
+      max-file-size-bytes: ${ALIYUN_OCR_MAX_FILE_SIZE_BYTES:10485760}
