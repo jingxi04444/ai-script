@@ -52,3 +52,11 @@ html[data-color-mode='light'] .rail-profile-dropdown .ant-dropdown-menu-submenu-
 html[data-color-mode='light'] .ant-dropdown-menu-submenu-popup .ant-dropdown-menu-item {
   color: #252a2d !important;
 }
+.home-rail .rail-custom-icon {
+  object-fit: contain;
+}
+
+.home-rail .rail-custom-icon::before,
+.home-rail .rail-custom-icon::after {
+  display: none;
+}

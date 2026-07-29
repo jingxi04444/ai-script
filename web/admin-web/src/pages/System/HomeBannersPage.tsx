@@ -29,7 +29,11 @@ const sortBanners = (rows: HomeBanner[]) => [...rows].sort((left, right) => {
   return String(left.id ?? '').localeCompare(String(right.id ?? ''));
 });
 
-const HomeBannersPage = () => {
+interface HomeBannersPageProps {
+  embedded?: boolean;
+}
+
+const HomeBannersPage = ({ embedded = false }: HomeBannersPageProps) => {
   const { notify } = useAdminShell();
   const [items, setItems] = useState<HomeBanner[]>([]);
   const [loading, setLoading] = useState(false);
@@ -132,19 +136,21 @@ const HomeBannersPage = () => {
     } catch { notify('图片上传失败'); }
   };
 
+  const headerActions = (
+    <>
+      <button className="toolbar-btn" type="button" onClick={load}><RefreshCcw size={16} />{loading ? '加载中' : '刷新'}</button>
+      <button className="toolbar-btn primary" type="button" onClick={openCreateModal}><Plus size={16} />新增轮播</button>
+    </>
+  );
+
   return (
-    <div className="page-stack home-banners-page">
-      <PageHeader
+    <div className={`${embedded ? 'home-banners-embedded' : 'page-stack'} home-banners-page`}>
+      {!embedded && <PageHeader
         title="首页轮播"
         description="独立维护用户端首页轮播图，启用项按排序值从小到大展示。"
-        actions={(
-          <>
-            <button className="toolbar-btn" type="button" onClick={load}><RefreshCcw size={16} />{loading ? '加载中' : '刷新'}</button>
-            <button className="toolbar-btn primary" type="button" onClick={openCreateModal}><Plus size={16} />新增轮播</button>
-          </>
-        )}
-      />
-      <SectionCard title="轮播项" description="每条数据单独保存到 sys_home_banner 表。">
+        actions={headerActions}
+      />}
+      <SectionCard title="轮播项" description="维护图片、标题、副标题、跳转和排序，保存后同步到用户端首页。" action={embedded ? headerActions : undefined}>
         {rows.length ? (
           <div className="admin-table home-banner-table">
             <div className="table-head home-banner-table-head">

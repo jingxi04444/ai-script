@@ -17,6 +17,12 @@ import type { PaginationParams } from '../types/api';
 export const assetApi = {
   list: (params?: AssetQueryParams): Promise<AssetPage> => api.get('/assets', { params }),
   create: (data: AssetSaveParams): Promise<Asset> => api.post('/assets', data),
+  uploadProductFrame: (file: File, projectId?: string): Promise<Asset> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (projectId) formData.append('projectId', projectId);
+    return api.post('/product-frame-assets/upload', formData);
+  },
   update: (id: string, data: AssetSaveParams): Promise<Asset> => api.put(`/assets/${id}`, data),
   delete: (id: string): Promise<void> => api.delete(`/assets/${id}`),
 

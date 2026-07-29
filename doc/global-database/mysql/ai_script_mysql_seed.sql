@@ -27,6 +27,78 @@ INSERT INTO sys_site_config (
   front_original_scenario_prompts = VALUES(front_original_scenario_prompts),
   status = VALUES(status);
 
+INSERT INTO sys_config_item (
+  parent_id, node_type, group_code, config_key, config_name, config_value, value_type, description, sort_order, status
+) VALUES
+  (NULL, 'group', 'page-visual', 'visual', '页面视觉', NULL, 'string', '用户端页面图标、图片和文案配置', 10, 1),
+  (NULL, 'group', 'script-generator', 'content', '脚本生成器', NULL, 'string', '脚本生成器案例与提示词配置', 20, 1)
+ON DUPLICATE KEY UPDATE
+  config_name = VALUES(config_name),
+  description = VALUES(description),
+  sort_order = VALUES(sort_order),
+  status = VALUES(status);
+
+SET @visual_root_id = (SELECT id FROM sys_config_item WHERE config_key = 'visual' LIMIT 1);
+SET @content_root_id = (SELECT id FROM sys_config_item WHERE config_key = 'content' LIMIT 1);
+
+INSERT INTO sys_config_item (
+  parent_id, node_type, group_code, config_key, config_name, config_value, value_type, description, sort_order, status
+) VALUES
+  (@visual_root_id, 'group', 'page-visual', 'visual.home', '主页视觉', NULL, 'string', '主页品牌、导航、快捷入口和作品配置', 10, 1),
+  (@visual_root_id, 'group', 'page-visual', 'visual.script-generator', '脚本生成器视觉', NULL, 'string', '脚本生成器品牌区和入口配置', 20, 1),
+  (@content_root_id, 'group', 'script-generator', 'content.viral', '爆款复刻管理', NULL, 'string', '爆款解析案例配置', 10, 1),
+  (@content_root_id, 'group', 'script-generator', 'content.original', 'AI智能脚本管理', NULL, 'string', 'AI智能脚本分类提示词配置', 20, 1)
+ON DUPLICATE KEY UPDATE
+  parent_id = VALUES(parent_id),
+  config_name = VALUES(config_name),
+  description = VALUES(description),
+  sort_order = VALUES(sort_order),
+  status = VALUES(status);
+
+SET @visual_home_id = (SELECT id FROM sys_config_item WHERE config_key = 'visual.home' LIMIT 1);
+SET @visual_script_id = (SELECT id FROM sys_config_item WHERE config_key = 'visual.script-generator' LIMIT 1);
+SET @content_viral_id = (SELECT id FROM sys_config_item WHERE config_key = 'content.viral' LIMIT 1);
+SET @content_original_id = (SELECT id FROM sys_config_item WHERE config_key = 'content.original' LIMIT 1);
+
+INSERT INTO sys_config_item (
+  parent_id, node_type, group_code, config_key, config_name, config_value, value_type, description, sort_order, status
+)
+SELECT @visual_home_id, 'item', 'page-visual', 'site.home.logo.url', '首页品牌图标 URL',
+       front_home_logo_url, 'string', '用户端左侧栏顶部品牌图标地址', 10, 1
+FROM sys_site_config WHERE config_code = 'default'
+UNION ALL
+SELECT @visual_home_id, 'item', 'page-visual', 'site.home.logo.key', '首页品牌图标存储 Key',
+       front_home_logo_key, 'string', '品牌图标对象存储 Key', 20, 1
+FROM sys_site_config WHERE config_code = 'default'
+UNION ALL
+SELECT @visual_home_id, 'item', 'page-visual', 'visual.home.config', '主页视觉配置',
+       CAST(front_home_visual_config AS CHAR), 'json', '主页导航、快捷入口和作品配置', 30, 1
+FROM sys_site_config WHERE config_code = 'default'
+UNION ALL
+SELECT @visual_script_id, 'item', 'page-visual', 'visual.script-generator.config', '脚本生成器视觉配置',
+       CAST(front_script_visual_config AS CHAR), 'json', '脚本生成器图标与文案配置', 10, 1
+FROM sys_site_config WHERE config_code = 'default'
+UNION ALL
+SELECT @content_viral_id, 'item', 'script-generator', 'content.viral.simple-analysis-example', '简易文案解析案例',
+       front_viral_simple_analysis_example, 'text', '爆款复刻简易文案解析示例', 10, 1
+FROM sys_site_config WHERE config_code = 'default'
+UNION ALL
+SELECT @content_viral_id, 'item', 'script-generator', 'content.viral.deep-analysis-example', '深度拉片解析案例',
+       front_viral_deep_analysis_example, 'text', '爆款复刻深度拉片解析示例', 20, 1
+FROM sys_site_config WHERE config_code = 'default'
+UNION ALL
+SELECT @content_original_id, 'item', 'script-generator', 'content.original.scenario-prompts', 'AI智能脚本分类提示词',
+       CAST(front_original_scenario_prompts AS CHAR), 'json', 'AI智能脚本大类和子类提示词配置', 10, 1
+FROM sys_site_config WHERE config_code = 'default'
+ON DUPLICATE KEY UPDATE
+  parent_id = VALUES(parent_id),
+  config_name = VALUES(config_name),
+  config_value = COALESCE(VALUES(config_value), config_value),
+  value_type = VALUES(value_type),
+  description = VALUES(description),
+  sort_order = VALUES(sort_order),
+  status = VALUES(status);
+
 INSERT INTO sys_home_banner (
   id, title, subtitle, image_url, image_key, link_url, sort_order, status
 ) VALUES

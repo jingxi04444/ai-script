@@ -1,0 +1,191 @@
+.page-visual-page .panel-card {
+  background: linear-gradient(180deg, rgba(27, 37, 42, 0.96), rgba(10, 17, 21, 0.96));
+}
+
+.visual-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 5px;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: rgba(9, 16, 20, 0.72);
+}
+
+.visual-tabs button {
+  min-height: 42px;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 17px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-muted);
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.visual-tabs button.active {
+  border-color: rgba(100, 240, 113, 0.65);
+  background: rgba(83, 207, 101, 0.14);
+  color: var(--green);
+}
+
+.visual-save-bar {
+  position: sticky;
+  top: 10px;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 58px;
+  padding: 9px 12px 9px 18px;
+  border: 1px solid rgba(100, 240, 113, 0.28);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(14px);
+}
+
+.visual-save-bar > span {
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.visual-save-bar .toolbar-btn {
+  min-width: 150px;
+  justify-content: center;
+}
+
+.visual-list {
+  display: grid;
+  gap: 10px;
+}
+
+.visual-row,
+.visual-brand-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(200px, 260px) minmax(220px, 1fr);
+  align-items: end;
+  gap: 14px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: rgba(7, 13, 16, 0.48);
+}
+
+.visual-brand-script,
+.visual-row-copy {
+  grid-template-columns: minmax(200px, 260px) minmax(180px, 0.7fr) minmax(280px, 1.3fr);
+}
+
+.visual-row-script-mode {
+  grid-template-columns: minmax(200px, 240px) minmax(160px, 0.65fr) minmax(160px, 0.65fr) minmax(260px, 1.2fr);
+}
+
+.visual-row-work {
+  grid-template-columns: minmax(200px, 240px) minmax(170px, 0.8fr) minmax(130px, 0.55fr) minmax(220px, 1fr) 36px;
+}
+
+.visual-field {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+.visual-field > span {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.visual-field input {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 11px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  outline: none;
+  background: rgba(8, 14, 17, 0.84);
+  color: var(--text);
+  text-overflow: ellipsis;
+}
+
+.visual-field input:focus {
+  border-color: rgba(100, 240, 113, 0.6);
+}
+
+.visual-title-field {
+  max-width: 420px;
+  margin-bottom: 14px;
+}
+
+.visual-image-control {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 42px minmax(86px, max-content) 34px;
+  align-items: center;
+  gap: 8px;
+}
+
+.visual-image-preview {
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(83, 207, 101, 0.08);
+  color: var(--green);
+}
+
+.visual-image-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.visual-image-control .toolbar-btn {
+  min-height: 38px;
+  justify-content: center;
+}
+
+.table-btn.icon-only {
+  width: 34px;
+  min-width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+}
+
+.visual-delete {
+  align-self: end;
+  margin-bottom: 3px;
+}
+
+.home-banners-embedded {
+  display: block;
+}
+
+@media (max-width: 1180px) {
+  .visual-row,
+  .visual-brand-row,
+  .visual-brand-script,
+  .visual-row-copy,
+  .visual-row-script-mode,
+  .visual-row-work {
+    grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+  }
+
+  .visual-delete {
+    justify-self: end;
+  }
+}

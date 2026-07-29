@@ -19,7 +19,10 @@ const PermissionsPage = lazy(() => import('./pages/System/PermissionsPage'));
 const OperationLogsPage = lazy(() => import('./pages/System/OperationLogsPage'));
 const SiteConfigPage = lazy(() => import('./pages/System/SiteConfigPage'));
 const HomeBannersPage = lazy(() => import('./pages/System/HomeBannersPage'));
+const PageVisualPage = lazy(() => import('./pages/System/PageVisualPage'));
+const ConfigDictionaryPage = lazy(() => import('./pages/System/ConfigDictionaryPage'));
 const ScriptFormatsPage = lazy(() => import('./pages/System/ScriptFormatsPage'));
+const ScriptGeneratorManagementPage = lazy(() => import('./pages/ScriptGenerator/ScriptGeneratorManagementPage'));
 
 const LazyLoad = ({ children }: { children: ReactNode }) => (
   <Suspense fallback={<div>Loading...</div>}>
@@ -81,12 +84,32 @@ export const router: RouteObject[] = [
         element: <LazyLoad><TemplateListPage /></LazyLoad>,
       },
       {
+        path: 'script-generator-management',
+        element: <LazyLoad><ScriptGeneratorManagementPage /></LazyLoad>,
+      },
+      {
+        path: 'ai-script-management',
+        element: <LazyLoad><SiteConfigPage promptOnly /></LazyLoad>,
+      },
+      {
         path: 'prompt-templates',
         element: <LazyLoad><PromptTemplatesPage /></LazyLoad>,
       },
       {
+        path: 'brief-management/detection-prompts',
+        element: <LazyLoad><PromptTemplatesPage briefMode /></LazyLoad>,
+      },
+      {
         path: 'import-templates',
         element: <LazyLoad><ImportTemplatesPage /></LazyLoad>,
+      },
+      {
+        path: 'brief-management/import-template',
+        element: <LazyLoad><ImportTemplatesPage briefMode /></LazyLoad>,
+      },
+      {
+        path: 'brief-management/script-formats',
+        element: <LazyLoad><ScriptFormatsPage briefMode /></LazyLoad>,
       },
       {
         path: 'system',
@@ -109,8 +132,16 @@ export const router: RouteObject[] = [
         element: <LazyLoad><HomeBannersPage /></LazyLoad>,
       },
       {
+        path: 'system/page-visual',
+        element: <LazyLoad><PageVisualPage /></LazyLoad>,
+      },
+      {
         path: 'system/site-config',
         element: <LazyLoad><SiteConfigPage /></LazyLoad>,
+      },
+      {
+        path: 'system/config-dictionary',
+        element: <LazyLoad><ConfigDictionaryPage /></LazyLoad>,
       },
       {
         path: 'system/script-formats',
@@ -122,7 +153,7 @@ export const router: RouteObject[] = [
       },
       {
         path: 'scripts',
-        element: <Navigate to="/templates" replace />,
+        element: <Navigate to="/script-generator-management" replace />,
       },
     ],
   },

@@ -1,0 +1,40 @@
+.models-page .models-provider-grid {
+  width: 100%;
+  min-width: 1160px;
+  grid-template-columns: 190px 130px 100px minmax(300px, 1fr) 100px 90px 140px;
+}
+
+.models-page .models-provider-grid > * {
+  min-width: 0;
+}
+
+.models-page .models-provider-name,
+.models-page .models-provider-platform,
+.models-page .models-provider-type,
+.models-page .models-provider-endpoint {
+  display: block;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.models-page .models-provider-actions {
+  justify-content: flex-start;
+  gap: 6px;
+  overflow: visible;
+}
+
+.models-page .models-provider-actions .table-btn {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 1180px) {
+  .models-page .models-provider-table {
+    overflow-x: auto;
+  }
+
+  .models-page .models-provider-grid {
+    min-width: 1160px;
+  }
+}

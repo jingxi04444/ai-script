@@ -8,7 +8,11 @@ import './script-formats-page.css';
 
 const emptyForm: Partial<ScriptFormat> = { name: '', code: '', formatRequirement: '', sortOrder: 0, status: 1 };
 
-const ScriptFormatsPage = () => {
+interface ScriptFormatsPageProps {
+  briefMode?: boolean;
+}
+
+const ScriptFormatsPage = ({ briefMode = false }: ScriptFormatsPageProps) => {
   const { notify } = useAdminShell();
   const [formats, setFormats] = useState<ScriptFormat[]>([]);
   const [loading, setLoading] = useState(false);
@@ -68,12 +72,12 @@ const ScriptFormatsPage = () => {
   return (
     <div className="page-stack">
       <PageHeader
-        title="脚本格式"
-        description="维护前台可选的脚本输出格式和格式要求。"
+        title={briefMode ? '脚本格式（产品和剧情类）' : '脚本格式'}
+        description={briefMode ? '统一维护卖点 Brief 后续生成产品类、剧情类脚本时可选择的输出格式与格式要求。' : '维护前台可选的脚本输出格式和格式要求。'}
         actions={<><button className="toolbar-btn" type="button" onClick={() => { setPage(1); if (page === 1) load(); }}><RefreshCcw size={16} />刷新</button><button className="toolbar-btn primary" type="button" onClick={() => setEditing(emptyForm)}><Plus size={16} />新增格式</button></>}
       />
 
-      <SectionCard title="脚本格式列表" description="对接 /system/script-formats。" action={<span className="status-badge purple">{rows.length} 条</span>}>
+      <SectionCard title={briefMode ? '产品和剧情类脚本格式' : '脚本格式列表'} description={briefMode ? '产品类与剧情类生成流程共用当前启用的格式配置。' : '对接 /system/script-formats。'} action={<span className="status-badge purple">{rows.length} 条</span>}>
         {rows.length ? <>
           <div className="admin-table script-format-table">
             <div className="table-head">
