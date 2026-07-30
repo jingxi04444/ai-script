@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Blocks, Bot, Database, FileSearch, FileText, Sparkles } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import { Blocks, Bot, Database, FileSearch, FileText, ListTree, Sparkles } from 'lucide-react';
 import { PageHeader, SectionCard } from '../../components/common/AdminUI';
 import PromptTemplatesPage from '../Materials/PromptTemplatesPage';
+import ScriptFormatsPage from '../System/ScriptFormatsPage';
 import './script-generator-management-page.css';
 
-type GeneratorTab = 'viral' | 'original' | 'template';
+type GeneratorTab = 'viral' | 'original' | 'template' | 'format';
 
 interface ViralSection {
   key: string;
@@ -23,6 +25,7 @@ const generatorTabs: Array<{
   { key: 'viral', label: '爆款复刻', description: '解析、整理、拆解和生成提示词', icon: Sparkles },
   { key: 'original', label: 'AI原创', description: 'AI 原创脚本生成提示词', icon: Bot },
   { key: 'template', label: '脚本模板', description: '模板库脚本生成提示词', icon: Database },
+  { key: 'format', label: '脚本格式', description: '输出格式和格式要求', icon: ListTree },
 ];
 
 const viralSections: ViralSection[] = [
@@ -63,7 +66,10 @@ const viralSections: ViralSection[] = [
 ];
 
 const ScriptGeneratorManagementPage = () => {
-  const [activeTab, setActiveTab] = useState<GeneratorTab>('viral');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('tab');
+  const initialTab: GeneratorTab = generatorTabs.some((tab) => tab.key === requestedTab) ? requestedTab as GeneratorTab : 'viral';
+  const [activeTab, setActiveTab] = useState<GeneratorTab>(initialTab);
   const [activeViralSection, setActiveViralSection] = useState('plugin');
   const selectedViralSection = viralSections.find((item) => item.key === activeViralSection) || viralSections[0];
 
@@ -84,7 +90,10 @@ const ScriptGeneratorManagementPage = () => {
               role="tab"
               aria-selected={activeTab === tab.key}
               key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => {
+                setActiveTab(tab.key);
+                setSearchParams(tab.key === 'viral' ? {} : { tab: tab.key }, { replace: true });
+              }}
             >
               <Icon size={19} />
               <span>
@@ -174,6 +183,12 @@ const ScriptGeneratorManagementPage = () => {
             pageTitle="脚本模板库生成提示词"
             pageDescription="维护选择模板后结合产品 Brief 和脚本配置生成模板脚本时使用的提示词。"
           />
+        </section>
+      ) : null}
+
+      {activeTab === 'format' ? (
+        <section className="generator-prompt-tab">
+          <ScriptFormatsPage embedded />
         </section>
       ) : null}
     </div>

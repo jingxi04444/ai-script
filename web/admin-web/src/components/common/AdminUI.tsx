@@ -107,6 +107,7 @@ export function Modal({
   onClose,
   footer,
   size = 'md',
+  closeOnBackdrop = true,
 }: {
   open: boolean;
   title: string;
@@ -115,13 +116,14 @@ export function Modal({
   onClose: () => void;
   footer?: ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'full';
+  closeOnBackdrop?: boolean;
 }) {
   if (!open) return null;
 
   const widthClass = size === 'full' ? 'modal-card modal-full' : size === 'lg' ? 'modal-card modal-lg' : size === 'sm' ? 'modal-card modal-sm' : 'modal-card';
 
   return (
-    <div className="modal-backdrop" onClick={onClose} role="presentation">
+    <div className="modal-backdrop" onClick={closeOnBackdrop ? onClose : undefined} role="presentation">
       <div className={widthClass} onClick={(event) => event.stopPropagation()} role="dialog" aria-modal="true">
         <div className="modal-head">
           <div>

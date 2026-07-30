@@ -6,9 +6,10 @@ import { useAdminShell } from '../../components/Layout/adminShell';
 
 interface ImportTemplatesPageProps {
   briefMode?: boolean;
+  embedded?: boolean;
 }
 
-const ImportTemplatesPage = ({ briefMode = false }: ImportTemplatesPageProps) => {
+const ImportTemplatesPage = ({ briefMode = false, embedded = false }: ImportTemplatesPageProps) => {
   const { notify } = useAdminShell();
   const [templates, setTemplates] = useState<ImportTemplate[]>([]);
   const [loading, setLoading] = useState(false);
@@ -71,14 +72,14 @@ const ImportTemplatesPage = ({ briefMode = false }: ImportTemplatesPageProps) =>
   const rows = useMemo(() => templates, [templates]);
 
   return (
-    <div className="page-stack">
-      <PageHeader
+    <div className={`page-stack${embedded ? ' embedded-import-page' : ''}`}>
+      {!embedded && <PageHeader
         title={briefMode ? '卖点 Brief 导入模板' : '导入模板'}
         description={briefMode ? '管理产品卖点 Brief 批量导入时下载和使用的模板文件。' : '单独管理卖点、爆款脚本等导入模板文件。'}
         actions={<button className="toolbar-btn" type="button" onClick={() => { setPage(1); if (page === 1) load(); }}><RefreshCcw size={16} />刷新</button>}
-      />
+      />}
 
-      <SectionCard title={briefMode ? '卖点 Brief 模板' : '导入模板列表'} description={briefMode ? '这里只展示 templateType= selling_point 的导入模板。' : '对接 /system/import-templates。'} action={<span className="status-badge purple">{rows.length} 条</span>}>
+      <SectionCard title={briefMode ? '卖点 Brief 模板' : '导入模板列表'} description={briefMode ? '这里只展示 templateType= selling_point 的导入模板。' : '对接 /system/import-templates。'} action={<div className="table-actions"><span className="status-badge purple">{rows.length} 条</span>{embedded && <button className="toolbar-btn" type="button" onClick={() => { setPage(1); if (page === 1) load(); }}><RefreshCcw size={16} />刷新</button>}</div>}>
         {rows.length ? (
           <>
           <div className="admin-table">

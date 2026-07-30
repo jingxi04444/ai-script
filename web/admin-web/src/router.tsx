@@ -21,8 +21,8 @@ const SiteConfigPage = lazy(() => import('./pages/System/SiteConfigPage'));
 const HomeBannersPage = lazy(() => import('./pages/System/HomeBannersPage'));
 const PageVisualPage = lazy(() => import('./pages/System/PageVisualPage'));
 const ConfigDictionaryPage = lazy(() => import('./pages/System/ConfigDictionaryPage'));
-const ScriptFormatsPage = lazy(() => import('./pages/System/ScriptFormatsPage'));
 const ScriptGeneratorManagementPage = lazy(() => import('./pages/ScriptGenerator/ScriptGeneratorManagementPage'));
+const BriefManagementPage = lazy(() => import('./pages/Brief/BriefManagementPage'));
 
 const LazyLoad = ({ children }: { children: ReactNode }) => (
   <Suspense fallback={<div>Loading...</div>}>
@@ -96,8 +96,12 @@ export const router: RouteObject[] = [
         element: <LazyLoad><PromptTemplatesPage /></LazyLoad>,
       },
       {
+        path: 'brief-management',
+        element: <LazyLoad><BriefManagementPage /></LazyLoad>,
+      },
+      {
         path: 'brief-management/detection-prompts',
-        element: <LazyLoad><PromptTemplatesPage briefMode /></LazyLoad>,
+        element: <Navigate to="/brief-management?tab=detection" replace />,
       },
       {
         path: 'import-templates',
@@ -105,11 +109,11 @@ export const router: RouteObject[] = [
       },
       {
         path: 'brief-management/import-template',
-        element: <LazyLoad><ImportTemplatesPage briefMode /></LazyLoad>,
+        element: <Navigate to="/brief-management?tab=import" replace />,
       },
       {
         path: 'brief-management/script-formats',
-        element: <LazyLoad><ScriptFormatsPage briefMode /></LazyLoad>,
+        element: <Navigate to="/script-generator-management?tab=format" replace />,
       },
       {
         path: 'system',
@@ -145,7 +149,7 @@ export const router: RouteObject[] = [
       },
       {
         path: 'system/script-formats',
-        element: <LazyLoad><ScriptFormatsPage /></LazyLoad>,
+        element: <Navigate to="/script-generator-management?tab=format" replace />,
       },
       {
         path: 'settings',

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Home, Image, Plus, RefreshCcw, Save, Sparkles, Trash2, UploadCloud } from 'lucide-react';
+import { Home, Image, Plus, RefreshCcw, Save, Sparkles, Trash2, UploadCloud, Video } from 'lucide-react';
 import { systemApi, type SiteConfig } from '../../api/system';
 import { uploadApi } from '../../api/upload';
 import { PageHeader, SectionCard } from '../../components/common/AdminUI';
@@ -19,6 +19,8 @@ interface VisualItem {
   iconKey?: string;
   imageUrl?: string;
   imageKey?: string;
+  videoUrl?: string;
+  videoKey?: string;
   linkUrl?: string;
 }
 
@@ -138,20 +140,20 @@ const PageVisualPage = () => {
     }
   };
 
-  const uploadImage = async (
+  const uploadMedia = async (
     key: string,
     file: File | undefined,
-    applyAndSave: (url: string, objectKey: string) => Promise<void> | void,
+    applyAndSave: (url: string, objectKey: string, contentType: string) => Promise<void> | void,
   ) => {
     if (!file) return;
     setUploadingKey(key);
     try {
       const result = await uploadApi.uploadFile(file);
-      await applyAndSave(result.url, result.objectKey);
-      notify('图片上传成功，已自动保存');
+      await applyAndSave(result.url, result.objectKey, result.contentType);
+      notify(`${result.contentType.startsWith('video/') ? '视频' : '图片'}上传成功，已自动保存`);
     } catch {
       setDirty(true);
-      notify('图片上传或自动保存失败');
+      notify('媒体上传或自动保存失败');
     } finally {
       setUploadingKey('');
     }
@@ -182,7 +184,7 @@ const PageVisualPage = () => {
       <div className="visual-image-preview">{url ? <img src={url} alt="" /> : <Image size={18} />}</div>
       <label className="toolbar-btn upload-btn">
         <UploadCloud size={15} />{uploadingKey === uploadKey ? '上传中' : '上传'}
-        <input type="file" hidden accept="image/*" onChange={(event) => void uploadImage(uploadKey, event.target.files?.[0], onChange)} />
+        <input type="file" hidden accept="image/*" onChange={(event) => void uploadMedia(uploadKey, event.target.files?.[0], (url, objectKey) => onChange(url, objectKey))} />
       </label>
       {url && <button className="table-btn danger icon-only" type="button" title="移除图片并自动保存" onClick={async () => {
         setUploadingKey(uploadKey);
@@ -198,6 +200,50 @@ const PageVisualPage = () => {
       }}><Trash2 size={14} /></button>}
     </div>
   );
+
+  const renderWorkMediaControl = (
+    item: VisualItem,
+    onChange: (patch: Partial<VisualItem>) => Promise<void> | void,
+  ) => {
+    const uploadKey = `work-${item.key}`;
+    const mediaUrl = item.videoUrl || item.imageUrl;
+    return (
+      <div className="visual-image-control visual-work-media-control">
+        <div className="visual-image-preview visual-media-preview">
+          {item.videoUrl
+            ? <video src={item.videoUrl} muted playsInline />
+            : item.imageUrl
+              ? <img src={item.imageUrl} alt="" />
+              : <Video size={18} />}
+        </div>
+        <label className="toolbar-btn upload-btn">
+          <UploadCloud size={15} />{uploadingKey === uploadKey ? '上传中' : '上传图片/视频'}
+          <input
+            type="file"
+            hidden
+            accept="image/*,video/*"
+            onChange={(event) => void uploadMedia(uploadKey, event.target.files?.[0], (url, objectKey, contentType) => onChange(
+              contentType.startsWith('video/')
+                ? { videoUrl: url, videoKey: objectKey, imageUrl: '', imageKey: '' }
+                : { imageUrl: url, imageKey: objectKey, videoUrl: '', videoKey: '' },
+            ))}
+          />
+        </label>
+        {mediaUrl && <button className="table-btn danger icon-only" type="button" title="移除媒体并自动保存" onClick={async () => {
+          setUploadingKey(uploadKey);
+          try {
+            await onChange({ imageUrl: '', imageKey: '', videoUrl: '', videoKey: '' });
+            notify('作品媒体已移除并自动保存');
+          } catch {
+            setDirty(true);
+            notify('媒体移除后自动保存失败');
+          } finally {
+            setUploadingKey('');
+          }
+        }}><Trash2 size={14} /></button>}
+      </div>
+    );
+  };
 
   return (
     <div className="page-stack page-visual-page">
@@ -284,7 +330,7 @@ const PageVisualPage = () => {
             </div>
           </SectionCard>
 
-          <SectionCard title="首页作品" description="上传和修改首页下方作品卡片。" action={<button className="toolbar-btn" type="button" onClick={() => {
+          <SectionCard title="首页作品" description="上传图片或视频，并修改首页下方作品卡片。" action={<button className="toolbar-btn" type="button" onClick={() => {
             setDirty(true);
             setHomeVisual((current) => ({ ...current, works: [...current.works, { key: `work-${Date.now()}`, label: '新作品', category: '其他' }] }));
           }}><Plus size={15} />新增作品</button>}>
@@ -295,11 +341,11 @@ const PageVisualPage = () => {
             <div className="visual-list">
               {homeVisual.works.map((item, index) => (
                 <article className="visual-row visual-row-work" key={item.key}>
-                  {renderImageControl(`work-${item.key}`, item.imageUrl, async (url, objectKey) => {
+                  {renderWorkMediaControl(item, async (patch) => {
                     const nextHomeVisual = {
                       ...homeVisual,
                       works: homeVisual.works.map((currentItem, itemIndex) => itemIndex === index
-                        ? { ...currentItem, imageUrl: url, imageKey: objectKey }
+                        ? { ...currentItem, ...patch }
                         : currentItem),
                     };
                     setHomeVisual(nextHomeVisual);

@@ -10,7 +10,7 @@ type TemplateForm = Partial<Template>;
 
 type ParagraphStructureState = { columns: string[]; rows: string[][] };
 
-const templateCategories = ['全部', '产品介绍', '创意剧情', '活动福利', '测评', '教程'] as const;
+const templateCategories = ['全部', '最新热点', '产品介绍', '创意剧情', '活动福利', '选购攻略'] as const;
 
 const defaultParagraphColumns = ['段落原文', '核心概括', '功能定位'];
 
@@ -99,7 +99,7 @@ const auditStatusLabels: Record<NonNullable<Template['auditStatus']>, string> = 
 const TemplateListPage = () => {
   const { notify } = useAdminShell();
   const [keyword, setKeyword] = useState('');
-  const [activeCategory, setActiveCategory] = useState<(typeof templateCategories)[number]>('产品介绍');
+  const [activeCategory, setActiveCategory] = useState<(typeof templateCategories)[number]>('全部');
   const [templates, setTemplates] = useState<Template[]>([]);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(1);
@@ -148,7 +148,10 @@ const TemplateListPage = () => {
 
   const openEdit = (template: Template) => {
     setEditing(template);
-    setForm(template);
+    setForm({
+      ...template,
+      category: template.category === '测评' || template.category === '教程' ? '选购攻略' : template.category,
+    });
     setParagraphStructure(parseParagraphStructure(template.paragraphStructure));
     setEditorOpen(true);
   };
@@ -267,7 +270,7 @@ const TemplateListPage = () => {
               setPage(1);
             }}
           >
-            {category}
+            {category === '最新热点' ? <>🔥 {category}</> : category}
           </button>
         ))}
       </div>
@@ -347,6 +350,7 @@ const TemplateListPage = () => {
         title={editing ? '编辑模板' : '新增模板'}
         description="填写模板基础信息后保存。"
         onClose={() => setEditorOpen(false)}
+        closeOnBackdrop={false}
         size="full"
         footer={<><button className="modal-btn" type="button" onClick={() => setEditorOpen(false)}>取消</button><button className="modal-btn primary" type="button" onClick={save}><Save size={16} />保存</button></>}
       >

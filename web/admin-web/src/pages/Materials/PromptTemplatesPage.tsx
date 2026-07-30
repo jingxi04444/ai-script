@@ -123,7 +123,7 @@ const PromptTemplatesPage = ({
       /> : (
         <div className="toolbar-group embedded-prompt-actions">
           <button className="toolbar-btn" type="button" onClick={() => { setPage(1); if (page === 1) load(); }}><RefreshCcw size={16} />刷新</button>
-          <button className="toolbar-btn primary" type="button" onClick={openCreate}><Plus size={16} />新增 Prompt</button>
+          {!briefMode && <button className="toolbar-btn primary" type="button" onClick={openCreate}><Plus size={16} />新增 Prompt</button>}
         </div>
       )}
 

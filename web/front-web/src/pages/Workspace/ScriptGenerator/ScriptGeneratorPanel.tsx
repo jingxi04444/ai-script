@@ -56,7 +56,8 @@ interface PolishMentionRange {
   end: number;
 }
 
-type TemplateCategory = '产品介绍' | '创意剧情' | '活动福利' | '测评' | '教程';
+type TemplateCategory = '最新热点' | '产品介绍' | '创意剧情' | '活动福利' | '选购攻略';
+type TemplateFilter = '全部' | TemplateCategory;
 type TemplateSort = '综合排序' | '热度最高' | '最新模板';
 type TemplateCard = ScriptTemplate & { category: TemplateCategory; popularityScore: number; updatedOrder: number };
 interface OriginalScenarioPrompt {
@@ -223,7 +224,7 @@ const parseOriginalScenarioPrompts = (value?: string): OriginalScenarioCategory[
 
 const polishQuickPrompts = ['更口语一点', '压缩到 30 秒', '强化产品卖点', '开场更抓人', '结尾更强转化'];
 
-const templateCategories = ['全部', '产品介绍', '创意剧情', '活动福利', '测评', '教程'];
+const templateCategories: TemplateFilter[] = ['全部', '最新热点', '产品介绍', '创意剧情', '活动福利', '选购攻略'];
 const templatePageSize = 10;
 const displayTemplateMeta = (value?: string) => {
   const characters = Array.from(value ?? '');
@@ -287,19 +288,19 @@ const templateCards: TemplateCard[] = [
   { id: '09', name: '限时优惠型', actor: '男/女', people: '1人', popularity: '高', difficulty: '通用', locked: true, category: '活动福利', popularityScore: 89, updatedOrder: 16 },
   { id: '10', name: '买赠福利型', actor: '女', people: '1人', popularity: '中', difficulty: '宝妈', locked: true, category: '活动福利', popularityScore: 80, updatedOrder: 15 },
   { id: '11', name: '节日促销型', actor: '男/女', people: '2人', popularity: '高', difficulty: '通用', locked: false, category: '活动福利', popularityScore: 88, updatedOrder: 14 },
-  { id: '12', name: '真实测评型', actor: '男', people: '1人', popularity: '高', difficulty: '测评党', locked: false, category: '测评', popularityScore: 94, updatedOrder: 13 },
-  { id: '13', name: '开箱体验型', actor: '女', people: '1人', popularity: '中', difficulty: '通用', locked: true, category: '测评', popularityScore: 81, updatedOrder: 12 },
-  { id: '14', name: '横向测评型', actor: '男/女', people: '1人', popularity: '高', difficulty: '测评党', locked: true, category: '测评', popularityScore: 87, updatedOrder: 11 },
-  { id: '15', name: '三步教程型', actor: '男/女', people: '1人', popularity: '高', difficulty: '通用', locked: true, category: '教程', popularityScore: 85, updatedOrder: 10 },
-  { id: '16', name: '新手教学型', actor: '女', people: '1人', popularity: '中', difficulty: '新手', locked: true, category: '教程', popularityScore: 76, updatedOrder: 9 },
-  { id: '17', name: '避坑指南型', actor: '男', people: '1人', popularity: '高', difficulty: '通用', locked: false, category: '教程', popularityScore: 90, updatedOrder: 8 },
+  { id: '12', name: '真实测评型', actor: '男', people: '1人', popularity: '高', difficulty: '测评党', locked: false, category: '选购攻略', popularityScore: 94, updatedOrder: 13 },
+  { id: '13', name: '开箱体验型', actor: '女', people: '1人', popularity: '中', difficulty: '通用', locked: true, category: '选购攻略', popularityScore: 81, updatedOrder: 12 },
+  { id: '14', name: '横向测评型', actor: '男/女', people: '1人', popularity: '高', difficulty: '测评党', locked: true, category: '选购攻略', popularityScore: 87, updatedOrder: 11 },
+  { id: '15', name: '三步教程型', actor: '男/女', people: '1人', popularity: '高', difficulty: '通用', locked: true, category: '选购攻略', popularityScore: 85, updatedOrder: 10 },
+  { id: '16', name: '新手教学型', actor: '女', people: '1人', popularity: '中', difficulty: '新手', locked: true, category: '选购攻略', popularityScore: 76, updatedOrder: 9 },
+  { id: '17', name: '避坑指南型', actor: '男', people: '1人', popularity: '高', difficulty: '通用', locked: false, category: '选购攻略', popularityScore: 90, updatedOrder: 8 },
   { id: '18', name: '用户证言型', actor: '女', people: '1人', popularity: '中', difficulty: '宝妈', locked: true, category: '产品介绍', popularityScore: 79, updatedOrder: 7 },
   { id: '19', name: '权威背书型', actor: '男', people: '1人', popularity: '中', difficulty: '通用', locked: true, category: '产品介绍', popularityScore: 78, updatedOrder: 6 },
   { id: '20', name: '清单推荐型', actor: '男/女', people: '1人', popularity: '高', difficulty: '上班族', locked: true, category: '产品介绍', popularityScore: 83, updatedOrder: 5 },
   { id: '21', name: '轻喜剧带货', actor: '男/女', people: '3人', popularity: '高', difficulty: '年轻人', locked: true, category: '创意剧情', popularityScore: 86, updatedOrder: 4 },
   { id: '22', name: '直播福利切片', actor: '女', people: '1人', popularity: '高', difficulty: '通用', locked: true, category: '活动福利', popularityScore: 82, updatedOrder: 3 },
-  { id: '23', name: '实测对比型', actor: '男', people: '1人', popularity: '中', difficulty: '测评党', locked: true, category: '测评', popularityScore: 77, updatedOrder: 2 },
-  { id: '24', name: '保养教程型', actor: '女', people: '1人', popularity: '中', difficulty: '新手', locked: true, category: '教程', popularityScore: 75, updatedOrder: 1 },
+  { id: '23', name: '实测对比型', actor: '男', people: '1人', popularity: '中', difficulty: '测评党', locked: true, category: '选购攻略', popularityScore: 77, updatedOrder: 2 },
+  { id: '24', name: '保养教程型', actor: '女', people: '1人', popularity: '中', difficulty: '新手', locked: true, category: '选购攻略', popularityScore: 75, updatedOrder: 1 },
 ];
 
 interface ScriptEntryCard {
@@ -389,7 +390,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   const briefIdParam = searchParams.get('briefId');
   const [analysisMode, setAnalysisMode] = useState<'simple' | 'deep'>('simple');
   const [selectedTemplate, setSelectedTemplate] = useState(templateCards[0].id);
-  const [category, setCategory] = useState('全部');
+  const [category, setCategory] = useState<TemplateFilter>('全部');
   const [templateSort, setTemplateSort] = useState<TemplateSort>('综合排序');
   const [templateSearch, setTemplateSearch] = useState('');
   const [templatePage, setTemplatePage] = useState(1);
@@ -475,7 +476,11 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
       if (!list.length) return;
       const nextTemplates = list.map((item, index): TemplateCard => ({
         ...item,
-        category: (templateCategories.includes(item.category || '') ? item.category : '产品介绍') as TemplateCategory,
+        category: (item.category === '测评' || item.category === '教程'
+          ? '选购攻略'
+          : templateCategories.includes(item.category as TemplateFilter)
+            ? item.category
+            : '产品介绍') as TemplateCategory,
         popularityScore: item.popularity === '高' ? 95 : item.popularity === '中' ? 82 : 70,
         updatedOrder: Date.parse(item.updatedAt || item.createdAt || '') || list.length - index,
       }));
@@ -1472,7 +1477,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                   setTemplatePage(1);
                 }}
               >
-                {item}
+                {item === '最新热点' ? <>🔥 {item}</> : item}
               </button>
             ))}
           </nav>

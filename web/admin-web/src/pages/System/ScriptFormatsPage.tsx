@@ -10,9 +10,10 @@ const emptyForm: Partial<ScriptFormat> = { name: '', code: '', formatRequirement
 
 interface ScriptFormatsPageProps {
   briefMode?: boolean;
+  embedded?: boolean;
 }
 
-const ScriptFormatsPage = ({ briefMode = false }: ScriptFormatsPageProps) => {
+const ScriptFormatsPage = ({ briefMode = false, embedded = false }: ScriptFormatsPageProps) => {
   const { notify } = useAdminShell();
   const [formats, setFormats] = useState<ScriptFormat[]>([]);
   const [loading, setLoading] = useState(false);
@@ -70,14 +71,14 @@ const ScriptFormatsPage = ({ briefMode = false }: ScriptFormatsPageProps) => {
   };
 
   return (
-    <div className="page-stack">
-      <PageHeader
+    <div className={embedded ? 'page-stack script-formats-embedded' : 'page-stack'}>
+      {!embedded && <PageHeader
         title={briefMode ? '脚本格式（产品和剧情类）' : '脚本格式'}
         description={briefMode ? '统一维护卖点 Brief 后续生成产品类、剧情类脚本时可选择的输出格式与格式要求。' : '维护前台可选的脚本输出格式和格式要求。'}
         actions={<><button className="toolbar-btn" type="button" onClick={() => { setPage(1); if (page === 1) load(); }}><RefreshCcw size={16} />刷新</button><button className="toolbar-btn primary" type="button" onClick={() => setEditing(emptyForm)}><Plus size={16} />新增格式</button></>}
-      />
+      />}
 
-      <SectionCard title={briefMode ? '产品和剧情类脚本格式' : '脚本格式列表'} description={briefMode ? '产品类与剧情类生成流程共用当前启用的格式配置。' : '对接 /system/script-formats。'} action={<span className="status-badge purple">{rows.length} 条</span>}>
+      <SectionCard title={briefMode ? '产品和剧情类脚本格式' : '脚本格式列表'} description={briefMode ? '产品类与剧情类生成流程共用当前启用的格式配置。' : '维护脚本生成器可选的输出格式和格式要求。'} action={<div className="table-actions"><span className="status-badge purple">{rows.length} 条</span>{embedded && <><button className="toolbar-btn" type="button" onClick={() => { setPage(1); if (page === 1) load(); }}><RefreshCcw size={16} />刷新</button><button className="toolbar-btn primary" type="button" onClick={() => setEditing(emptyForm)}><Plus size={16} />新增格式</button></>}</div>}>
         {rows.length ? <>
           <div className="admin-table script-format-table">
             <div className="table-head">

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   AppstoreOutlined,
+  CloseOutlined,
   EditOutlined,
   LinkOutlined,
   PlusOutlined,
@@ -46,6 +47,7 @@ interface HomeWork {
   tone: string;
   category: string;
   imageUrl?: string;
+  videoUrl?: string;
   linkUrl?: string;
 }
 
@@ -72,6 +74,7 @@ const HomePage = () => {
   const [hotWorks, setHotWorks] = useState<HomeWork[]>(defaultHotWorks);
   const [worksTitle, setWorksTitle] = useState('作品');
   const [activeCategory, setActiveCategory] = useState('全部');
+  const [previewWork, setPreviewWork] = useState<HomeWork | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -115,6 +118,7 @@ const HomePage = () => {
             category: work.category || '其他',
             tone: work.tone || defaultHotWorks[index % defaultHotWorks.length].tone,
             imageUrl: work.imageUrl,
+            videoUrl: work.videoUrl,
             linkUrl: work.linkUrl,
           })));
         }
@@ -163,6 +167,14 @@ const HomePage = () => {
     if (!work.linkUrl) return handleOpen();
     if (work.linkUrl.startsWith('/')) navigate(work.linkUrl);
     else window.open(work.linkUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  const handleWorkClick = (work: HomeWork) => {
+    if (work.videoUrl) {
+      setPreviewWork(work);
+      return;
+    }
+    openWork(work);
   };
 
   const workCategories = ['全部', ...Array.from(new Set(hotWorks.map((work) => work.category).filter(Boolean)))];
@@ -234,9 +246,13 @@ const HomePage = () => {
           </header>
           <div className="hot-row">
             {visibleWorks.map((work) => (
-              <button className={`hot-card ${work.tone}`} key={work.key} onClick={() => openWork(work)}>
-                <div className={`hot-thumb ${work.imageUrl ? 'has-image' : ''}`}>
-                  {work.imageUrl ? <img src={work.imageUrl} alt="" /> : <span />}
+              <button className={`hot-card ${work.tone}`} key={work.key} onClick={() => handleWorkClick(work)}>
+                <div className={`hot-thumb ${work.imageUrl || work.videoUrl ? 'has-image' : ''}`}>
+                  {work.videoUrl
+                    ? <video src={work.videoUrl} muted loop autoPlay playsInline />
+                    : work.imageUrl
+                      ? <img src={work.imageUrl} alt="" />
+                      : null}
                 </div>
                 <strong>{work.label}</strong>
               </button>
@@ -244,6 +260,26 @@ const HomePage = () => {
           </div>
         </section>
       </section>
+
+      {previewWork?.videoUrl && (
+        <div className="work-video-modal-backdrop" role="presentation" onClick={() => setPreviewWork(null)}>
+          <section
+            className="work-video-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`播放${previewWork.label}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <header>
+              <strong>{previewWork.label}</strong>
+              <button type="button" aria-label="关闭视频播放弹窗" onClick={() => setPreviewWork(null)}>
+                <CloseOutlined />
+              </button>
+            </header>
+            <video src={previewWork.videoUrl} controls autoPlay playsInline />
+          </section>
+        </div>
+      )}
 
       {commerceDialog === 'member' && (
         <MemberPaymentDialog

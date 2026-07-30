@@ -6,7 +6,6 @@ import {
   Bot,
   ChevronDown,
   ClipboardCheck,
-  ClipboardList,
   Database,
   FileText,
   FolderKanban,
@@ -46,9 +45,7 @@ const menuGroups: Array<{ title: string; items: MenuItem[] }> = [
   {
     title: '卖点 Brief',
     items: [
-      { label: 'Brief 检测提示词', path: '/brief-management/detection-prompts', icon: ClipboardCheck },
-      { label: '卖点 Brief 导入模板', path: '/brief-management/import-template', icon: UploadCloud },
-      { label: '脚本格式（产品/剧情）', path: '/brief-management/script-formats', icon: ClipboardList },
+      { label: '卖点 Brief 管理', path: '/brief-management', icon: ClipboardCheck },
     ],
   },
   {
@@ -77,7 +74,6 @@ const menuGroups: Array<{ title: string; items: MenuItem[] }> = [
       { label: '权限管理', path: '/system/permissions', icon: ListChecks },
       { label: '配置字典', path: '/system/config-dictionary', icon: Database },
       { label: '业务配置', path: '/system/site-config', icon: Settings },
-      { label: '脚本格式', path: '/system/script-formats', icon: FileText },
       { label: '操作日志', path: '/system/logs', icon: ScrollText },
     ],
   },
@@ -97,6 +93,7 @@ const routeMeta: Record<string, { title: string; desc: string }> = {
   '/templates': { title: '脚本模板库管理', desc: '维护前台脚本模板库中的可复用模板。' },
   '/brief-management/detection-prompts': { title: 'Brief 检测提示词', desc: '维护产品卖点 Brief 检测使用的提示词和返回结构。' },
   '/brief-management/import-template': { title: '卖点 Brief 导入模板', desc: '维护卖点 Brief 批量导入模板文件。' },
+  '/brief-management': { title: '卖点 Brief 管理', desc: '集中维护 Brief 检测提示词和批量导入模板。' },
   '/brief-management/script-formats': { title: '脚本格式（产品和剧情类）', desc: '维护产品类和剧情类脚本的输出格式。' },
   '/prompt-templates': { title: 'Prompt 模板', desc: '维护系统 Prompt 模板和场景策略。' },
   '/import-templates': { title: '导入模板', desc: '维护前台可下载和导入的数据模板。' },

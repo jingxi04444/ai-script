@@ -1,0 +1,72 @@
+.brief-management-page {
+  gap: 18px;
+}
+
+.brief-management-tabs {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 7px;
+  border: 1px solid var(--line);
+  border-radius: 15px;
+  background: var(--panel);
+}
+
+.brief-management-tab {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-height: 66px;
+  padding: 11px 16px;
+  border: 1px solid transparent;
+  border-radius: 11px;
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+}
+
+.brief-management-tab span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.brief-management-tab strong {
+  color: var(--text);
+  font-size: 15px;
+}
+
+.brief-management-tab small {
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.brief-management-tab.active {
+  border-color: color-mix(in srgb, var(--green) 50%, var(--line));
+  background: color-mix(in srgb, var(--green) 11%, var(--panel));
+  color: var(--green);
+}
+
+.brief-management-tab.active strong {
+  color: var(--green);
+}
+
+.brief-management-content {
+  min-width: 0;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--panel);
+}
+
+@media (max-width: 640px) {
+  .brief-management-tabs {
+    grid-template-columns: 1fr;
+  }
+
+  .brief-management-content {
+    padding: 14px;
+  }
+}
