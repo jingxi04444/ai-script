@@ -133,7 +133,7 @@ public class MinioStorageClient implements StorageClient {
         String authorization = aliyunOssAuthorization("PUT", resourcePath, date, effectiveContentType);
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(aliyunOssObjectUrl(endpoint, objectKey)))
-            .timeout(Duration.ofSeconds(60))
+            .timeout(Duration.ofSeconds(300))
             .header("Date", date)
             .header("Content-Type", effectiveContentType)
             .header("Authorization", authorization)
