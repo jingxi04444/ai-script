@@ -180,6 +180,9 @@ const BriefDialog = ({
   const [shareLinks, setShareLinks] = useState<Partial<Record<BriefSharePermission, BriefShareResult>>>({});
   const [selectedSharePermission, setSelectedSharePermission] = useState<BriefSharePermission>('read');
   const [sharing, setSharing] = useState(false);
+  const [isBatchShareMode, setIsBatchShareMode] = useState(false);
+  const [selectedBatchBriefIds, setSelectedBatchBriefIds] = useState<string[]>([]);
+  const [batchSharePermission, setBatchSharePermission] = useState<BriefSharePermission>('read');
 
   useEffect(() => {
     let cancelled = false;
@@ -187,6 +190,8 @@ const BriefDialog = ({
     setBriefs([]);
     setSelectedBriefId('');
     setSelectedVersionId('');
+    setSelectedBatchBriefIds([]);
+    setIsBatchShareMode(false);
 
     if (!initialBriefId && !projectId) {
       setIsBriefListLoading(false);
@@ -327,6 +332,34 @@ const BriefDialog = ({
     }
   };
 
+  const toggleBatchBrief = (briefId: string) => {
+    setSelectedBatchBriefIds((current) => current.includes(briefId)
+      ? current.filter((id) => id !== briefId)
+      : [...current, briefId]);
+  };
+
+  const handleBatchShare = async () => {
+    const selectedBriefs = briefs.filter((brief) => selectedBatchBriefIds.includes(brief.id));
+    const manageableBriefs = selectedBriefs.filter((brief) => (brief.accessPermission || 'manage') === 'manage');
+    if (!manageableBriefs.length) {
+      message.warning('\u8bf7\u5148\u9009\u62e9\u81ea\u5df1\u53ef\u7ba1\u7406\u7684 Brief');
+      return;
+    }
+    setSharing(true);
+    try {
+      const sharePack = await briefApi.createSharePack(manageableBriefs.map((brief) => brief.id), batchSharePermission);
+      await copyToClipboard(new URL(sharePack.shareUrl, window.location.origin).toString());
+      const sharedIds = new Set(manageableBriefs.map((brief) => brief.id));
+      setBriefs((current) => current.map((brief) => sharedIds.has(brief.id) ? { ...brief, shareEnabled: 1 } : brief));
+      setSelectedBatchBriefIds([]);
+      setIsBatchShareMode(false);
+      message.success(`\u5df2\u751f\u6210 Brief \u5206\u4eab\u5305\u94fe\u63a5\u5e76\u590d\u5236`);
+    } catch {
+      message.error('\u6279\u91cf\u5206\u4eab\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5');
+    } finally {
+      setSharing(false);
+    }
+  };
   const openSharePanel = () => {
     setSideTab('collaboration');
   };
@@ -467,6 +500,16 @@ const BriefDialog = ({
                 <h2 id="brief-title">当前项目 Brief 文档</h2>
               </div>
               <div className="brief-folder-head-actions">
+                <button
+                  type="button"
+                  className={`brief-folder-batch ${isBatchShareMode ? 'active' : ''}`}
+                  onClick={() => {
+                    setIsBatchShareMode((current) => !current);
+                    setSelectedBatchBriefIds([]);
+                  }}
+                >
+                  <ShareAltOutlined />{'\u6279\u91cf\u5206\u4eab'}
+                </button>
                 <button type="button" className="brief-folder-create" onClick={handleAddBrief}>
                   <PlusOutlined />
                   <span>新建 Brief</span>
@@ -480,6 +523,21 @@ const BriefDialog = ({
                 <FileWordOutlined />
                 <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="搜索 Brief 文档名称或产品型号" />
               </label>
+              {isBatchShareMode ? (
+                <div className="brief-batch-share-actions">
+                  <button type="button" onClick={() => setSelectedBatchBriefIds(
+                    selectedBatchBriefIds.length === visibleBriefs.length ? [] : visibleBriefs.map((brief) => brief.id),
+                  )}>
+                    {selectedBatchBriefIds.length === visibleBriefs.length ? '\u53d6\u6d88\u5168\u9009' : '\u5168\u9009'}
+                  </button>
+                  <select value={batchSharePermission} onChange={(event) => setBatchSharePermission(event.target.value as BriefSharePermission)}>
+                    {sharePermissionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                  <button type="button" className="primary" onClick={handleBatchShare} disabled={sharing || !selectedBatchBriefIds.length}>
+                    <ShareAltOutlined />{'\u5171\u4eab'} {selectedBatchBriefIds.length || ''} {'\u4efd Brief'}
+                  </button>
+                </div>
+              ) : null}
               <span>{isBriefListLoading ? '正在加载当前项目 Brief…' : `共 ${visibleBriefs.length} 份文档`}</span>
             </div>
 
@@ -491,13 +549,14 @@ const BriefDialog = ({
                   <span>请稍候，不会显示其他项目的文档。</span>
                 </div>
               ) : visibleBriefs.map((brief) => (
-                <button type="button" className="brief-folder-card" key={brief.id} onClick={() => openBrief(brief)}>
+                <button type="button" className={`brief-folder-card ${isBatchShareMode && selectedBatchBriefIds.includes(brief.id) ? 'is-selected' : ''}`} key={brief.id} onClick={() => isBatchShareMode ? toggleBatchBrief(brief.id) : openBrief(brief)} aria-pressed={isBatchShareMode ? selectedBatchBriefIds.includes(brief.id) : undefined}>
                   <span className="brief-folder-shape"><FolderOpenOutlined /></span>
                   <span className="brief-folder-copy">
                     <strong>{brief.productName || brief.name || '未命名 Brief'}</strong>
                     <small>{brief.productModel || 'Word Brief 文档'}</small>
                     <em>{brief.versions?.[0]?.label || 'v1.0'} · {formatDateTime(brief.versions?.[0]?.createdAt || brief.updatedAt)}</em>
                   </span>
+                  {isBatchShareMode ? <span className={`brief-folder-check ${selectedBatchBriefIds.includes(brief.id) ? 'is-checked' : ''}`}>{selectedBatchBriefIds.includes(brief.id) ? <CheckOutlined /> : null}</span> : null}
                   {brief.shareEnabled === 1 ? <span className="brief-folder-shared"><TeamOutlined />已分享</span> : null}
                 </button>
               ))}

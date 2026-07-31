@@ -9,16 +9,22 @@ import com.aiscript.framework.tenant.TenantContext;
 import com.aiscript.modules.brief.convert.BriefConvert;
 import com.aiscript.modules.brief.dto.BriefEditRequestDTO;
 import com.aiscript.modules.brief.dto.BriefSaveDTO;
+import com.aiscript.modules.brief.dto.BriefSharePackCreateDTO;
+import com.aiscript.modules.brief.dto.BriefSharePackLinkDTO;
 import com.aiscript.modules.brief.entity.AiBrief;
 import com.aiscript.modules.brief.entity.AiBriefCollaborator;
 import com.aiscript.modules.brief.entity.AiBriefEditRequest;
 import com.aiscript.modules.brief.entity.AiBriefShareLink;
+import com.aiscript.modules.brief.entity.AiBriefSharePack;
+import com.aiscript.modules.brief.entity.AiBriefSharePackItem;
 import com.aiscript.modules.brief.entity.AiBriefVersion;
 import com.aiscript.modules.brief.entity.AiProjectBriefRef;
 import com.aiscript.modules.brief.mapper.AiBriefCollaboratorMapper;
 import com.aiscript.modules.brief.mapper.AiBriefEditRequestMapper;
 import com.aiscript.modules.brief.mapper.AiBriefMapper;
 import com.aiscript.modules.brief.mapper.AiBriefShareLinkMapper;
+import com.aiscript.modules.brief.mapper.AiBriefSharePackMapper;
+import com.aiscript.modules.brief.mapper.AiBriefSharePackItemMapper;
 import com.aiscript.modules.brief.mapper.AiBriefVersionMapper;
 import com.aiscript.modules.brief.mapper.AiProjectBriefRefMapper;
 import com.aiscript.modules.project.entity.AiProject;
@@ -31,6 +37,7 @@ import com.aiscript.modules.brief.vo.BriefAssetLibraryVO;
 import com.aiscript.modules.brief.vo.BriefAssetRowVO;
 import com.aiscript.modules.brief.vo.BriefDetailQueryResult;
 import com.aiscript.modules.brief.vo.BriefShareVO;
+import com.aiscript.modules.brief.vo.BriefSharePackVO;
 import com.aiscript.modules.brief.vo.BriefVO;
 import com.aiscript.security.LoginUser;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -62,6 +69,8 @@ public class BriefServiceImpl implements BriefService {
     private final AiBriefCollaboratorMapper collaboratorMapper;
     private final AiBriefEditRequestMapper editRequestMapper;
     private final AiBriefShareLinkMapper shareLinkMapper;
+    private final AiBriefSharePackMapper sharePackMapper;
+    private final AiBriefSharePackItemMapper sharePackItemMapper;
 
     public BriefServiceImpl(
         AiBriefMapper briefMapper,
@@ -70,7 +79,9 @@ public class BriefServiceImpl implements BriefService {
         AiProjectMapper projectMapper,
         AiBriefCollaboratorMapper collaboratorMapper,
         AiBriefEditRequestMapper editRequestMapper,
-        AiBriefShareLinkMapper shareLinkMapper
+        AiBriefShareLinkMapper shareLinkMapper,
+        AiBriefSharePackMapper sharePackMapper,
+        AiBriefSharePackItemMapper sharePackItemMapper
     ) {
         this.briefMapper = briefMapper;
         this.briefVersionMapper = briefVersionMapper;
@@ -79,6 +90,8 @@ public class BriefServiceImpl implements BriefService {
         this.collaboratorMapper = collaboratorMapper;
         this.editRequestMapper = editRequestMapper;
         this.shareLinkMapper = shareLinkMapper;
+        this.sharePackMapper = sharePackMapper;
+        this.sharePackItemMapper = sharePackItemMapper;
     }
 
     @Override
@@ -296,6 +309,31 @@ public class BriefServiceImpl implements BriefService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public BriefSharePackVO createSharePack(BriefSharePackCreateDTO dto) {
+        if (dto == null || dto.getBriefIds() == null || dto.getBriefIds().isEmpty()) throw new BusinessException("请选择至少一份 Brief");
+        List<Integer> ids = dto.getBriefIds().stream().filter(java.util.Objects::nonNull).distinct().toList();
+        List<AiBrief> selected = briefMapper.selectBatchIds(ids);
+        if (selected.size() != ids.size()) throw new BusinessException("存在无效 Brief");
+        for (AiBrief brief : selected) { ensureCanManage(brief); brief.setShareEnabled(1); brief.setShareTime(LocalDateTime.now()); briefMapper.updateById(brief); }
+        AiBriefSharePack pack = new AiBriefSharePack();
+        pack.setTenantId(currentTenantId()); pack.setShareToken(newShareToken()); pack.setPermission(normalizeSharePermission(dto.getPermission())); pack.setEnabled(1);
+        sharePackMapper.insert(pack);
+        for (Integer briefId : ids) { AiBriefSharePackItem item = new AiBriefSharePackItem(); item.setTenantId(currentTenantId()); item.setSharePackId(pack.getId()); item.setBriefId(briefId); sharePackItemMapper.insert(item); }
+        return toSharePackVO(pack, selected);
+    }
+
+    @Override
+    public BriefSharePackVO getSharePackByToken(String token) { AiBriefSharePack pack = resolveSharePack(token); return toSharePackVO(pack, sharePackBriefs(pack)); }
+
+    @Override
+    public BriefVO getSharePackBrief(String token, Integer briefId) {
+        AiBriefSharePack pack = resolveSharePack(token);
+        Long count = sharePackItemMapper.selectCount(new LambdaQueryWrapper<AiBriefSharePackItem>().eq(AiBriefSharePackItem::getSharePackId, pack.getId()).eq(AiBriefSharePackItem::getBriefId, briefId));
+        if (count == 0) throw new BusinessException("该 Brief 不在分享包内");
+        return toVOWithVersions(getBrief(briefId), normalizeSharePermission(pack.getPermission()));
+    }
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public BriefVO getByShareToken(String token) {
         if (!StringUtils.hasText(token)) {
             throw new BusinessException("分享链接无效");
@@ -310,6 +348,44 @@ public class BriefServiceImpl implements BriefService {
         return toVOWithVersions(brief, owner ? "manage" : resolved.permission());
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void unlinkSharePackFromProject(String token, BriefSharePackLinkDTO dto) {
+        if (dto == null || dto.getProjectId() == null) throw new BusinessException("请选择项目");
+        AiBriefSharePack pack = resolveSharePack(token);
+        ensureOwnedProject(dto.getProjectId());
+        java.util.Set<Integer> available = sharePackBriefs(pack).stream().map(AiBrief::getId).collect(java.util.stream.Collectors.toSet());
+        List<Integer> ids = dto.getBriefIds() == null || dto.getBriefIds().isEmpty() ? new ArrayList<>(available) : dto.getBriefIds().stream().filter(available::contains).distinct().toList();
+        if (!ids.isEmpty()) projectBriefRefMapper.delete(new LambdaQueryWrapper<AiProjectBriefRef>().eq(AiProjectBriefRef::getTenantId, currentTenantId()).eq(AiProjectBriefRef::getProjectId, dto.getProjectId()).in(AiProjectBriefRef::getBriefId, ids));
+    }
+
+    @Override
+    public List<String> sharePackLinkedBriefIds(String token, Integer projectId) {
+        if (projectId == null) throw new BusinessException("请选择项目");
+        AiBriefSharePack pack = resolveSharePack(token);
+        ensureOwnedProject(projectId);
+        java.util.Set<Integer> available = sharePackBriefs(pack).stream().map(AiBrief::getId).collect(java.util.stream.Collectors.toSet());
+        if (available.isEmpty()) return List.of();
+        return projectBriefRefMapper.selectList(new LambdaQueryWrapper<AiProjectBriefRef>().eq(AiProjectBriefRef::getTenantId, currentTenantId()).eq(AiProjectBriefRef::getProjectId, projectId).in(AiProjectBriefRef::getBriefId, available)).stream().map(ref -> String.valueOf(ref.getBriefId())).toList();
+    }
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<BriefVO> linkSharePackToProject(String token, BriefSharePackLinkDTO dto) {
+        if (dto == null || dto.getProjectId() == null) throw new BusinessException("请选择要加入的项目");
+        AiBriefSharePack pack = resolveSharePack(token);
+        ensureOwnedProject(dto.getProjectId());
+        Integer userId = requireCurrentUserId();
+        List<AiBrief> available = sharePackBriefs(pack);
+        java.util.Set<Integer> requested = dto.getBriefIds() == null || dto.getBriefIds().isEmpty() ? null : new java.util.HashSet<>(dto.getBriefIds());
+        List<AiBrief> selected = available.stream().filter(brief -> requested == null || requested.contains(brief.getId())).toList();
+        if (selected.isEmpty()) throw new BusinessException("请选择至少一份 Brief");
+        for (AiBrief brief : selected) {
+            if (userId.equals(brief.getCreateBy())) throw new BusinessException("分享人不能使用自己的分享包");
+            upsertCollaborator(brief, userId, normalizeSharePermission(pack.getPermission()), "link");
+            projectBriefRefMapper.upsertReference(currentTenantId(), dto.getProjectId(), brief.getId(), userId);
+        }
+        return selected.stream().map(brief -> toVOWithVersions(brief, normalizeSharePermission(pack.getPermission()))).toList();
+    }
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BriefVO updateByShareToken(String token, Integer projectId, BriefSaveDTO dto) {
@@ -349,19 +425,7 @@ public class BriefServiceImpl implements BriefService {
             throw new BusinessException("请先通过有效分享链接访问该 Brief");
         }
 
-        AiProjectBriefRef existing = projectBriefRefMapper.selectOne(
-            new LambdaQueryWrapper<AiProjectBriefRef>()
-                .eq(AiProjectBriefRef::getProjectId, projectId)
-                .eq(AiProjectBriefRef::getBriefId, brief.getId())
-                .last("LIMIT 1")
-        );
-        if (existing == null) {
-            AiProjectBriefRef reference = new AiProjectBriefRef();
-            reference.setTenantId(currentTenantId());
-            reference.setProjectId(projectId);
-            reference.setBriefId(brief.getId());
-            projectBriefRefMapper.insert(reference);
-        }
+        projectBriefRefMapper.upsertReference(currentTenantId(), projectId, brief.getId(), userId);
         return toVOWithVersions(brief);
     }
 
@@ -883,6 +947,23 @@ public class BriefServiceImpl implements BriefService {
         return vo;
     }
 
+    private AiBriefSharePack resolveSharePack(String token) {
+        AiBriefSharePack pack = sharePackMapper.selectOne(new LambdaQueryWrapper<AiBriefSharePack>().eq(AiBriefSharePack::getShareToken, token).eq(AiBriefSharePack::getEnabled, 1).last("LIMIT 1"));
+        if (pack == null) throw new BusinessException("分享链接不存在或已失效");
+        return pack;
+    }
+
+    private List<AiBrief> sharePackBriefs(AiBriefSharePack pack) {
+        List<Integer> ids = sharePackItemMapper.selectList(new LambdaQueryWrapper<AiBriefSharePackItem>().eq(AiBriefSharePackItem::getSharePackId, pack.getId()).orderByAsc(AiBriefSharePackItem::getId)).stream().map(AiBriefSharePackItem::getBriefId).toList();
+        if (ids.isEmpty()) return List.of();
+        Map<Integer, AiBrief> byId = new HashMap<>();
+        briefMapper.selectBatchIds(ids).forEach(brief -> byId.put(brief.getId(), brief));
+        return ids.stream().map(byId::get).filter(java.util.Objects::nonNull).toList();
+    }
+
+    private BriefSharePackVO toSharePackVO(AiBriefSharePack pack, List<AiBrief> briefs) {
+        BriefSharePackVO vo = new BriefSharePackVO(); vo.setShareToken(pack.getShareToken()); vo.setShareUrl("/brief-share-pack/" + pack.getShareToken()); vo.setPermission(normalizeSharePermission(pack.getPermission())); vo.setBriefs(briefs.stream().map(brief -> toVOWithVersions(brief, normalizeSharePermission(pack.getPermission()))).toList()); return vo;
+    }
     private BriefShareVO toShareVO(AiBriefShareLink shareLink) {
         BriefShareVO vo = new BriefShareVO();
         vo.setBriefId(String.valueOf(shareLink.getBriefId()));

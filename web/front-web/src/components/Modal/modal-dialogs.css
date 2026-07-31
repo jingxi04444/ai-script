@@ -2901,3 +2901,82 @@
     border-left: 0;
   }
 }
+
+.brief-folder-batch,
+.brief-batch-share-actions button,
+.brief-batch-share-actions select {
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 12px;
+  border: 1px solid #394043;
+  border-radius: 9px;
+  background: #1c2021;
+  color: #e7ebec;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.brief-folder-batch.active,
+.brief-batch-share-actions .primary {
+  border-color: rgba(104, 219, 100, 0.7);
+  background: rgba(75, 170, 83, 0.18);
+  color: #91ef89;
+}
+
+.brief-batch-share-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.brief-batch-share-actions select {
+  appearance: auto;
+  min-width: 92px;
+}
+
+.brief-batch-share-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.brief-folder-card.is-selected {
+  border-color: #6bd96b;
+  background: rgba(74, 157, 79, 0.15);
+}
+
+.brief-folder-check {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #73dd70;
+  border-radius: 50%;
+  background: #244d28;
+  color: #a6f59b;
+  font-size: 11px;
+}
+
+@media (max-width: 760px) {
+  .brief-folder-head-actions,
+  .brief-batch-share-actions {
+    flex-wrap: wrap;
+  }
+
+  .brief-folder-toolbar {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .brief-batch-share-actions {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+.brief-folder-check.is-checked { background: #244d28; }

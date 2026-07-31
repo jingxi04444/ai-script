@@ -5,10 +5,13 @@ import com.aiscript.framework.storage.StorageClient;
 import com.aiscript.modules.brief.dto.BriefEditRequestDTO;
 import com.aiscript.modules.brief.dto.BriefSaveDTO;
 import com.aiscript.modules.brief.dto.BriefShareDTO;
+import com.aiscript.modules.brief.dto.BriefSharePackCreateDTO;
+import com.aiscript.modules.brief.dto.BriefSharePackLinkDTO;
 import com.aiscript.modules.brief.service.BriefService;
 import com.aiscript.modules.brief.vo.BriefEditRequestVO;
 import com.aiscript.modules.brief.vo.BriefAssetLibraryVO;
 import com.aiscript.modules.brief.vo.BriefShareVO;
+import com.aiscript.modules.brief.vo.BriefSharePackVO;
 import com.aiscript.modules.brief.vo.BriefVO;
 import com.aiscript.modules.system.entity.SysImportTemplateConfig;
 import com.aiscript.modules.system.mapper.SysImportTemplateConfigMapper;
@@ -82,6 +85,29 @@ public class BriefController {
         return R.ok(briefService.assetLibrary());
     }
 
+    @GetMapping("/share-pack/{token}")
+    public R<BriefSharePackVO> getSharePack(@PathVariable String token) {
+        return R.ok(briefService.getSharePackByToken(token));
+    }
+
+    @PostMapping("/share-pack/{token}/link")
+    public R<List<BriefVO>> linkSharePack(@PathVariable String token, @RequestBody BriefSharePackLinkDTO payload) {
+        return R.ok(briefService.linkSharePackToProject(token, payload));
+    }
+    @PostMapping("/share-pack/{token}/unlink")
+    public R<Void> unlinkSharePack(@PathVariable String token, @RequestBody BriefSharePackLinkDTO payload) {
+        briefService.unlinkSharePackFromProject(token, payload);
+        return R.ok();
+    }
+
+    @GetMapping("/share-pack/{token}/linked")
+    public R<List<String>> sharePackLinkedBriefIds(@PathVariable String token, @RequestParam Integer projectId) {
+        return R.ok(briefService.sharePackLinkedBriefIds(token, projectId));
+    }
+    @GetMapping("/share-pack/{token}/briefs/{briefId}")
+    public R<BriefVO> getSharePackBrief(@PathVariable String token, @PathVariable Integer briefId) {
+        return R.ok(briefService.getSharePackBrief(token, briefId));
+    }
     @GetMapping("/share/{token}")
     public R<BriefVO> getByShareToken(@PathVariable String token) {
         return R.ok(briefService.getByShareToken(token));
@@ -111,6 +137,10 @@ public class BriefController {
         return R.ok(briefService.update(id, payload));
     }
 
+    @PostMapping("/share-packs")
+    public R<BriefSharePackVO> createSharePack(@RequestBody BriefSharePackCreateDTO payload) {
+        return R.ok(briefService.createSharePack(payload));
+    }
     @PostMapping("/{id}/share")
     public R<BriefShareVO> enableShare(@PathVariable Integer id, @RequestBody(required = false) BriefShareDTO payload) {
         return R.ok(briefService.enableShare(id, payload == null ? null : payload.getPermission()));

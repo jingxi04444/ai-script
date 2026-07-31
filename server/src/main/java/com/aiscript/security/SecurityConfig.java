@@ -52,7 +52,7 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/site-config").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/script-formats").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/home-banners").permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/briefs/share/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/briefs/share/**", "/api/briefs/share-pack/**").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .anyRequest().access(dynamicAuthorizationManager)
             )

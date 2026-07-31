@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiscript.modules.brief.mapper.AiProjectBriefRefMapper">
+
+    <insert id="upsertReference">
+        INSERT INTO ai_project_brief_ref (
+            tenant_id, project_id, brief_id,
+            create_by, create_time, update_by, update_time, deleted
+        )
+        VALUES (
+            #{tenantId}, #{projectId}, #{briefId},
+            #{userId}, CURRENT_TIMESTAMP, #{userId}, CURRENT_TIMESTAMP, 0
+        )
+        ON DUPLICATE KEY UPDATE
+            tenant_id = VALUES(tenant_id),
+            update_by = VALUES(update_by),
+            update_time = CURRENT_TIMESTAMP,
+            deleted = 0
+    </insert>
+
+</mapper>

@@ -1,7 +1,7 @@
 import { config } from '../config';
 import { mockBriefApi } from '../mock/brief';
 import api from './request';
-import type { Brief, BriefAssetLibrary, BriefDetectionReport, BriefEditRequest, BriefSharePermission, BriefShareResult } from '../types/brief';
+import type { Brief, BriefAssetLibrary, BriefDetectionReport, BriefEditRequest, BriefSharePack, BriefSharePermission, BriefShareResult } from '../types/brief';
 
 const briefDetailRequests = new Map<string, Promise<Brief>>();
 
@@ -92,6 +92,21 @@ export const briefApi = {
     URL.revokeObjectURL(url);
   },
 
+  createSharePack: (briefIds: string[], permission: BriefSharePermission): Promise<BriefSharePack> =>
+    api.post('/briefs/share-packs', { briefIds: briefIds.map(Number), permission }),
+
+  getSharePack: (token: string): Promise<BriefSharePack> =>
+    api.get(`/briefs/share-pack/${token}`),
+
+  linkSharePackToProject: (token: string, projectId: string, briefIds: string[]): Promise<Brief[]> =>
+    api.post(`/briefs/share-pack/${token}/link`, { projectId: Number(projectId), briefIds: briefIds.map(Number) }),
+  unlinkSharePackFromProject: (token: string, projectId: string, briefIds: string[]): Promise<void> =>
+    api.post(`/briefs/share-pack/${token}/unlink`, { projectId: Number(projectId), briefIds: briefIds.map(Number) }),
+
+  sharePackLinkedBriefIds: (token: string, projectId: string): Promise<string[]> =>
+    api.get(`/briefs/share-pack/${token}/linked`, { params: { projectId } }),
+  getSharePackBrief: (token: string, briefId: string): Promise<Brief> =>
+    api.get(`/briefs/share-pack/${token}/briefs/${briefId}`),
   enableShare: (briefId: string, permission: BriefSharePermission): Promise<BriefShareResult> =>
     config.useMock ? mockBriefApi.enableShare(briefId, permission) : api.post(`/briefs/${briefId}/share`, { permission }),
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CaretRightFilled, FileTextOutlined, FolderFilled, FormOutlined, LeftOutlined, MenuFoldOutlined, PictureOutlined, RightOutlined } from '@ant-design/icons';
+import { message } from 'antd';
+import { CaretRightFilled, CheckOutlined, FileTextOutlined, FolderFilled, FormOutlined, LeftOutlined, MenuFoldOutlined, PictureOutlined, RightOutlined, ShareAltOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { assetApi } from '../../api/asset';
 import { briefApi } from '../../api/brief';
@@ -52,6 +53,8 @@ const AssetsPage = () => {
   const [briefLibrary, setBriefLibrary] = useState<BriefAssetLibrary | null>(null);
   const [briefsLoading, setBriefsLoading] = useState(true);
   const [briefLoadFailed, setBriefLoadFailed] = useState(false);
+  const [isAssetBriefShareMode, setIsAssetBriefShareMode] = useState(false);
+  const [selectedAssetBriefIds, setSelectedAssetBriefIds] = useState<string[]>([]);
 
   const [scripts, setScripts] = useState<Script[]>([]);
   const [viralScriptCount, setViralScriptCount] = useState<number | null>(null);
@@ -162,6 +165,15 @@ const AssetsPage = () => {
     setExpandedViews((current) => ({ ...current, [view]: !current[view] }));
   };
 
+  const createAssetBriefSharePack = async () => {
+    if (!selectedAssetBriefIds.length) return message.warning('请选择 Brief');
+    try {
+      const pack = await briefApi.createSharePack(selectedAssetBriefIds, 'read');
+      await navigator.clipboard.writeText(new URL(pack.shareUrl, window.location.origin).toString());
+      setSelectedAssetBriefIds([]); setIsAssetBriefShareMode(false);
+      message.success('Brief 分享包链接已复制');
+    } catch { message.error('创建分享包失败：只能分享自己可管理的 Brief'); }
+  };
   const openBrief = (brief: BriefAssetItem) => {
     const params = new URLSearchParams({
       projectId: brief.projectId,
@@ -208,13 +220,14 @@ const AssetsPage = () => {
       return (
         <section className="assets-record-grid" aria-label={`${selectedBriefProject?.name || '当前项目'}的 Brief`}>
           {visibleProjectBriefs.map((brief) => (
-            <button className="assets-record-card" type="button" key={brief.id} onClick={() => openBrief(brief)}>
+            <button className={`assets-record-card ${isAssetBriefShareMode && selectedAssetBriefIds.includes(brief.id) ? 'is-selected' : ''}`} type="button" key={brief.id} onClick={() => isAssetBriefShareMode ? setSelectedAssetBriefIds((current) => current.includes(brief.id) ? current.filter((id) => id !== brief.id) : [...current, brief.id]) : openBrief(brief)}>
               <span className="assets-record-icon"><FormOutlined /></span>
               <span className="assets-record-copy">
                 <strong>{brief.productName || brief.name || '未命名 Brief'}</strong>
                 <small>{brief.productModel || 'Brief'}</small>
                 <em>更新于 {formatDateTime(brief.updatedAt)}</em>
               </span>
+              {isAssetBriefShareMode ? <span className={`assets-brief-check ${selectedAssetBriefIds.includes(brief.id) ? 'is-checked' : ''}`}>{selectedAssetBriefIds.includes(brief.id) ? <CheckOutlined /> : null}</span> : null}
               <RightOutlined />
             </button>
           ))}
@@ -359,7 +372,10 @@ const AssetsPage = () => {
                 <LeftOutlined /> 返回项目文件夹
               </button>
             )}
-            <h1>{selectedBriefProject?.name || selectedFolder?.name || LIBRARY_LABELS[activeView]}</h1>
+            <div className="assets-brief-title-row">
+              <h1>{selectedBriefProject?.name || selectedFolder?.name || LIBRARY_LABELS[activeView]}</h1>
+              {selectedBriefProject ? <div className="assets-brief-share-tools"><button type="button" onClick={() => { setIsAssetBriefShareMode((current) => !current); setSelectedAssetBriefIds([]); }}><ShareAltOutlined />{isAssetBriefShareMode ? '取消选择' : '创建分享包'}</button>{isAssetBriefShareMode ? <><button type="button" onClick={() => setSelectedAssetBriefIds(selectedAssetBriefIds.length === visibleProjectBriefs.length ? [] : visibleProjectBriefs.map((brief) => brief.id))}>全选</button><button type="button" onClick={createAssetBriefSharePack} disabled={!selectedAssetBriefIds.length}>共享 {selectedAssetBriefIds.length} 份 Brief</button></> : null}</div> : null}
+            </div>
             {renderFolderContents()}
           </div>
         </section>

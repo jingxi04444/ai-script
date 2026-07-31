@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { message, Upload } from 'antd';
-import { DeleteOutlined, FileTextOutlined, FormOutlined, PlusOutlined, ReloadOutlined, RightOutlined, UploadOutlined } from '@ant-design/icons';
+import { DeleteOutlined, FileTextOutlined, FormOutlined, PlusOutlined, ReloadOutlined, RightOutlined, ShareAltOutlined, UploadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { assetApi, fileApi } from '../../../api/asset';
 import { briefApi } from '../../../api/brief';
 import { scriptApi } from '../../../api/script';
 import type { Asset, SellingPointAsset, ViralAsset } from '../../../types/asset';
-import type { Brief } from '../../../types/brief';
+import type { Brief, BriefSharePermission } from '../../../types/brief';
 import type { Script } from '../../../types/script';
 import { formatDateTime } from '../../../utils/format';
 import './assets-panel.css';
@@ -30,6 +30,8 @@ const AssetsPanel = ({ projectId, ensureProjectId }: AssetsPanelProps) => {
   const [viralName, setViralName] = useState('');
   const [viralUrl, setViralUrl] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isBriefShareMode, setIsBriefShareMode] = useState(false);
+  const [selectedBriefIds, setSelectedBriefIds] = useState<string[]>([]);
 
   const loadAssets = useCallback(async () => {
     setLoading(true);
@@ -120,6 +122,23 @@ const AssetsPanel = ({ projectId, ensureProjectId }: AssetsPanelProps) => {
     }
   };
 
+  const toggleBriefSelection = (briefId: string) => {
+    setSelectedBriefIds((current) => current.includes(briefId) ? current.filter((id) => id !== briefId) : [...current, briefId]);
+  };
+
+  const shareSelectedBriefs = async () => {
+    const selected = briefs.filter((brief) => selectedBriefIds.includes(brief.id) && (brief.accessPermission || 'manage') === 'manage');
+    if (!selected.length) return message.warning('请选择可管理的 Brief');
+    try {
+      const pack = await briefApi.createSharePack(selected.map((brief) => brief.id), 'read' as BriefSharePermission);
+      await navigator.clipboard.writeText(new URL(pack.shareUrl, window.location.origin).toString());
+      setSelectedBriefIds([]);
+      setIsBriefShareMode(false);
+      message.success('Brief 分享包链接已复制');
+    } catch {
+      message.error('创建 Brief 分享包失败');
+    }
+  };
   const openBrief = (briefId: string) => {
     const params = new URLSearchParams({
       step: 'selling-points',
@@ -155,11 +174,12 @@ const AssetsPanel = ({ projectId, ensureProjectId }: AssetsPanelProps) => {
           <div className="asset-block-title">
             <h3><FormOutlined />Brief 资产库</h3>
             <span>{briefs.length} 份</span>
+            <button type="button" className="asset-brief-share" onClick={() => { setIsBriefShareMode((current) => !current); setSelectedBriefIds([]); }}><ShareAltOutlined />{isBriefShareMode ? '取消' : '创建分享包'}</button>
           </div>
           <p className="asset-block-description">包含我创建和别人共享给我的 Brief，内容更新会同步显示。</p>
-          <div className="asset-library-list">
+          {isBriefShareMode ? <div className="asset-brief-share-bar"><button type="button" onClick={() => setSelectedBriefIds(selectedBriefIds.length === briefs.length ? [] : briefs.map((brief) => brief.id))}>全选</button><button type="button" onClick={shareSelectedBriefs} disabled={!selectedBriefIds.length}>共享 {selectedBriefIds.length} 份 Brief</button></div> : null}          <div className="asset-library-list">
             {briefs.map((brief) => (
-              <button className="asset-library-link" type="button" key={brief.id} onClick={() => openBrief(brief.id)}>
+              <button className={`asset-library-link ${isBriefShareMode && selectedBriefIds.includes(brief.id) ? 'is-selected' : ''}`} type="button" key={brief.id} onClick={() => isBriefShareMode ? toggleBriefSelection(brief.id) : openBrief(brief.id)}>
                 <span className="asset-library-icon"><FormOutlined /></span>
                 <span className="asset-library-content">
                   <strong>{brief.productName || brief.name || '未命名 Brief'}</strong>

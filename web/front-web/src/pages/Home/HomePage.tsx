@@ -6,8 +6,10 @@ import {
   EditOutlined,
   LinkOutlined,
   PlusOutlined,
+  ShareAltOutlined,
   ThunderboltOutlined,
 } from '@ant-design/icons';
+import { message } from 'antd';
 import { siteApi, type HomeBanner } from '../../api/site';
 import HomeRail from '../../components/Layout/HomeRail';
 import MemberPaymentDialog from '../../components/Modal/MemberPaymentDialog';
@@ -177,6 +179,24 @@ const HomePage = () => {
     openWork(work);
   };
 
+  const handleSharePreviewWork = async () => {
+    if (!previewWork) return;
+    // Share the case page (or its configured landing page), never the raw video file.
+    const shareUrl = previewWork.linkUrl || window.location.href;
+    const shareData = { title: previewWork.label, text: previewWork.label, url: shareUrl };
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+        return;
+      }
+      await navigator.clipboard.writeText(shareUrl);
+      message.success('\u5206\u4eab\u94fe\u63a5\u5df2\u590d\u5236');
+    } catch (error) {
+      if ((error as DOMException)?.name !== 'AbortError') {
+        message.error('\u6682\u65f6\u65e0\u6cd5\u5206\u4eab\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5');
+      }
+    }
+  };
   const workCategories = ['全部', ...Array.from(new Set(hotWorks.map((work) => work.category).filter(Boolean)))];
   const visibleWorks = activeCategory === '全部' ? hotWorks : hotWorks.filter((work) => work.category === activeCategory);
 
@@ -272,11 +292,23 @@ const HomePage = () => {
           >
             <header>
               <strong>{previewWork.label}</strong>
-              <button type="button" aria-label="关闭视频播放弹窗" onClick={() => setPreviewWork(null)}>
-                <CloseOutlined />
-              </button>
+              <div className="work-video-modal-actions">
+                <button className="work-video-modal-share" type="button" onClick={handleSharePreviewWork}>
+                  <ShareAltOutlined />{'\u5206\u4eab'}
+                </button>
+                <button type="button" aria-label="关闭视频播放弹窗" onClick={() => setPreviewWork(null)}>
+                  <CloseOutlined />
+                </button>
+              </div>
             </header>
-            <video src={previewWork.videoUrl} controls autoPlay playsInline />
+            <video
+              src={previewWork.videoUrl}
+              controls
+              controlsList="nodownload noremoteplayback"
+              disablePictureInPicture
+              autoPlay
+              playsInline
+            />
           </section>
         </div>
       )}
