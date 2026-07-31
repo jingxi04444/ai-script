@@ -4,6 +4,7 @@ import lombok.Data;
 
 @Data
 public class GenerateScriptDTO {
+    private String requestNo;
     private String projectId;
     private String type;
     private String templateId;

@@ -34,6 +34,7 @@ import com.aiscript.modules.storyboard.mapper.AiStoryboardShotMapper;
 import com.aiscript.modules.system.entity.SysScriptFormatConfig;
 import com.aiscript.modules.system.mapper.SysScriptFormatConfigMapper;
 import com.aiscript.modules.system.service.PromptRenderService;
+import com.aiscript.modules.membership.service.MembershipEntitlementService;
 import com.aiscript.security.LoginUser;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -46,6 +47,7 @@ import java.util.HashMap;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -66,6 +68,7 @@ public class ScriptServiceImpl implements ScriptService {
     private final SysScriptFormatConfigMapper scriptFormatMapper;
     private final LlmClient llmClient;
     private final PromptRenderService promptRenderService;
+    private final MembershipEntitlementService entitlementService;
 
     public ScriptServiceImpl(
         AiStoryboardScriptMapper scriptMapper,
@@ -78,6 +81,7 @@ public class ScriptServiceImpl implements ScriptService {
         SysScriptFormatConfigMapper scriptFormatMapper,
         LlmClient llmClient,
         PromptRenderService promptRenderService
+        , MembershipEntitlementService entitlementService
     ) {
         this.scriptMapper = scriptMapper;
         this.templateMapper = templateMapper;
@@ -89,6 +93,7 @@ public class ScriptServiceImpl implements ScriptService {
         this.scriptFormatMapper = scriptFormatMapper;
         this.llmClient = llmClient;
         this.promptRenderService = promptRenderService;
+        this.entitlementService = entitlementService;
     }
 
     @Override
@@ -154,6 +159,19 @@ public class ScriptServiceImpl implements ScriptService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ScriptVO generate(GenerateScriptDTO dto) {
+        String operationId = StringUtils.hasText(dto.getRequestNo())
+            ? dto.getRequestNo()
+            : UUID.randomUUID().toString();
+        String monthlyRequestNo = "script_generate:" + currentUserId() + ":" + operationId;
+        String concurrencyRequestNo = "task_concurrency:script:" + currentUserId() + ":" + operationId;
+        entitlementService.reserveQuota(
+            currentTenantId(), currentUserId(), "TASK_CONCURRENCY_LIMIT", 1,
+            concurrencyRequestNo, "script_generate", null
+        );
+        entitlementService.reserveQuota(
+            currentTenantId(), currentUserId(), "SCRIPT_MONTHLY_LIMIT", 1,
+            monthlyRequestNo, "script_generate", null
+        );
         hydrateProductFrame(dto);
         AiGenerationTask task = createGenerationTask(dto);
         String generatedContent = generateContent(dto, task);
@@ -197,6 +215,8 @@ public class ScriptServiceImpl implements ScriptService {
         task.setResultPayload(JsonUtils.toJson(Map.of("scriptId", String.valueOf(script.getId()), "versionId", String.valueOf(version.getId()))));
         task.setFinishTime(LocalDateTime.now());
         generationTaskMapper.updateById(task);
+        entitlementService.confirmQuota(monthlyRequestNo);
+        entitlementService.releaseQuota(concurrencyRequestNo);
         return ScriptConvert.toScriptVO(script);
     }
 
@@ -280,18 +300,17 @@ public class ScriptServiceImpl implements ScriptService {
 
     @Override
     public List<ScriptTemplateVO> enabledTemplates() {
-        return templateMapper.selectList(new LambdaQueryWrapper<AiScriptTemplate>()
-                .eq(AiScriptTemplate::getStatus, 1)
-                .eq(AiScriptTemplate::getAuditStatus, "approved")
-                .eq(AiScriptTemplate::getPublishStatus, "online")
-                .orderByAsc(AiScriptTemplate::getSortOrder)
-                .orderByDesc(AiScriptTemplate::getUpdateTime)
-                .orderByAsc(AiScriptTemplate::getId))
-            .stream()
+        LambdaQueryWrapper<AiScriptTemplate> wrapper = baseEnabledTemplateQuery();
+        String scope = entitlementService.getValue(currentTenantId(), currentUserId(), "TEMPLATE_ACCESS_SCOPE");
+        if ("free_only".equals(scope)) {
+            wrapper.eq(AiScriptTemplate::getLocked, 0).last("LIMIT 2");
+        } else if (!entitlementService.hasFeature(currentTenantId(), currentUserId(), "HOT_TEMPLATE_ACCESS")) {
+            wrapper.eq(AiScriptTemplate::getLocked, 0);
+        }
+        return templateMapper.selectList(wrapper).stream()
             .map(ScriptConvert::toTemplateVO)
             .toList();
     }
-
     @Override
     public PageResult<ScriptTemplateVO> templatePage(PageQuery query, String category) {
         LambdaQueryWrapper<AiScriptTemplate> wrapper = new LambdaQueryWrapper<>();
@@ -642,9 +661,7 @@ public class ScriptServiceImpl implements ScriptService {
             if (!"approved".equals(template.getAuditStatus()) || !"online".equals(template.getPublishStatus())) {
                 throw new BusinessException("该模板尚未审核通过或已下架");
             }
-            if (template.getLocked() != null && template.getLocked() == 1) {
-                throw new BusinessException("该模板暂未解锁");
-            }
+            ensureTemplateAccess(template);
             return "模板要求：参考模板《" + template.getTemplateName() + "》；分类：" + nullToEmpty(template.getCategory())
                 + "；适用演员/账号：" + nullToEmpty(template.getActor())
                 + "；适用人群：" + nullToEmpty(template.getPeople())
@@ -661,6 +678,33 @@ public class ScriptServiceImpl implements ScriptService {
         }
     }
 
+    private void ensureTemplateAccess(AiScriptTemplate template) {
+        if (template.getLocked() != null && template.getLocked() == 1) {
+            entitlementService.requireFeature(currentTenantId(), currentUserId(), "HOT_TEMPLATE_ACCESS");
+        }
+        String scope = entitlementService.getValue(currentTenantId(), currentUserId(), "TEMPLATE_ACCESS_SCOPE");
+        if (!"free_only".equals(scope)) {
+            return;
+        }
+        boolean freeTemplate = templateMapper.selectList(baseEnabledTemplateQuery()
+                .eq(AiScriptTemplate::getLocked, 0)
+                .last("LIMIT 2"))
+            .stream()
+            .anyMatch(item -> item.getId().equals(template.getId()));
+        if (!freeTemplate) {
+            throw new BusinessException("免费体验版仅可使用 2 个免费模板");
+        }
+    }
+
+    private LambdaQueryWrapper<AiScriptTemplate> baseEnabledTemplateQuery() {
+        return new LambdaQueryWrapper<AiScriptTemplate>()
+            .eq(AiScriptTemplate::getStatus, 1)
+            .eq(AiScriptTemplate::getAuditStatus, "approved")
+            .eq(AiScriptTemplate::getPublishStatus, "online")
+            .orderByAsc(AiScriptTemplate::getSortOrder)
+            .orderByDesc(AiScriptTemplate::getUpdateTime)
+            .orderByAsc(AiScriptTemplate::getId);
+    }
     private ScriptFormatInfo scriptFormatInfo(GenerateScriptDTO dto) {
         String format = dto.getFormat();
         if (StringUtils.hasText(format)) {

@@ -5,6 +5,7 @@ import com.aiscript.config.PaymentProperties;
 import com.alipay.easysdk.factory.Factory;
 import com.alipay.easysdk.kernel.Config;
 import com.alipay.easysdk.payment.common.models.AlipayTradeQueryResponse;
+import com.alipay.easysdk.payment.common.models.AlipayTradeRefundResponse;
 import com.alipay.easysdk.payment.facetoface.models.AlipayTradePrecreateResponse;
 import java.math.BigDecimal;
 import org.springframework.stereotype.Component;
@@ -37,7 +38,29 @@ public class AlipayScanPayClient implements PayClient {
     }
     public PayQueryResponse queryOrder(String outTradeNo) { ensureEnabled(); try { init(); AlipayTradeQueryResponse q = Factory.Payment.Common().query(outTradeNo); PayQueryResponse r = new PayQueryResponse(); r.setProvider(provider()); r.setOrderNo(q.outTradeNo); r.setProviderTradeNo(q.tradeNo); r.setTradeStatus(q.tradeStatus); r.setPaid("TRADE_SUCCESS".equals(q.tradeStatus) || "TRADE_FINISHED".equals(q.tradeStatus)); if (q.totalAmount != null) r.setPaidAmount(new BigDecimal(q.totalAmount)); return r; } catch (Exception ex) { throw new BusinessException("支付宝查单失败"); } }
     public void closeOrder(String outTradeNo) { ensureEnabled(); try { init(); Factory.Payment.Common().close(outTradeNo); } catch (Exception ex) { throw new BusinessException("支付宝关单失败"); } }
-    private void ensureEnabled() {
+    public PayRefundResponse refund(PayRefundRequest request) {
+        ensureEnabled();
+        try {
+            init();
+            AlipayTradeRefundResponse result = Factory.Payment.Common().refund(
+                request.getOrderNo(), request.getRefundAmount().toPlainString()
+            );
+            PayRefundResponse response = new PayRefundResponse();
+            response.setRefundNo(request.getRefundNo());
+            response.setProviderRefundNo(result.tradeNo);
+            response.setStatus(result.code);
+            response.setSuccess("10000".equals(result.code));
+            response.setRawPayload(result.httpBody);
+            if (!response.isSuccess()) {
+                throw new BusinessException("支付宝退款失败: " + result.subMsg);
+            }
+            return response;
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (Exception exception) {
+            throw new BusinessException("支付宝退款失败");
+        }
+    }    private void ensureEnabled() {
         if (!properties.isEnabled() || !properties.getAlipay().isEnabled() || !StringUtils.hasText(properties.getAlipay().getAppId()) || !StringUtils.hasText(properties.getAlipay().getMerchantPrivateKey()) || !StringUtils.hasText(properties.getAlipay().getAlipayPublicKey()) || !StringUtils.hasText(properties.getAlipay().getNotifyUrl()) || !StringUtils.hasText(properties.getAlipay().getSellerId())) throw new BusinessException("支付宝未启用或配置不完整");
     }
     private void initQuietly() { try { init(); } catch (Exception ex) { throw new BusinessException("支付宝配置初始化失败"); } }

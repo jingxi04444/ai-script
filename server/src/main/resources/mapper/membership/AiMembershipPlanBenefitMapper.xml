@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiscript.modules.membership.mapper.AiMembershipPlanBenefitMapper">
+
+    <select id="selectActiveEntitlements"
+            resultType="com.aiscript.modules.membership.vo.MembershipEntitlementRow">
+        SELECT
+            pb.plan_id,
+            p.plan_code,
+            d.benefit_code,
+            d.benefit_name,
+            d.category,
+            pb.benefit_value,
+            d.value_type,
+            d.unit,
+            d.reset_type,
+            d.preview_only = 1 AS preview_only,
+            d.enabled = 1 AS definition_enabled,
+            pb.enabled = 1 AS plan_enabled
+        FROM ai_membership_plan_benefit pb
+        JOIN ai_membership_plan p
+          ON p.id = pb.plan_id
+         AND p.deleted = 0
+        JOIN ai_membership_benefit_definition d
+          ON d.id = pb.benefit_id
+         AND d.deleted = 0
+        WHERE pb.plan_id = #{planId}
+          AND pb.deleted = 0
+          AND (pb.effective_time IS NULL OR pb.effective_time &lt;= CURRENT_TIMESTAMP)
+          AND (pb.expire_time IS NULL OR pb.expire_time &gt; CURRENT_TIMESTAMP)
+        ORDER BY d.display_order, d.id
+    </select>
+
+</mapper>

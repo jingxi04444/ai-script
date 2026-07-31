@@ -14,6 +14,7 @@ import com.aiscript.modules.auth.service.AuthService;
 import com.aiscript.modules.auth.vo.AdminUserVO;
 import com.aiscript.modules.auth.vo.LoginVO;
 import com.aiscript.modules.auth.vo.UserInfoVO;
+import com.aiscript.modules.membership.service.MembershipService;
 import com.aiscript.modules.system.entity.SysRole;
 import com.aiscript.modules.system.entity.SysUserRole;
 import com.aiscript.modules.system.mapper.SysRoleMapper;
@@ -46,6 +47,7 @@ public class AuthServiceImpl implements AuthService {
     private final PermissionService permissionService;
     private final SysRoleMapper roleMapper;
     private final SysUserRoleMapper userRoleMapper;
+    private final MembershipService membershipService;
 
     public AuthServiceImpl(
         JwtTokenProvider jwtTokenProvider,
@@ -55,7 +57,8 @@ public class AuthServiceImpl implements AuthService {
         SmsClient smsClient,
         PermissionService permissionService,
         SysRoleMapper roleMapper,
-        SysUserRoleMapper userRoleMapper
+        SysUserRoleMapper userRoleMapper,
+        MembershipService membershipService
     ) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.sysUserMapper = sysUserMapper;
@@ -65,6 +68,7 @@ public class AuthServiceImpl implements AuthService {
         this.permissionService = permissionService;
         this.roleMapper = roleMapper;
         this.userRoleMapper = userRoleMapper;
+        this.membershipService = membershipService;
     }
 
     @Override
@@ -150,6 +154,7 @@ public class AuthServiceImpl implements AuthService {
         user.setBalance(BigDecimal.ZERO);
         user.setStatus(1);
         sysUserMapper.insert(user);
+        membershipService.ensureFreeSubscription(user.getTenantId(), user.getId());
         LoginDTO loginDTO = new LoginDTO();
         loginDTO.setUsername(dto.getUsername());
         loginDTO.setPassword(dto.getPassword());

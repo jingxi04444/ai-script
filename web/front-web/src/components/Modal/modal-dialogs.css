@@ -1715,7 +1715,7 @@
 .profile-dialog-backdrop { z-index: 110; }
 .profile-dialog-card { width: min(92vw, 480px); overflow: hidden; border: 1px solid #343b40; border-radius: 24px; background: linear-gradient(145deg, #202428, #151719); box-shadow: 0 30px 80px rgba(0,0,0,.56); color: #f5f7f8; }
 .profile-dialog-card > header { min-height: 78px; display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 18px 22px; border-bottom: 1px solid rgba(255,255,255,.08); }
-.profile-dialog-card > header span { color: #6eea77; font-size: 11px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
+.profile-dialog-card > header span { color: var(--theme-accent, #6eea77); font-size: 11px; font-weight: 850; letter-spacing: .12em; text-transform: uppercase; }
 .profile-dialog-card > header h2 { margin: 3px 0 0; font-size: 21px; }
 .profile-dialog-card > header button { width: 36px; height: 36px; min-height: 36px; display: grid; place-items: center; border-radius: 10px; background: rgba(255,255,255,.06); color: #cbd1d4; font-size: 24px; }
 .profile-dialog-state { min-height: 250px; display: flex; align-items: center; justify-content: center; gap: 10px; color: #aeb7bb; }
@@ -2980,3 +2980,80 @@
   }
 }
 .brief-folder-check.is-checked { background: #244d28; }
+.point-pack-dialog .balance-card {
+  border-color: rgba(var(--theme-accent-rgb, 98, 230, 112), 0.28);
+  background: var(--panel-2, #1a1d1e);
+}
+
+.point-pack-dialog .balance-card span,
+.point-pack-dialog .balance-card p {
+  color: var(--muted, #aab6bc);
+}
+
+.point-pack-dialog .recharge-amount-grid button {
+  height: 72px;
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  border-color: var(--line, rgba(126, 150, 164, 0.25));
+  background: var(--panel-2, #1c1e20);
+  color: var(--text, #eef5f6);
+}
+
+.point-pack-dialog .recharge-amount-grid button strong {
+  font-size: 18px;
+}
+
+.point-pack-dialog .recharge-amount-grid button small {
+  color: var(--muted, #aab6bc);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.point-pack-dialog .recharge-amount-grid button.active {
+  border-color: rgba(var(--theme-accent-rgb, 98, 230, 112), 0.78);
+  color: var(--theme-accent, #65f070);
+  background: rgba(var(--theme-accent-rgb, 98, 230, 112), 0.1);
+}
+
+.point-pack-dialog .recharge-amount-grid button.active small {
+  color: var(--theme-accent, #65f070);
+}
+
+.point-pack-dialog .recharge-amount-grid button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.point-pack-rate {
+  margin: 12px 0 0;
+  border-radius: 9px;
+  padding: 10px 12px;
+  color: var(--theme-accent, #65f070);
+  background: rgba(var(--theme-accent-rgb, 98, 230, 112), 0.08);
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.point-pack-rate.is-disabled {
+  color: #ff9c6e;
+  background: rgba(255, 122, 69, 0.1);
+}
+
+html[data-color-mode='light'] .profile-dialog-card {
+  border-color: #d8dde1;
+  background: #ffffff;
+  color: #202426;
+  box-shadow: 0 24px 70px rgba(38, 48, 54, 0.18);
+}
+html[data-color-mode='light'] .profile-dialog-card > header { border-bottom-color: #e2e6e9; }
+html[data-color-mode='light'] .profile-dialog-card > header span { color: var(--theme-accent-strong, #218b36); }
+html[data-color-mode='light'] .profile-dialog-card > header button { background: #eef1f3; color: #41484c; }
+html[data-color-mode='light'] .profile-dialog-avatar span,
+html[data-color-mode='light'] .profile-dialog-content dt,
+html[data-color-mode='light'] .profile-dialog-state { color: #626b70; }
+html[data-color-mode='light'] .profile-dialog-content dl div { border-color: #dfe4e7; background: #f7f9fa; }
+html[data-color-mode='light'] .profile-dialog-content dd { color: #202426; }

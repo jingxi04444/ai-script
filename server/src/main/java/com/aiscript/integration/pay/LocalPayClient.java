@@ -21,4 +21,12 @@ public class LocalPayClient implements PayClient {
     public PayNotifyMessage verifyAndParseNotify(PayNotifyMessage message) { message.setVerified(properties.isDevMode()); return message; }
     public PayQueryResponse queryOrder(String outTradeNo) { PayQueryResponse r = new PayQueryResponse(); r.setProvider(provider()); r.setOrderNo(outTradeNo); r.setTradeStatus("UNKNOWN"); return r; }
     public void closeOrder(String outTradeNo) { }
+    public PayRefundResponse refund(PayRefundRequest request) {
+        PayRefundResponse response = new PayRefundResponse();
+        response.setRefundNo(request.getRefundNo());
+        response.setProviderRefundNo("LOCAL_REFUND_" + request.getRefundNo());
+        response.setStatus("SUCCESS");
+        response.setSuccess(true);
+        return response;
+    }
 }

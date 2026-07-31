@@ -6,4 +6,5 @@ public interface PayClient {
     PayNotifyMessage verifyAndParseNotify(PayNotifyMessage message);
     PayQueryResponse queryOrder(String outTradeNo);
     void closeOrder(String outTradeNo);
+    PayRefundResponse refund(PayRefundRequest request);
 }

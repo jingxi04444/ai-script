@@ -15,10 +15,16 @@ import com.aiscript.modules.brief.vo.BriefDetectionMetricVO;
 import com.aiscript.modules.brief.vo.BriefDetectionReportVO;
 import com.aiscript.modules.brief.vo.BriefDetectionSuggestionVO;
 import com.aiscript.modules.system.service.PromptRenderService;
+import com.aiscript.modules.membership.service.MembershipEntitlementService;
+import com.aiscript.modules.membership.service.MembershipPointService;
+import com.aiscript.security.LoginUser;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,12 +36,16 @@ public class BriefAiServiceImpl implements BriefAiService {
     private final AiBriefAiResultMapper resultMapper;
     private final LlmClient llmClient;
     private final PromptRenderService promptRenderService;
+    private final MembershipEntitlementService entitlementService;
+    private final MembershipPointService pointService;
 
-    public BriefAiServiceImpl(AiBriefMapper briefMapper, AiBriefAiResultMapper resultMapper, LlmClient llmClient, PromptRenderService promptRenderService) {
+    public BriefAiServiceImpl(AiBriefMapper briefMapper, AiBriefAiResultMapper resultMapper, LlmClient llmClient, PromptRenderService promptRenderService, MembershipEntitlementService entitlementService, MembershipPointService pointService) {
         this.briefMapper = briefMapper;
         this.resultMapper = resultMapper;
         this.llmClient = llmClient;
         this.promptRenderService = promptRenderService;
+        this.entitlementService = entitlementService;
+        this.pointService = pointService;
     }
 
     @Override
@@ -44,6 +54,22 @@ public class BriefAiServiceImpl implements BriefAiService {
         AiBrief brief = briefMapper.selectById(briefId);
         if (brief == null) {
             throw new BusinessException("Brief 不存在");
+        }
+        LoginUser user = currentUser();
+        entitlementService.requireFeature(
+            user.getTenantId(), user.getUserId(), "BRIEF_DETECT_ACCESS"
+        );
+        long pointCost = entitlementService.getLimit(
+            user.getTenantId(), user.getUserId(), "BRIEF_DETECT_POINT_COST"
+        );
+        if (pointCost > 0) {
+            String requestNo = dto != null && dto.getRequestNo() != null && !dto.getRequestNo().isBlank()
+                ? dto.getRequestNo()
+                : "brief_detect:" + briefId + ":" + UUID.randomUUID();
+            pointService.consumePoints(
+                user.getTenantId(), user.getUserId(), pointCost, requestNo,
+                "brief_detect", briefId.longValue(), "Brief检测积分消耗"
+            );
         }
 
         String rawResponse = null;
@@ -71,7 +97,7 @@ public class BriefAiServiceImpl implements BriefAiService {
         result.setResultType("detect");
         result.setResultJson(JsonUtils.toJson(report));
         result.setRawResponse(rawResponse);
-        result.setCreateBy(DEFAULT_USER_ID);
+        result.setCreateBy(currentUser().getUserId());
         resultMapper.insert(result);
 
         report.id = String.valueOf(result.getId());
@@ -117,11 +143,18 @@ public class BriefAiServiceImpl implements BriefAiService {
         result.setResultType(resultType);
         result.setResultJson(raw);
         result.setRawResponse(raw);
-        result.setCreateBy(DEFAULT_USER_ID);
+        result.setCreateBy(currentUser().getUserId());
         resultMapper.insert(result);
         return toVO(result);
     }
 
+    private LoginUser currentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof LoginUser loginUser) {
+            return loginUser;
+        }
+        throw new BusinessException("请先登录");
+    }
     private BriefAiResultVO toVO(AiBriefAiResult result) {
         BriefAiResultVO vo = new BriefAiResultVO();
         vo.id = String.valueOf(result.getId());

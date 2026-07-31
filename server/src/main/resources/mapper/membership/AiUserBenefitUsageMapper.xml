@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiscript.modules.membership.mapper.AiUserBenefitUsageMapper">
+
+    <update id="reserveQuota">
+        UPDATE ai_user_benefit_usage
+        SET reserved_amount = reserved_amount + #{amount},
+            version = version + 1,
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{usageId}
+          AND (quota_total = -1 OR used_amount + reserved_amount + #{amount} &lt;= quota_total)
+    </update>
+
+    <update id="confirmQuota">
+        UPDATE ai_user_benefit_usage
+        SET reserved_amount = reserved_amount - #{amount},
+            used_amount = used_amount + #{amount},
+            version = version + 1,
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{usageId}
+          AND reserved_amount &gt;= #{amount}
+    </update>
+
+    <update id="releaseQuota">
+        UPDATE ai_user_benefit_usage
+        SET reserved_amount = reserved_amount - #{amount},
+            version = version + 1,
+            update_time = CURRENT_TIMESTAMP
+        WHERE id = #{usageId}
+          AND reserved_amount &gt;= #{amount}
+    </update>
+
+</mapper>

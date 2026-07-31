@@ -12,6 +12,11 @@ import com.wechat.pay.java.service.payments.nativepay.model.CloseOrderRequest;
 import com.wechat.pay.java.service.payments.nativepay.model.PrepayRequest;
 import com.wechat.pay.java.service.payments.nativepay.model.PrepayResponse;
 import com.wechat.pay.java.service.payments.nativepay.model.QueryOrderByOutTradeNoRequest;
+import com.wechat.pay.java.service.refund.RefundService;
+import com.wechat.pay.java.service.refund.model.AmountReq;
+import com.wechat.pay.java.service.refund.model.CreateRequest;
+import com.wechat.pay.java.service.refund.model.Refund;
+import com.wechat.pay.java.service.refund.model.Status;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import org.springframework.stereotype.Component;
@@ -51,13 +56,33 @@ public class WechatNativePayClient implements PayClient {
         PayQueryResponse r = new PayQueryResponse(); r.setProvider(provider()); r.setOrderNo(m.getOrderNo()); r.setProviderTradeNo(m.getProviderTradeNo()); r.setTradeStatus(m.getTradeStatus()); r.setPaidAmount(m.getTotalAmount()); r.setPaid(m.isPaid()); return r;
     }
     public void closeOrder(String outTradeNo) { ensureEnabled(); CloseOrderRequest req = new CloseOrderRequest(); req.setMchid(properties.getWechat().getMchId()); req.setOutTradeNo(outTradeNo); service().closeOrder(req); }
-    private void ensureEnabled() {
+    public PayRefundResponse refund(PayRefundRequest request) {
+        ensureEnabled();
+        CreateRequest createRequest = new CreateRequest();
+        createRequest.setOutTradeNo(request.getOrderNo());
+        createRequest.setOutRefundNo(request.getRefundNo());
+        createRequest.setReason(request.getReason());
+        AmountReq amount = new AmountReq();
+        amount.setRefund(toFen(request.getRefundAmount()).longValue());
+        amount.setTotal(toFen(request.getTotalAmount()).longValue());
+        amount.setCurrency("CNY");
+        createRequest.setAmount(amount);
+        Refund result = refundService().create(createRequest);
+        PayRefundResponse response = new PayRefundResponse();
+        response.setRefundNo(request.getRefundNo());
+        response.setProviderRefundNo(result.getRefundId());
+        response.setStatus(result.getStatus() == null ? null : result.getStatus().name());
+        response.setSuccess(result.getStatus() == Status.SUCCESS);
+        response.setRawPayload(result.toString());
+        return response;
+    }    private void ensureEnabled() {
         if (!properties.isEnabled() || !properties.getWechat().isEnabled() || !StringUtils.hasText(properties.getWechat().getAppId()) || !StringUtils.hasText(properties.getWechat().getMchId()) || !StringUtils.hasText(properties.getWechat().getApiV3Key()) || !StringUtils.hasText(properties.getWechat().getPrivateKeyPath()) || !StringUtils.hasText(properties.getWechat().getMchSerialNo()) || !StringUtils.hasText(properties.getWechat().getNotifyUrl())) {
             throw new BusinessException("微信支付未启用或配置不完整");
         }
     }
     private RSAAutoCertificateConfig config() { return new RSAAutoCertificateConfig.Builder().merchantId(properties.getWechat().getMchId()).privateKeyFromPath(properties.getWechat().getPrivateKeyPath()).merchantSerialNumber(properties.getWechat().getMchSerialNo()).apiV3Key(properties.getWechat().getApiV3Key()).build(); }
     private NativePayService service() { return new NativePayService.Builder().config(config()).build(); }
+    private RefundService refundService() { return new RefundService.Builder().config(config()).build(); }
     private String notifyUrl(PayCreateRequest req) { return StringUtils.hasText(properties.getWechat().getNotifyUrl()) ? properties.getWechat().getNotifyUrl() : req.getNotifyUrl(); }
     private Integer toFen(BigDecimal amount) { return amount.multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP).intValueExact(); }
     private BigDecimal yuan(Integer fen) { return fen == null ? null : BigDecimal.valueOf(fen).divide(BigDecimal.valueOf(100), 2, RoundingMode.UNNECESSARY); }

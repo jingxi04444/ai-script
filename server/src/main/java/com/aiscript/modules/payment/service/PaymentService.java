@@ -17,6 +17,8 @@ public interface PaymentService {
 
     PaymentOrderVO memberOrder(PaymentOrderDTO dto);
 
+    PaymentOrderVO pointOrder(PaymentOrderDTO dto);
+
     PaymentOrderVO handleCallback(PaymentCallbackDTO dto);
     PaymentOrderVO getOrder(String orderNo);
     PageResult<PaymentOrderVO> orders(PaymentOrderQueryDTO query);

@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiscript.modules.payment.mapper.AiRefundOrderMapper">
+
+    <select id="selectRefundPage"
+            resultType="com.aiscript.modules.payment.vo.RefundOrderVO">
+        SELECT
+            r.id,
+            r.refund_no AS refundNo,
+            r.payment_order_id AS paymentOrderId,
+            p.order_no AS paymentOrderNo,
+            r.subscription_id AS subscriptionId,
+            r.user_id AS userId,
+            r.refund_amount AS refundAmount,
+            r.refund_reason AS refundReason,
+            r.provider,
+            r.provider_refund_no AS providerRefundNo,
+            r.provider_status AS providerStatus,
+            r.status,
+            r.review_by AS reviewBy,
+            r.review_time AS reviewTime,
+            r.review_remark AS reviewRemark,
+            r.requested_time AS requestedTime,
+            r.completed_time AS completedTime,
+            r.failure_reason AS failureReason
+        FROM ai_refund_order r
+        INNER JOIN ai_payment_order p ON p.id = r.payment_order_id
+        <where>
+            <if test="userId != null">
+                r.user_id = #{userId}
+            </if>
+            <if test="status != null and status != ''">
+                AND r.status = #{status}
+            </if>
+            <if test="keyword != null and keyword != ''">
+                AND (
+                    r.refund_no LIKE CONCAT('%', #{keyword}, '%')
+                    OR p.order_no LIKE CONCAT('%', #{keyword}, '%')
+                )
+            </if>
+        </where>
+        ORDER BY r.create_time DESC
+    </select>
+
+</mapper>

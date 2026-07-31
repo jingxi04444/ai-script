@@ -7,7 +7,6 @@ import {
   ReloadOutlined,
   WechatOutlined,
   AlipayCircleOutlined,
-  WalletOutlined,
 } from '@ant-design/icons';
 import { message } from 'antd';
 import { membershipApi } from '../../api/membership';
@@ -50,7 +49,7 @@ const MemberPaymentDialog = ({ onClose, onRecharge }: MemberPaymentDialogProps) 
   }, []);
 
   const selectedPlan = plans.find((item) => item.id === plan) || plans[plans.length - 1];
-  const isBalancePay = payMethod === 'balance';
+  const selectedSku = selectedPlan?.skus?.[0];
   const orderStatus = (order?.status || '').toLowerCase();
   const fulfillStatus = (order?.fulfillStatus || '').toLowerCase();
   const isPaid = orderStatus === 'paid' || orderStatus === 'success' || orderStatus === 'completed';
@@ -105,23 +104,15 @@ const MemberPaymentDialog = ({ onClose, onRecharge }: MemberPaymentDialogProps) 
   };
 
   const submit = async () => {
-    if (!selectedPlan) {
+    if (!selectedPlan || !selectedSku) {
       message.warning('请选择会员套餐');
       return;
     }
     setSubmitting(true);
     try {
-      const nextOrder = await paymentApi.memberOrder({ planId: selectedPlan.id, payMethod });
+      const nextOrder = await paymentApi.memberOrder({ skuId: selectedSku.id, payMethod, idempotencyKey: crypto.randomUUID() });
       completedRef.current = false;
 
-      if (isBalancePay) {
-        if ((nextOrder.status || '').toLowerCase() === 'paid') {
-          finishSuccess();
-          return;
-        }
-        message.error(nextOrder.status ? `余额支付状态异常：${nextOrder.status}` : '余额支付失败');
-        return;
-      }
 
       if (handleOrderState(nextOrder)) {
         return;
@@ -255,7 +246,7 @@ const MemberPaymentDialog = ({ onClose, onRecharge }: MemberPaymentDialogProps) 
             </section>
 
             <footer className="commerce-actions payment-action-row">
-              <button onClick={onRecharge}>先充值余额</button>
+              <button onClick={onRecharge}>购买积分包</button>
               <button className="primary" onClick={refreshProviderStatus} disabled={refreshing}>
                 <ReloadOutlined />{refreshing ? '刷新中...' : '我已支付，刷新状态'}
               </button>
@@ -302,19 +293,14 @@ const MemberPaymentDialog = ({ onClose, onRecharge }: MemberPaymentDialogProps) 
                 >
                   <AlipayCircleOutlined />支付宝
                 </button>
-                <button
-                  className={payMethod === 'balance' ? 'active balance-pay' : 'balance-pay'}
-                  onClick={() => setPayMethod('balance')}
-                >
-                  <WalletOutlined />余额支付
-                </button>
+
               </div>
             </section>
 
             <footer className="commerce-actions">
-              <button onClick={onRecharge}>先充值余额</button>
+              <button onClick={onRecharge}>购买积分包</button>
               <button className="primary" disabled={submitting || !selectedPlan} onClick={submit}>
-                {submitting ? '下单中...' : isBalancePay ? '余额支付' : `立即支付 ¥${selectedPlan ? Number(selectedPlan.price).toFixed(0) : '0'}`}
+                {submitting ? '下单中...' : `立即支付 ¥${selectedPlan ? Number(selectedPlan.price).toFixed(0) : '0'}`}
               </button>
             </footer>
           </>

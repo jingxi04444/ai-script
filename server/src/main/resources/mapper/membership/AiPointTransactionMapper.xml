@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiscript.modules.membership.mapper.AiPointTransactionMapper">
+
+    <select id="selectByRequestNoForUpdate"
+            resultType="com.aiscript.modules.membership.entity.AiPointTransaction">
+        SELECT
+            id, tenant_id, account_id, user_id, transaction_type,
+            change_points, balance_after, biz_type, biz_id,
+            request_no, source_order_no, remark, create_time
+        FROM ai_point_transaction
+        WHERE request_no = #{requestNo}
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
+</mapper>

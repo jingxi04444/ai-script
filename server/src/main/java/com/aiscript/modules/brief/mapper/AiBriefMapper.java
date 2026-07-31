@@ -26,4 +26,14 @@ public interface AiBriefMapper extends BaseMapper<AiBrief> {
         @Param("tenantId") Integer tenantId,
         @Param("userId") Integer userId
     );
+    long countAccessibleBriefs(
+        @Param("tenantId") Integer tenantId,
+        @Param("userId") Integer userId
+    );
+
+    long countNewAccessibleBriefs(
+        @Param("tenantId") Integer tenantId,
+        @Param("userId") Integer userId,
+        @Param("briefIds") List<Integer> briefIds
+    );
 }

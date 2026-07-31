@@ -13,8 +13,12 @@ import lombok.EqualsAndHashCode;
 public class AiMembershipPlan extends BaseEntity {
     private String planCode;
     private String planName;
+    private Integer planLevel;
+    private Integer isFree;
     private Integer periodDays;
     private BigDecimal price;
     private String benefitsJson;
+    private String description;
+    private Integer displayOrder;
     private Integer status;
 }

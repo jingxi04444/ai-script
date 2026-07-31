@@ -4,6 +4,7 @@ import lombok.Data;
 
 @Data
 public class BriefDetectDTO {
+    private String requestNo;
     private String productName;
     private String price;
     private String slogan;

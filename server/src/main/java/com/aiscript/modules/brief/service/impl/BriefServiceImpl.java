@@ -29,6 +29,7 @@ import com.aiscript.modules.brief.mapper.AiBriefVersionMapper;
 import com.aiscript.modules.brief.mapper.AiProjectBriefRefMapper;
 import com.aiscript.modules.project.entity.AiProject;
 import com.aiscript.modules.project.mapper.AiProjectMapper;
+import com.aiscript.modules.membership.service.MembershipEntitlementService;
 import com.aiscript.modules.brief.service.BriefService;
 import com.aiscript.modules.brief.vo.BriefEditRequestVO;
 import com.aiscript.modules.brief.vo.BriefAssetGroupVO;
@@ -71,6 +72,7 @@ public class BriefServiceImpl implements BriefService {
     private final AiBriefShareLinkMapper shareLinkMapper;
     private final AiBriefSharePackMapper sharePackMapper;
     private final AiBriefSharePackItemMapper sharePackItemMapper;
+    private final MembershipEntitlementService entitlementService;
 
     public BriefServiceImpl(
         AiBriefMapper briefMapper,
@@ -82,6 +84,7 @@ public class BriefServiceImpl implements BriefService {
         AiBriefShareLinkMapper shareLinkMapper,
         AiBriefSharePackMapper sharePackMapper,
         AiBriefSharePackItemMapper sharePackItemMapper
+        , MembershipEntitlementService entitlementService
     ) {
         this.briefMapper = briefMapper;
         this.briefVersionMapper = briefVersionMapper;
@@ -92,6 +95,7 @@ public class BriefServiceImpl implements BriefService {
         this.shareLinkMapper = shareLinkMapper;
         this.sharePackMapper = sharePackMapper;
         this.sharePackItemMapper = sharePackItemMapper;
+        this.entitlementService = entitlementService;
     }
 
     @Override
@@ -204,6 +208,7 @@ public class BriefServiceImpl implements BriefService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BriefVO create(BriefSaveDTO dto) {
+        assertCanAddBriefs(1);
         AiBrief brief = new AiBrief();
         brief.setTenantId(TenantContext.getTenantId() == null ? DEFAULT_TENANT_ID : TenantContext.getTenantId());
         brief.setProjectId(Integer.valueOf(dto.getProjectId()));
@@ -264,6 +269,7 @@ public class BriefServiceImpl implements BriefService {
 
     @Override
     public BriefShareVO enableShare(Integer id, String permission) {
+        entitlementService.requireFeature(currentTenantId(), requireCurrentUserId(), "BRIEF_COLLABORATION");
         AiBrief brief = getBrief(id);
         ensureCanManage(brief);
         String normalizedPermission = normalizeSharePermission(permission);
@@ -310,6 +316,7 @@ public class BriefServiceImpl implements BriefService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BriefSharePackVO createSharePack(BriefSharePackCreateDTO dto) {
+        entitlementService.requireFeature(currentTenantId(), requireCurrentUserId(), "BRIEF_COLLABORATION");
         if (dto == null || dto.getBriefIds() == null || dto.getBriefIds().isEmpty()) throw new BusinessException("请选择至少一份 Brief");
         List<Integer> ids = dto.getBriefIds().stream().filter(java.util.Objects::nonNull).distinct().toList();
         List<AiBrief> selected = briefMapper.selectBatchIds(ids);
@@ -371,6 +378,7 @@ public class BriefServiceImpl implements BriefService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public List<BriefVO> linkSharePackToProject(String token, BriefSharePackLinkDTO dto) {
+        entitlementService.requireFeature(currentTenantId(), requireCurrentUserId(), "BRIEF_COLLABORATION");
         if (dto == null || dto.getProjectId() == null) throw new BusinessException("请选择要加入的项目");
         AiBriefSharePack pack = resolveSharePack(token);
         ensureOwnedProject(dto.getProjectId());
@@ -379,6 +387,7 @@ public class BriefServiceImpl implements BriefService {
         java.util.Set<Integer> requested = dto.getBriefIds() == null || dto.getBriefIds().isEmpty() ? null : new java.util.HashSet<>(dto.getBriefIds());
         List<AiBrief> selected = available.stream().filter(brief -> requested == null || requested.contains(brief.getId())).toList();
         if (selected.isEmpty()) throw new BusinessException("请选择至少一份 Brief");
+        assertCanLinkBriefs(selected.stream().map(AiBrief::getId).toList());
         for (AiBrief brief : selected) {
             if (userId.equals(brief.getCreateBy())) throw new BusinessException("分享人不能使用自己的分享包");
             upsertCollaborator(brief, userId, normalizeSharePermission(pack.getPermission()), "link");
@@ -522,6 +531,7 @@ public class BriefServiceImpl implements BriefService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public List<BriefVO> importBrief(Integer projectId, MultipartFile file) {
+        entitlementService.requireFeature(currentTenantId(), requireCurrentUserId(), "BRIEF_BATCH_IMPORT");
         if (file == null || file.isEmpty()) {
             throw new BusinessException("请上传文件");
         }
@@ -556,6 +566,7 @@ public class BriefServiceImpl implements BriefService {
                 .and(wrapper -> wrapper.eq(AiBrief::getProductName, productName).or().eq(AiBrief::getBriefName, productName))
                 .last("LIMIT 1"));
             if (brief == null) {
+                assertCanAddBriefs(1);
                 brief = new AiBrief();
                 brief.setTenantId(currentTenantId());
                 brief.setProjectId(projectId);
@@ -581,6 +592,28 @@ public class BriefServiceImpl implements BriefService {
         return imported;
     }
 
+    private void assertCanAddBriefs(long additionalCount) {
+        long limit = entitlementService.getLimit(
+            currentTenantId(), requireCurrentUserId(), "BRIEF_MAX_ACTIVE"
+        );
+        if (limit < 0) {
+            return;
+        }
+        long current = briefMapper.countAccessibleBriefs(currentTenantId(), requireCurrentUserId());
+        if (current + additionalCount > limit) {
+            throw new BusinessException("当前会员最多可保留" + limit + "个有效Brief，请升级会员或删除不用的Brief");
+        }
+    }
+
+    private void assertCanLinkBriefs(List<Integer> briefIds) {
+        if (briefIds == null || briefIds.isEmpty()) {
+            return;
+        }
+        long additional = briefMapper.countNewAccessibleBriefs(
+            currentTenantId(), requireCurrentUserId(), briefIds
+        );
+        assertCanAddBriefs(additional);
+    }
     private void fill(AiBrief brief, BriefSaveDTO dto) {
         String productName = resolveProductName(dto);
         brief.setBriefName(productName);

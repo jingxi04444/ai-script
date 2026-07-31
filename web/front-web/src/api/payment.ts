@@ -6,7 +6,10 @@ export const paymentApi = {
   recharge: (params: { amount: number; payMethod: string }): Promise<PaymentOrder> =>
     api.post('/payments/recharge-orders', params),
 
-  memberOrder: (params: { planId: string; payMethod: string }): Promise<PaymentOrder> =>
+  pointOrder: (params: { amount: number; payMethod: string; idempotencyKey: string }): Promise<PaymentOrder> =>
+    api.post('/payments/point-orders', params),
+
+  memberOrder: (params: { skuId: string; payMethod: string; idempotencyKey: string }): Promise<PaymentOrder> =>
     api.post('/payments/member-orders', params),
 
   getOrder: (orderNo: string): Promise<PaymentOrder> =>

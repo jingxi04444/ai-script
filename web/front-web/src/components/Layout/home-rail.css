@@ -60,3 +60,153 @@ html[data-color-mode='light'] .ant-dropdown-menu-submenu-popup .ant-dropdown-men
 .home-rail .rail-custom-icon::after {
   display: none;
 }
+
+/* HomeRail owns its geometry so route-level styles cannot move or resize the menu. */
+aside.home-rail.home-rail-stable {
+  width: 112px !important;
+  min-width: 112px !important;
+  max-width: 112px !important;
+  height: 100dvh !important;
+  display: grid !important;
+  grid-template-rows: 78px 350px minmax(0, 1fr) !important;
+  overflow: hidden !important;
+}
+
+aside.home-rail.home-rail-stable .nano-mark {
+  width: 48px !important;
+  height: 48px !important;
+  margin: 18px auto 0 !important;
+}
+
+aside.home-rail.home-rail-stable nav {
+  width: 100% !important;
+  height: 350px !important;
+  min-height: 350px !important;
+  max-height: 350px !important;
+  display: grid !important;
+  grid-template-rows: repeat(5, 70px) !important;
+  align-content: start !important;
+  gap: 0 !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: visible !important;
+}
+
+aside.home-rail.home-rail-stable nav button,
+aside.home-rail.home-rail-stable nav button.active,
+aside.home-rail.home-rail-stable nav button:hover {
+  width: 100% !important;
+  height: 70px !important;
+  min-height: 70px !important;
+  max-height: 70px !important;
+  display: grid !important;
+  grid-template-rows: 32px 24px !important;
+  place-items: center !important;
+  align-content: center !important;
+  gap: 8px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  background-color: transparent !important;
+  transform: none !important;
+}
+
+aside.home-rail.home-rail-stable nav strong {
+  height: 24px !important;
+  line-height: 24px !important;
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  white-space: nowrap !important;
+}
+
+aside.home-rail.home-rail-stable nav .rail-icon {
+  width: 28px !important;
+  height: 28px !important;
+}
+
+aside.home-rail.home-rail-stable nav button.active::after {
+  left: 14px !important;
+  right: 14px !important;
+  bottom: 6px !important;
+  height: 18px !important;
+  pointer-events: none !important;
+}
+
+aside.home-rail.home-rail-stable .rail-member {
+  align-self: end !important;
+  display: grid !important;
+  justify-items: center !important;
+  align-content: end !important;
+  gap: 10px !important;
+  padding: 10px 8px 18px !important;
+  margin: 0 !important;
+}
+
+aside.home-rail.home-rail-stable .rail-member button {
+  width: 94px !important;
+  min-height: 36px !important;
+  padding: 0 8px !important;
+  border-radius: 20px !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
+  white-space: nowrap !important;
+}
+
+aside.home-rail.home-rail-stable .rail-member .rail-avatar {
+  width: 48px !important;
+  height: 48px !important;
+  min-width: 48px !important;
+  min-height: 48px !important;
+  max-width: 48px !important;
+  max-height: 48px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  font-size: 21px !important;
+}
+
+aside.home-rail.home-rail-stable .rail-member .rail-membership-card {
+  width: 82px !important;
+  height: 70px !important;
+  min-height: 70px !important;
+  display: grid !important;
+  place-items: center !important;
+  align-content: center !important;
+  gap: 6px !important;
+  padding: 7px 3px !important;
+  border: 1px solid rgba(73, 195, 220, 0.34) !important;
+  border-radius: 16px !important;
+  background: rgba(25, 37, 41, 0.78) !important;
+  color: #36c7df !important;
+}
+
+aside.home-rail.home-rail-stable .rail-membership-card span,
+aside.home-rail.home-rail-stable .rail-membership-card strong {
+  max-width: 74px !important;
+  overflow: hidden !important;
+  color: #36c7df !important;
+  line-height: 1 !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+aside.home-rail.home-rail-stable .rail-membership-card span {
+  font-size: 12px !important;
+}
+
+aside.home-rail.home-rail-stable .rail-membership-card strong {
+  font-size: 13px !important;
+}
+
+aside.home-rail.home-rail-stable .rail-member .rail-bottom-icon {
+  width: 34px !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 0 !important;
+  border-radius: 10px !important;
+  background: transparent !important;
+  color: #8f9aa0 !important;
+  font-size: 12px !important;
+  font-weight: 800 !important;
+}

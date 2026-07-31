@@ -13,11 +13,16 @@ import com.aiscript.integration.pay.PayCreateResponse;
 import com.aiscript.integration.pay.PayNotifyMessage;
 import com.aiscript.integration.pay.PayQueryResponse;
 import com.aiscript.security.LoginUser;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.aiscript.modules.membership.entity.AiMembershipPlan;
-import com.aiscript.modules.membership.entity.AiUserMembership;
+import com.aiscript.modules.membership.entity.AiMembershipPlanSku;
 import com.aiscript.modules.membership.mapper.AiMembershipPlanMapper;
-import com.aiscript.modules.membership.mapper.AiUserMembershipMapper;
+import com.aiscript.modules.membership.mapper.AiMembershipPlanSkuMapper;
+import com.aiscript.modules.membership.service.MembershipSubscriptionService;
+import com.aiscript.modules.membership.service.MembershipEntitlementService;
+import com.aiscript.modules.membership.service.MembershipPointService;
+import com.aiscript.modules.membership.vo.MembershipChangeQuoteVO;
 import com.aiscript.modules.payment.dto.PaymentCallbackDTO;
 import com.aiscript.modules.payment.dto.PaymentOrderDTO;
 import com.aiscript.modules.payment.dto.PaymentOrderQueryDTO;
@@ -47,6 +52,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.dao.DuplicateKeyException;
@@ -59,11 +65,14 @@ public class PaymentServiceImpl implements PaymentService {
     private static final Integer DEFAULT_TENANT_ID = 1;
     private final AiPaymentOrderMapper orderMapper;
     private final AiMembershipPlanMapper planMapper;
+    private final AiMembershipPlanSkuMapper skuMapper;
+    private final MembershipSubscriptionService membershipSubscriptionService;
+    private final MembershipEntitlementService membershipEntitlementService;
+    private final MembershipPointService membershipPointService;
     private final PayClientRouter payClientRouter;
     private final AiPaymentCallbackMapper callbackMapper;
     private final AiWalletAccountMapper walletAccountMapper;
     private final AiWalletTransactionMapper walletTransactionMapper;
-    private final AiUserMembershipMapper userMembershipMapper;
     private final AiQuotaAccountMapper quotaAccountMapper;
     private final AiQuotaTransactionMapper quotaTransactionMapper;
     private final ObjectMapper objectMapper;
@@ -71,22 +80,28 @@ public class PaymentServiceImpl implements PaymentService {
     public PaymentServiceImpl(
         AiPaymentOrderMapper orderMapper,
         AiMembershipPlanMapper planMapper,
+        AiMembershipPlanSkuMapper skuMapper,
+        MembershipSubscriptionService membershipSubscriptionService,
+        MembershipEntitlementService membershipEntitlementService,
+        MembershipPointService membershipPointService,
         PayClientRouter payClientRouter,
         AiPaymentCallbackMapper callbackMapper,
         AiWalletAccountMapper walletAccountMapper,
         AiWalletTransactionMapper walletTransactionMapper,
-        AiUserMembershipMapper userMembershipMapper,
         AiQuotaAccountMapper quotaAccountMapper,
         AiQuotaTransactionMapper quotaTransactionMapper,
         ObjectMapper objectMapper
     ) {
         this.orderMapper = orderMapper;
         this.planMapper = planMapper;
+        this.skuMapper = skuMapper;
+        this.membershipSubscriptionService = membershipSubscriptionService;
+        this.membershipEntitlementService = membershipEntitlementService;
+        this.membershipPointService = membershipPointService;
         this.payClientRouter = payClientRouter;
         this.callbackMapper = callbackMapper;
         this.walletAccountMapper = walletAccountMapper;
         this.walletTransactionMapper = walletTransactionMapper;
-        this.userMembershipMapper = userMembershipMapper;
         this.quotaAccountMapper = quotaAccountMapper;
         this.quotaTransactionMapper = quotaTransactionMapper;
         this.objectMapper = objectMapper;
@@ -111,21 +126,61 @@ public class PaymentServiceImpl implements PaymentService {
         if (dto == null) {
             throw new BusinessException("支付参数不能为空");
         }
-        if (!StringUtils.hasText(dto.getPlanId())) {
-            throw new BusinessException("会员套餐ID不能为空");
+        if ("balance".equalsIgnoreCase(dto.getPayMethod())) {
+            return handleBalanceMemberOrder(dto);
         }
-        AiMembershipPlan plan = planMapper.selectById(parseLong(dto.getPlanId(), "会员套餐ID格式不正确"));
-        if (plan == null || plan.getStatus() == null || plan.getStatus() != 1) {
-            throw new BusinessException("会员套餐不存在或已下架");
-        }
-        BigDecimal amount = plan.getPrice();
-        if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new BusinessException("会员订单金额必须大于0");
-        }
-        if ("balance".equalsIgnoreCase(dto.getPayMethod())) return handleBalanceMemberOrder(dto);
-        return createOrder("member", dto.getPayMethod(), amount, "会员订单-" + plan.getPlanName(), plan.getId(), toJson(plan));
+        MembershipOrderTarget target = resolveMembershipTarget(dto);
+        MembershipChangeQuoteVO quote = membershipSubscriptionService.quote(
+            currentTenantId(), currentUserId(), target.sku().getId()
+        );
+        assertPayableChange(quote);
+        return createOrder(
+            "member", dto.getPayMethod(), quote.getPayableAmount(),
+            "会员订阅-" + target.sku().getSkuName(), target.plan().getId(),
+            target.sku().getId(), quote.getChangeType(), dto.getIdempotencyKey(),
+            toJson(Map.of("plan", target.plan(), "sku", target.sku(), "quote", quote))
+        );
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public PaymentOrderVO pointOrder(PaymentOrderDTO dto) {
+        if (dto == null || dto.getAmount() == null
+            || dto.getAmount().compareTo(BigDecimal.ZERO) <= 0
+            || dto.getAmount().remainder(BigDecimal.TEN).compareTo(BigDecimal.ZERO) != 0) {
+            throw new BusinessException("积分包金额必须是大于0的10元整数倍");
+        }
+        membershipEntitlementService.requireFeature(
+            currentTenantId(), currentUserId(), "POINT_PURCHASE_ACCESS"
+        );
+        long rate = membershipEntitlementService.getLimit(
+            currentTenantId(), currentUserId(), "POINTS_PER_10_YUAN"
+        );
+        if (rate <= 0) {
+            throw new BusinessException("当前会员等级不支持购买积分包");
+        }
+        long blocks;
+        try {
+            blocks = dto.getAmount().divideToIntegralValue(BigDecimal.TEN).longValueExact();
+        } catch (ArithmeticException exception) {
+            throw new BusinessException("积分包金额过大");
+        }
+        long points;
+        try {
+            points = Math.multiplyExact(blocks, rate);
+        } catch (ArithmeticException exception) {
+            throw new BusinessException("积分数量超出系统限制");
+        }
+        String snapshot = toJson(Map.of("points", points, "pointsPer10Yuan", rate));
+        PaymentOrderVO created = createOrder(
+            "point", dto.getPayMethod(), dto.getAmount(), "积分包-" + points + "积分",
+            null, null, "point_purchase", dto.getIdempotencyKey(), snapshot
+        );
+        if (!"balance".equalsIgnoreCase(dto.getPayMethod())) {
+            return created;
+        }
+        return payPointOrderByBalance(created.getOrderNo());
+    }
     @Override
     @Transactional(rollbackFor = Exception.class)
     public PaymentOrderVO handleCallback(PaymentCallbackDTO dto) {
@@ -211,7 +266,7 @@ public class PaymentServiceImpl implements PaymentService {
         if ("paid".equals(order.getStatus()) && "success".equals(order.getFulfillStatus())) { cb.setHandleResult("duplicate"); saveCallback(cb); return toOrderVO(order, null); }
         order.setStatus("paid"); order.setPaidAmount(msg.getTotalAmount() == null ? order.getAmount() : msg.getTotalAmount()); order.setProviderTradeNo(msg.getProviderTradeNo());
         order.setProviderStatus(msg.getTradeStatus()); order.setPayTime(LocalDateTime.now()); order.setNotifyTime(LocalDateTime.now()); orderMapper.updateById(order);
-        try { if ("recharge".equals(order.getOrderType())) rechargeWallet(order); else if ("member".equals(order.getOrderType())) activateMembership(order); order.setFulfillStatus("success"); order.setFulfillTime(LocalDateTime.now()); }
+        try { if ("recharge".equals(order.getOrderType())) rechargeWallet(order); else if ("member".equals(order.getOrderType())) membershipSubscriptionService.fulfillPaidOrder(order); else if ("point".equals(order.getOrderType())) fulfillPointPurchase(order); order.setFulfillStatus("success"); order.setFulfillTime(LocalDateTime.now()); }
         catch (Exception ex) { order.setFulfillStatus("failed"); order.setFulfillError(ex.getMessage()); throw ex; }
         finally { orderMapper.updateById(order); }
         cb.setHandleResult("success"); saveCallback(cb); return toOrderVO(order, null);
@@ -220,14 +275,62 @@ public class PaymentServiceImpl implements PaymentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public PaymentOrderVO handleBalanceMemberOrder(PaymentOrderDTO dto) {
-        AiMembershipPlan plan = planMapper.selectById(parseLong(dto.getPlanId(), "会员套餐ID格式不正确"));
-        PaymentOrderVO vo = createOrder("member", "balance", plan.getPrice(), "会员订单-" + plan.getPlanName(), plan.getId(), toJson(plan));
-        AiPaymentOrder order = findOrder(vo.getOrderNo()); AiWalletAccount wallet = ensureWallet(order.getUserId());
-        if (wallet.getBalance().compareTo(order.getAmount()) < 0) throw new BusinessException(ResultCode.CONFLICT, "余额不足");
-        int updated = walletAccountMapper.update(null, new LambdaUpdateWrapper<AiWalletAccount>().eq(AiWalletAccount::getId, wallet.getId()).ge(AiWalletAccount::getBalance, order.getAmount()).setSql("balance = balance - " + order.getAmount()));
-        if (updated == 0) throw new BusinessException(ResultCode.CONFLICT, "余额不足");
-        wallet = ensureWallet(order.getUserId()); saveWalletTransaction(wallet, "consume", order.getAmount().negate(), "payment_order", order.getId(), "会员余额支付");
-        order.setStatus("paid"); order.setPaidAmount(order.getAmount()); order.setPayTime(LocalDateTime.now()); activateMembership(order); order.setFulfillStatus("success"); order.setFulfillTime(LocalDateTime.now()); orderMapper.updateById(order);
+        MembershipOrderTarget target = resolveMembershipTarget(dto);
+        MembershipChangeQuoteVO quote = membershipSubscriptionService.quote(
+            currentTenantId(), currentUserId(), target.sku().getId()
+        );
+        assertPayableChange(quote);
+        PaymentOrderVO vo = createOrder(
+            "member", "balance", quote.getPayableAmount(),
+            "会员订阅-" + target.sku().getSkuName(), target.plan().getId(),
+            target.sku().getId(), quote.getChangeType(), dto.getIdempotencyKey(),
+            toJson(Map.of("plan", target.plan(), "sku", target.sku(), "quote", quote))
+        );
+        AiPaymentOrder order = findOrder(vo.getOrderNo());
+        if ("paid".equals(order.getStatus()) && "success".equals(order.getFulfillStatus())) {
+            return toOrderVO(order, null);
+        }
+        int claimed = orderMapper.update(
+            null,
+            new LambdaUpdateWrapper<AiPaymentOrder>()
+                .eq(AiPaymentOrder::getId, order.getId())
+                .eq(AiPaymentOrder::getStatus, "pending")
+                .eq(AiPaymentOrder::getFulfillStatus, "pending")
+                .set(AiPaymentOrder::getFulfillStatus, "processing")
+        );
+        if (claimed == 0) {
+            AiPaymentOrder latest = findOrder(order.getOrderNo());
+            if ("paid".equals(latest.getStatus()) && "success".equals(latest.getFulfillStatus())) {
+                return toOrderVO(latest, null);
+            }
+            throw new BusinessException(ResultCode.CONFLICT, "会员订单正在处理，请勿重复提交");
+        }
+        AiWalletAccount wallet = ensureWallet(order.getUserId());
+        if (wallet.getBalance().compareTo(order.getAmount()) < 0) {
+            throw new BusinessException(ResultCode.CONFLICT, "余额不足");
+        }
+        int updated = walletAccountMapper.update(
+            null,
+            new LambdaUpdateWrapper<AiWalletAccount>()
+                .eq(AiWalletAccount::getId, wallet.getId())
+                .ge(AiWalletAccount::getBalance, order.getAmount())
+                .setSql("balance = balance - " + order.getAmount())
+        );
+        if (updated == 0) {
+            throw new BusinessException(ResultCode.CONFLICT, "余额不足");
+        }
+        wallet = ensureWallet(order.getUserId());
+        saveWalletTransaction(
+            wallet, "consume", order.getAmount().negate(),
+            "payment_order", order.getId(), "会员余额支付"
+        );
+        order.setStatus("paid");
+        order.setPaidAmount(order.getAmount());
+        order.setPayTime(LocalDateTime.now());
+        membershipSubscriptionService.fulfillPaidOrder(order);
+        order.setFulfillStatus("success");
+        order.setFulfillTime(LocalDateTime.now());
+        orderMapper.updateById(order);
         return toOrderVO(order, null);
     }
 
@@ -282,25 +385,93 @@ public class PaymentServiceImpl implements PaymentService {
         return toQuotaVO(account);
     }
 
-    private PaymentOrderVO createOrder(String type, String payMethod, BigDecimal amount, String subject, Integer planId, String snapshot) {
+    private PaymentOrderVO createOrder(
+        String type,
+        String payMethod,
+        BigDecimal amount,
+        String subject,
+        Integer planId,
+        String snapshot
+    ) {
+        return createOrder(type, payMethod, amount, subject, planId, null, null, null, snapshot);
+    }
+
+    private PaymentOrderVO createOrder(
+        String type,
+        String payMethod,
+        BigDecimal amount,
+        String subject,
+        Integer planId,
+        Long skuId,
+        String orderScene,
+        String idempotencyKey,
+        String snapshot
+    ) {
+        Integer userId = currentUserId();
+        if (StringUtils.hasText(idempotencyKey)) {
+            AiPaymentOrder existing = orderMapper.selectOne(new LambdaQueryWrapper<AiPaymentOrder>()
+                .eq(AiPaymentOrder::getUserId, userId)
+                .eq(AiPaymentOrder::getIdempotencyKey, idempotencyKey)
+                .last("LIMIT 1"));
+            if (existing != null) {
+                return toOrderVO(existing, null);
+            }
+        }
+
         AiPaymentOrder order = new AiPaymentOrder();
         order.setTenantId(TenantContext.getTenantId() == null ? DEFAULT_TENANT_ID : TenantContext.getTenantId());
-        order.setUserId(currentUserId());
+        order.setUserId(userId);
         order.setOrderNo(type.toUpperCase() + IdUtils.nextId());
+        order.setIdempotencyKey(idempotencyKey);
         order.setOrderType(type);
+        order.setOrderScene(orderScene);
         order.setPayMethod(payMethod == null ? "wechat" : payMethod);
-        order.setProvider(payClientRouter.providerOf(order.getPayMethod())); order.setTradeType("NATIVE"); order.setPlanId(planId); order.setProductSnapshotJson(snapshot); order.setCurrency("CNY"); order.setFulfillStatus("pending"); order.setVersion(0);
+        order.setProvider(payClientRouter.providerOf(order.getPayMethod()));
+        order.setTradeType("NATIVE");
+        order.setPlanId(planId);
+        order.setSkuId(skuId);
+        order.setProductSnapshotJson(snapshot);
+        order.setCurrency("CNY");
+        order.setFulfillStatus("pending");
+        order.setVersion(0);
         order.setAmount(amount == null ? BigDecimal.ZERO : amount);
+        order.setRefundAmount(BigDecimal.ZERO);
         order.setSubject(subject);
         order.setStatus("pending");
-        orderMapper.insert(order);
-        if ("balance".equals(order.getPayMethod())) return toOrderVO(order, null);
-        PayCreateRequest req = new PayCreateRequest(); req.setProvider(order.getProvider()); req.setPayMethod(order.getPayMethod()); req.setOrderNo(order.getOrderNo()); req.setAmount(order.getAmount()); req.setSubject(order.getSubject());
-        PayCreateResponse payParams = payClientRouter.route(order.getProvider(), order.getPayMethod()).createNativeOrder(req);
+        order.setExpireTime(LocalDateTime.now().plusMinutes(15));
+        try {
+            orderMapper.insert(order);
+        } catch (DuplicateKeyException duplicate) {
+            if (!StringUtils.hasText(idempotencyKey)) {
+                throw duplicate;
+            }
+            AiPaymentOrder concurrent = orderMapper.selectOne(new LambdaQueryWrapper<AiPaymentOrder>()
+                .eq(AiPaymentOrder::getUserId, userId)
+                .eq(AiPaymentOrder::getIdempotencyKey, idempotencyKey)
+                .last("LIMIT 1"));
+            if (concurrent == null) {
+                throw duplicate;
+            }
+            return toOrderVO(concurrent, null);
+        }
+        if ("balance".equals(order.getPayMethod())) {
+            return toOrderVO(order, null);
+        }
+
+        PayCreateRequest request = new PayCreateRequest();
+        request.setProvider(order.getProvider());
+        request.setPayMethod(order.getPayMethod());
+        request.setOrderNo(order.getOrderNo());
+        request.setAmount(order.getAmount());
+        request.setSubject(order.getSubject());
+        PayCreateResponse payParams = payClientRouter
+            .route(order.getProvider(), order.getPayMethod())
+            .createNativeOrder(request);
         if (payParams.getProviderTradeNo() != null) {
             order.setProviderTradeNo(payParams.getProviderTradeNo());
         }
-        order.setQrContent(payParams.getQrContent()); orderMapper.updateById(order);
+        order.setQrContent(payParams.getQrContent());
+        orderMapper.updateById(order);
         return toOrderVO(order, toPaymentParamsVO(payParams));
     }
 
@@ -310,9 +481,15 @@ public class PaymentServiceImpl implements PaymentService {
         vo.setUserId(order.getUserId() == null ? null : String.valueOf(order.getUserId()));
         vo.setOrderNo(order.getOrderNo());
         vo.setOrderType(order.getOrderType());
+        vo.setOrderScene(order.getOrderScene());
+        vo.setIdempotencyKey(order.getIdempotencyKey());
+        vo.setPlanId(order.getPlanId() == null ? null : String.valueOf(order.getPlanId()));
+        vo.setSkuId(order.getSkuId() == null ? null : String.valueOf(order.getSkuId()));
+        vo.setSubscriptionId(order.getSubscriptionId() == null ? null : String.valueOf(order.getSubscriptionId()));
         vo.setStatus(order.getStatus());
         vo.setAmount(order.getAmount());
         vo.setPaidAmount(order.getPaidAmount());
+        vo.setRefundAmount(order.getRefundAmount());
         vo.setCurrency(order.getCurrency());
         vo.setPayMethod(order.getPayMethod());
         vo.setSubject(order.getSubject());
@@ -348,28 +525,74 @@ public class PaymentServiceImpl implements PaymentService {
         return time == null ? null : time.toString();
     }
 
+    private PaymentOrderVO payPointOrderByBalance(String orderNo) {
+        AiPaymentOrder order = findOrder(orderNo);
+        if ("paid".equals(order.getStatus()) && "success".equals(order.getFulfillStatus())) {
+            return toOrderVO(order, null);
+        }
+        int claimed = orderMapper.update(
+            null,
+            new LambdaUpdateWrapper<AiPaymentOrder>()
+                .eq(AiPaymentOrder::getId, order.getId())
+                .eq(AiPaymentOrder::getStatus, "pending")
+                .eq(AiPaymentOrder::getFulfillStatus, "pending")
+                .set(AiPaymentOrder::getFulfillStatus, "processing")
+        );
+        if (claimed == 0) {
+            AiPaymentOrder latest = findOrder(orderNo);
+            if ("paid".equals(latest.getStatus()) && "success".equals(latest.getFulfillStatus())) {
+                return toOrderVO(latest, null);
+            }
+            throw new BusinessException(ResultCode.CONFLICT, "积分订单正在处理，请勿重复提交");
+        }
+
+        AiWalletAccount wallet = ensureWallet(order.getUserId());
+        int updated = walletAccountMapper.update(
+            null,
+            new LambdaUpdateWrapper<AiWalletAccount>()
+                .eq(AiWalletAccount::getId, wallet.getId())
+                .ge(AiWalletAccount::getBalance, order.getAmount())
+                .setSql("balance = balance - " + order.getAmount())
+        );
+        if (updated == 0) {
+            throw new BusinessException(ResultCode.CONFLICT, "余额不足");
+        }
+        wallet = ensureWallet(order.getUserId());
+        saveWalletTransaction(
+            wallet, "consume", order.getAmount().negate(),
+            "payment_order", order.getId(), "积分包余额支付"
+        );
+        order.setStatus("paid");
+        order.setPaidAmount(order.getAmount());
+        order.setPayTime(LocalDateTime.now());
+        fulfillPointPurchase(order);
+        order.setFulfillStatus("success");
+        order.setFulfillTime(LocalDateTime.now());
+        orderMapper.updateById(order);
+        return toOrderVO(order, null);
+    }
+
+    private void fulfillPointPurchase(AiPaymentOrder order) {
+        long points;
+        try {
+            JsonNode snapshot = objectMapper.readTree(order.getProductSnapshotJson());
+            points = snapshot.path("points").asLong(0);
+        } catch (Exception exception) {
+            throw new BusinessException("积分订单快照解析失败");
+        }
+        if (points <= 0) {
+            throw new BusinessException("积分订单数量无效");
+        }
+        membershipPointService.grantPoints(
+            order.getTenantId(), order.getUserId(), points, "purchase",
+            "point_purchase:" + order.getOrderNo(), "payment_order",
+            order.getId().longValue(), order.getOrderNo(), "积分包购买"
+        );
+    }
     private void rechargeWallet(AiPaymentOrder order) {
         AiWalletAccount wallet = ensureWallet(order.getUserId());
         if (!insertWalletTransaction(wallet, "recharge", order.getAmount(), "payment_order", order.getId(), "余额充值到账")) return;
         walletAccountMapper.update(null, new LambdaUpdateWrapper<AiWalletAccount>().eq(AiWalletAccount::getId, wallet.getId()).setSql("balance = balance + " + order.getAmount()));
-    }
-
-    private void activateMembership(AiPaymentOrder order) {
-        if (userMembershipMapper.selectCount(new LambdaQueryWrapper<AiUserMembership>().eq(AiUserMembership::getSourceOrderNo, order.getOrderNo())) > 0) return;
-        AiMembershipPlan plan = order.getPlanId() == null ? null : planMapper.selectById(order.getPlanId());
-        if (plan == null) {
-            return;
-        }
-        LocalDateTime now = LocalDateTime.now();
-        AiUserMembership membership = new AiUserMembership();
-        membership.setTenantId(order.getTenantId());
-        membership.setUserId(order.getUserId());
-        membership.setPlanId(plan.getId());
-        membership.setStatus("active");
-        membership.setSourceOrderNo(order.getOrderNo()); membership.setSourcePayMethod(order.getPayMethod()); membership.setPlanSnapshotJson(order.getProductSnapshotJson());
-        membership.setStartTime(now);
-        membership.setExpireTime(now.plusDays(plan.getPeriodDays() == null ? 30 : plan.getPeriodDays()));
-        try { userMembershipMapper.insert(membership); } catch (DuplicateKeyException ignored) { }
     }
 
     private AiWalletAccount ensureWallet(Integer userId) {
@@ -458,6 +681,49 @@ public class PaymentServiceImpl implements PaymentService {
         return vo;
     }
     private PaymentParamsVO toPaymentParamsVO(AiPaymentOrder order) { PaymentParamsVO vo = new PaymentParamsVO(); vo.setProviderTradeNo(order.getProviderTradeNo()); vo.setOrderNo(order.getOrderNo()); vo.setAmount(order.getAmount()); vo.setSubject(order.getSubject()); vo.setPayUrl(order.getQrContent()); vo.setQrCode(order.getQrContent()); return vo; }
+    private MembershipOrderTarget resolveMembershipTarget(PaymentOrderDTO dto) {
+        AiMembershipPlanSku sku;
+        if (StringUtils.hasText(dto.getSkuId())) {
+            sku = skuMapper.selectById(parseLongId(dto.getSkuId(), "会员SKU格式不正确"));
+        } else if (StringUtils.hasText(dto.getPlanId())) {
+            Integer planId = parseLong(dto.getPlanId(), "会员套餐ID格式不正确");
+            sku = skuMapper.selectOne(new LambdaQueryWrapper<AiMembershipPlanSku>()
+                .eq(AiMembershipPlanSku::getPlanId, planId.longValue())
+                .eq(AiMembershipPlanSku::getStatus, 1)
+                .orderByAsc(AiMembershipPlanSku::getDisplayOrder)
+                .last("LIMIT 1"));
+        } else {
+            throw new BusinessException("会员SKU不能为空");
+        }
+        if (sku == null || sku.getStatus() == null || sku.getStatus() != 1) {
+            throw new BusinessException("会员SKU不存在或已下架");
+        }
+        AiMembershipPlan plan = planMapper.selectById(sku.getPlanId());
+        if (plan == null || plan.getStatus() == null || plan.getStatus() != 1) {
+            throw new BusinessException("会员套餐不存在或已下架");
+        }
+        return new MembershipOrderTarget(plan, sku);
+    }
+
+    private void assertPayableChange(MembershipChangeQuoteVO quote) {
+        if ("downgrade".equals(quote.getChangeType())) {
+            throw new BusinessException(ResultCode.CONFLICT, "降级无需支付，请使用到期降级接口");
+        }
+        if (quote.getPayableAmount() == null || quote.getPayableAmount().compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessException("会员订单金额必须大于0");
+        }
+    }
+
+    private Long parseLongId(String value, String message) {
+        try {
+            return Long.valueOf(value);
+        } catch (NumberFormatException exception) {
+            throw new BusinessException(message);
+        }
+    }
+
+    private record MembershipOrderTarget(AiMembershipPlan plan, AiMembershipPlanSku sku) {
+    }
     private String toJson(Object o) { try { return objectMapper.writeValueAsString(o); } catch (Exception ex) { return "{}"; } }
 
     private Integer parseLong(String value, String message) {

@@ -43,6 +43,10 @@ public class PaymentController {
     @PostMapping("/member-orders")
     public R<PaymentOrderVO> memberOrders(@RequestBody PaymentOrderDTO payload) { return R.ok(paymentService.memberOrder(payload)); }
 
+    @PostMapping("/point-orders")
+    public R<PaymentOrderVO> pointOrders(@RequestBody PaymentOrderDTO payload) {
+        return R.ok(paymentService.pointOrder(payload));
+    }
     @GetMapping("/orders")
     public R<PageResult<PaymentOrderVO>> orders(PaymentOrderQueryDTO query) { return R.ok(paymentService.orders(query)); }
 

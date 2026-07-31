@@ -24,6 +24,9 @@ import com.aiscript.modules.source.vo.AnalysisDimensionVO;
 import com.aiscript.modules.source.vo.LinkExtractVO;
 import com.aiscript.modules.source.vo.SourceAnalysisVO;
 import com.aiscript.modules.system.service.PromptRenderService;
+import com.aiscript.modules.membership.service.MembershipEntitlementService;
+import com.aiscript.modules.membership.service.MembershipPointService;
+import com.aiscript.security.LoginUser;
 import com.aiscript.task.parser.VideoParseTask;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
@@ -34,6 +37,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.UUID;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
@@ -57,6 +63,8 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
     private final LlmClient llmClient;
     private final PromptRenderService promptRenderService;
     private final VideoParseTask videoParseTask;
+    private final MembershipEntitlementService entitlementService;
+    private final MembershipPointService pointService;
     private static final List<DimensionSpec> DIMENSION_SPECS = List.of(
         new DimensionSpec("paragraphStructure", "段落结构拆解"),
         new DimensionSpec("keyIssues", "需要特别指出"),
@@ -76,6 +84,8 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
         PromptRenderService promptRenderService,
         @Lazy
         VideoParseTask videoParseTask
+        , MembershipEntitlementService entitlementService,
+        MembershipPointService pointService
     ) {
         this.analysisMapper = analysisMapper;
         this.reportMapper = reportMapper;
@@ -85,6 +95,8 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
         this.llmClient = llmClient;
         this.promptRenderService = promptRenderService;
         this.videoParseTask = videoParseTask;
+        this.entitlementService = entitlementService;
+        this.pointService = pointService;
     }
 
     @Override
@@ -341,9 +353,38 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
             throw new BusinessException("项目ID和文案内容不能为空");
         }
         String mode = StringUtils.hasText(dto.getMode()) ? dto.getMode() : "simple";
+        LoginUser user = currentUser();
+        boolean deepMode = "deep".equals(mode);
+        entitlementService.requireFeature(
+            user.getTenantId(), user.getUserId(),
+            deepMode ? "VIRAL_DEEP_ACCESS" : "VIRAL_SIMPLE_ACCESS"
+        );
+        String pointCode = deepMode ? "VIRAL_DEEP_POINT_COST" : "VIRAL_SIMPLE_POINT_COST";
+        long pointCost = entitlementService.getLimit(
+            user.getTenantId(), user.getUserId(), pointCode
+        );
+        String operationId = StringUtils.hasText(dto.getRequestNo())
+            ? dto.getRequestNo()
+            : UUID.randomUUID().toString();
+        String trialRequestNo = null;
+        if (pointCost > 0) {
+            pointService.consumePoints(
+                user.getTenantId(), user.getUserId(), pointCost,
+                "viral_analysis:" + user.getUserId() + ":" + operationId,
+                deepMode ? "viral_deep" : "viral_simple", null,
+                deepMode ? "爆款深度解析积分消耗" : "爆款简易解析积分消耗"
+            );
+        } else if (deepMode) {
+            throw new BusinessException("当前会员等级不支持爆款深度解析");
+        } else {
+            trialRequestNo = "viral_simple_trial:" + user.getUserId() + ":" + operationId;
+            entitlementService.reserveQuota(
+                user.getTenantId(), user.getUserId(), "VIRAL_SIMPLE_TRIAL_LIMIT", 1,
+                trialRequestNo, "viral_simple", null
+            );
+        }
         String llmResult = analyzeCopyWithLlm(dto.getCopy(), mode);
         List<AnalysisDimensionVO> dimensions = parseAnalysisDimensions(llmResult, dto.getCopy(), mode);
-        boolean deepMode = "deep".equals(mode);
         String summary = deepMode && !dimensions.isEmpty() ? dimensionsToSummary(dimensions) : llmResult;
         AiSourceAnalysis analysis = new AiSourceAnalysis();
         analysis.setTenantId(currentTenantId());
@@ -359,6 +400,9 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
         saveReport(analysis, "copy_structure", Map.of("mode", mode, "copy", dto.getCopy(), "structure", summary, "llmResult", llmResult));
         SourceAnalysisVO vo = SourceConvert.toVO(analysis);
         vo.setDimensions(dimensions);
+        if (trialRequestNo != null) {
+            entitlementService.confirmQuota(trialRequestNo);
+        }
         return vo;
     }
 
@@ -621,6 +665,13 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
         });
     }
 
+    private LoginUser currentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof LoginUser loginUser) {
+            return loginUser;
+        }
+        throw new BusinessException("请先登录");
+    }
     private Integer currentTenantId() {
         return TenantContext.getTenantId() == null ? DEFAULT_TENANT_ID : TenantContext.getTenantId();
     }

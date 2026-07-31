@@ -21,6 +21,7 @@ import com.aiscript.modules.asset.service.ProductFrameContentExtractor;
 import com.aiscript.modules.asset.vo.AssetVO;
 import com.aiscript.modules.asset.vo.SellingPointAssetVO;
 import com.aiscript.modules.asset.vo.ViralAssetVO;
+import com.aiscript.modules.membership.service.MembershipStorageService;
 import com.aiscript.security.LoginUser;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -47,19 +48,22 @@ public class AssetServiceImpl implements AssetService {
     private final AiViralAssetMapper viralAssetMapper;
     private final StorageClient storageClient;
     private final ProductFrameContentExtractor productFrameContentExtractor;
+    private final MembershipStorageService membershipStorageService;
 
     public AssetServiceImpl(
         AiAssetMapper assetMapper,
         AiSellingPointAssetMapper sellingPointAssetMapper,
         AiViralAssetMapper viralAssetMapper,
         StorageClient storageClient,
-        ProductFrameContentExtractor productFrameContentExtractor
+        ProductFrameContentExtractor productFrameContentExtractor,
+        MembershipStorageService membershipStorageService
     ) {
         this.assetMapper = assetMapper;
         this.sellingPointAssetMapper = sellingPointAssetMapper;
         this.viralAssetMapper = viralAssetMapper;
         this.storageClient = storageClient;
         this.productFrameContentExtractor = productFrameContentExtractor;
+        this.membershipStorageService = membershipStorageService;
     }
 
     @Override
@@ -72,14 +76,24 @@ public class AssetServiceImpl implements AssetService {
         String filename = file.getOriginalFilename().trim();
         String extractedText = productFrameContentExtractor.extract(file);
         String suffix = filename.contains(".") ? filename.substring(filename.lastIndexOf(".")) : "";
-        String objectKey = "product-frame/" + LocalDate.now() + "/"
+        String requestedObjectKey = "product-frame/" + LocalDate.now() + "/"
             + UUID.randomUUID().toString().replace("-", "") + suffix;
+        String storageRequestNo = membershipStorageService.reserve(
+            currentTenantId(), currentUserId(), requestedObjectKey, file.getSize(), "product_frame", null
+        );
+        String objectKey;
         try {
-            objectKey = storageClient.putObject(objectKey, file.getInputStream(), file.getSize(), file.getContentType());
+            objectKey = storageClient.putObject(
+                requestedObjectKey, file.getInputStream(), file.getSize(), file.getContentType()
+            );
+            membershipStorageService.confirm(storageRequestNo, objectKey);
         } catch (IOException ex) {
+            membershipStorageService.release(storageRequestNo);
             throw new BusinessException("产品画面文件读取失败：" + ex.getMessage());
+        } catch (RuntimeException ex) {
+            membershipStorageService.release(storageRequestNo);
+            throw ex;
         }
-
         AiAsset entity = assetMapper.selectOne(new LambdaQueryWrapper<AiAsset>()
             .eq(AiAsset::getTenantId, currentTenantId())
             .eq(AiAsset::getOwnerId, currentUserId())
@@ -88,6 +102,7 @@ public class AssetServiceImpl implements AssetService {
             .orderByDesc(AiAsset::getUpdateTime)
             .last("LIMIT 1"));
         boolean created = entity == null;
+        String replacedStorageKey = created ? null : entity.getStorageKey();
         if (created) {
             entity = new AiAsset();
             entity.setTenantId(currentTenantId());
@@ -109,11 +124,13 @@ public class AssetServiceImpl implements AssetService {
         metadata.put("immutable", true);
         metadata.put("source", "script-product-frame");
         metadata.put("parseType", productFrameContentExtractor.isTableFile(filename) ? "table" : "ocr");
+        metadata.put("storageRequestNo", storageRequestNo);
         entity.setMetadataJson(JsonUtils.toJson(metadata));
         if (created) {
             assetMapper.insert(entity);
         } else {
             assetMapper.updateById(entity);
+            membershipStorageService.releaseByObjectKey(currentTenantId(), currentUserId(), replacedStorageKey);
         }
         AssetVO result = AssetConvert.toAssetVO(entity);
         result.setExtractedText(extractedText);

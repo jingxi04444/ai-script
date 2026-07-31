@@ -235,4 +235,63 @@
         ORDER BY version.version_no DESC, version.create_time DESC
     </select>
 
+    <select id="countAccessibleBriefs" resultType="long">
+        SELECT COUNT(DISTINCT accessible.brief_id)
+        FROM (
+            SELECT b.id AS brief_id
+            FROM ai_brief b
+            INNER JOIN ai_project p
+                ON p.id = b.project_id
+               AND p.tenant_id = #{tenantId}
+               AND p.owner_id = #{userId}
+               AND p.deleted = 0
+            WHERE b.tenant_id = #{tenantId}
+              AND b.deleted = 0
+            UNION
+            SELECT ref.brief_id
+            FROM ai_project_brief_ref ref
+            INNER JOIN ai_project p
+                ON p.id = ref.project_id
+               AND p.tenant_id = #{tenantId}
+               AND p.owner_id = #{userId}
+               AND p.deleted = 0
+            INNER JOIN ai_brief b
+                ON b.id = ref.brief_id
+               AND b.tenant_id = #{tenantId}
+               AND b.deleted = 0
+            WHERE ref.tenant_id = #{tenantId}
+              AND ref.deleted = 0
+        ) accessible
+    </select>
+
+    <select id="countNewAccessibleBriefs" resultType="long">
+        SELECT COUNT(DISTINCT candidate.id)
+        FROM ai_brief candidate
+        WHERE candidate.tenant_id = #{tenantId}
+          AND candidate.deleted = 0
+          AND candidate.id IN
+          <foreach collection="briefIds" item="briefId" open="(" separator="," close=")">
+              #{briefId}
+          </foreach>
+          AND NOT EXISTS (
+              SELECT 1
+              FROM ai_project direct_project
+              WHERE direct_project.id = candidate.project_id
+                AND direct_project.tenant_id = #{tenantId}
+                AND direct_project.owner_id = #{userId}
+                AND direct_project.deleted = 0
+          )
+          AND NOT EXISTS (
+              SELECT 1
+              FROM ai_project_brief_ref existing_ref
+              INNER JOIN ai_project linked_project
+                  ON linked_project.id = existing_ref.project_id
+                 AND linked_project.tenant_id = #{tenantId}
+                 AND linked_project.owner_id = #{userId}
+                 AND linked_project.deleted = 0
+              WHERE existing_ref.brief_id = candidate.id
+                AND existing_ref.tenant_id = #{tenantId}
+                AND existing_ref.deleted = 0
+          )
+    </select>
 </mapper>

@@ -10,9 +10,15 @@ public class PaymentOrderVO {
     private String userId;
     private String orderNo;
     private String orderType;
+    private String orderScene;
+    private String idempotencyKey;
+    private String planId;
+    private String skuId;
+    private String subscriptionId;
     private String status;
     private BigDecimal amount;
     private BigDecimal paidAmount;
+    private BigDecimal refundAmount;
     private String currency;
     private String payMethod;
     private String subject;

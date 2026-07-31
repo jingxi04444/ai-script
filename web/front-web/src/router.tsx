@@ -11,6 +11,7 @@ const WorkspacePage = lazy(() => import('./pages/Workspace/WorkspacePage'));
 const BriefSharePage = lazy(() => import('./pages/BriefShare/BriefSharePage'));
 const BriefSharePackPage = lazy(() => import('./pages/BriefSharePack/BriefSharePackPage'));
 const PaymentOrdersPage = lazy(() => import('./pages/PaymentOrders/PaymentOrdersPage'));
+const MembershipPage = lazy(() => import('./pages/Membership/MembershipPage'));
 
 const LazyLoad = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#888' }}>Loading...</div>}>
@@ -58,6 +59,10 @@ export const router: RouteObject[] = [
   {
     path: '/brief-share/:token',
     element: <LazyLoad><BriefSharePage /></LazyLoad>,
+  },
+  {
+    path: '/membership',
+    element: <RequireAuth><LazyLoad><MembershipPage /></LazyLoad></RequireAuth>,
   },
   {
     path: '/payment/orders',

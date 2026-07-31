@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiscript.modules.membership.mapper.AiUserSubscriptionMapper">
+
+    <select id="selectActiveByUserForUpdate"
+            resultType="com.aiscript.modules.membership.entity.AiUserSubscription">
+        SELECT
+            id, tenant_id, user_id, plan_id, sku_id, status, auto_renew,
+            start_time, current_period_start, current_period_end,
+            benefit_anchor_time, next_renew_time, cancel_at_period_end,
+            cancel_time, pending_plan_id, pending_sku_id,
+            pending_effective_time, provider, agreement_no,
+            plan_snapshot_json, source_order_no, version,
+            create_by, create_time, update_by, update_time, deleted
+        FROM ai_user_subscription
+        WHERE user_id = #{userId}
+          AND status IN ('active', 'canceling', 'past_due')
+          AND deleted = 0
+        ORDER BY id DESC
+        LIMIT 1
+        FOR UPDATE
+    </select>
+
+</mapper>
