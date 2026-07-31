@@ -9,6 +9,7 @@ const ProjectsPage = lazy(() => import('./pages/Projects/ProjectsPage'));
 const AssetsPage = lazy(() => import('./pages/Assets/AssetsPage'));
 const WorkspacePage = lazy(() => import('./pages/Workspace/WorkspacePage'));
 const BriefSharePage = lazy(() => import('./pages/BriefShare/BriefSharePage'));
+const BriefSharePackPage = lazy(() => import('./pages/BriefSharePack/BriefSharePackPage'));
 const PaymentOrdersPage = lazy(() => import('./pages/PaymentOrders/PaymentOrdersPage'));
 
 const LazyLoad = ({ children }: { children: React.ReactNode }) => (
@@ -49,6 +50,10 @@ export const router: RouteObject[] = [
   {
     path: '/workspace/:projectId',
     element: <RequireAuth><LazyLoad><WorkspacePage /></LazyLoad></RequireAuth>,
+  },
+  {
+    path: '/brief-share-pack/:token',
+    element: <LazyLoad><BriefSharePackPage /></LazyLoad>,
   },
   {
     path: '/brief-share/:token',

@@ -396,3 +396,10 @@
 .assets-library-back:hover {
   color: #67db71;
 }
+.assets-brief-share-tools { display: flex; gap: 8px; margin: 16px 0; }
+.assets-brief-share-tools button { padding: 8px 12px; border: 1px solid #3b4544; border-radius: 8px; background: #1a2020; color: #e8eeee; }
+.assets-record-card.is-selected { border-color: #70df70 !important; background: rgba(74, 157, 79, .16) !important; }
+.assets-brief-check { display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid #72df70; border-radius: 50%; color: #b6f7ad; }
+.assets-brief-check.is-checked { background: #245028; }
+.assets-brief-title-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.assets-brief-title-row .assets-brief-share-tools { margin: 0; }

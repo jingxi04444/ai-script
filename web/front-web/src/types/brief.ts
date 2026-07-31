@@ -109,3 +109,10 @@ export interface BriefEditRequest {
   createdAt?: string;
   approveTime?: string;
 }
+
+export interface BriefSharePack {
+  shareToken: string;
+  shareUrl: string;
+  permission: BriefSharePermission;
+  briefs: Brief[];
+}
