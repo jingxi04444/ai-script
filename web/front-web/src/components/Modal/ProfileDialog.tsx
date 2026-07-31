@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { LoadingOutlined, UserOutlined } from '@ant-design/icons';
 import { authApi } from '../../api/auth';
+import { membershipApi } from '../../api/membership';
 import type { UserInfo } from '../../types/user';
+import type { PointAccount, UserMembership } from '../../types/membership';
 import './modal-dialogs.css';
 
 interface ProfileDialogProps {
@@ -10,12 +12,22 @@ interface ProfileDialogProps {
 
 const ProfileDialog = ({ onClose }: ProfileDialogProps) => {
   const [profile, setProfile] = useState<UserInfo | null>(null);
+  const [membership, setMembership] = useState<UserMembership | null>(null);
+  const [points, setPoints] = useState<PointAccount | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
   useEffect(() => {
-    authApi.getUserInfo()
-      .then(setProfile)
+    Promise.all([
+      authApi.getUserInfo(),
+      membershipApi.current().catch(() => null),
+      membershipApi.points().catch(() => null),
+    ])
+      .then(([userInfo, currentMembership, pointAccount]) => {
+        setProfile(userInfo);
+        setMembership(currentMembership);
+        setPoints(pointAccount);
+      })
       .catch(() => setLoadError('个人信息加载失败，请稍后重试'))
       .finally(() => setLoading(false));
   }, []);
@@ -38,8 +50,8 @@ const ProfileDialog = ({ onClose }: ProfileDialogProps) => {
               <div><strong>{profile.username || '未设置用户名'}</strong><span>ID：{profile.id}</span></div>
             </div>
             <dl>
-              <div><dt>会员等级</dt><dd>{profile.memberLevel ? `等级 ${profile.memberLevel}` : '普通用户'}</dd></div>
-              <div><dt>账户余额</dt><dd>¥{Number(profile.balance || 0).toFixed(2)}</dd></div>
+              <div><dt>当前套餐</dt><dd>{membership?.planName || '免费体验版'}</dd></div>
+              <div><dt>积分余额</dt><dd>{Math.floor(points?.availablePoints ?? 0)} 积分</dd></div>
               <div><dt>手机号码</dt><dd>{profile.phone || '未绑定'}</dd></div>
               <div><dt>电子邮箱</dt><dd>{profile.email || '未绑定'}</dd></div>
             </dl>

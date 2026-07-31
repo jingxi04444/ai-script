@@ -9,6 +9,7 @@ import {
   WechatOutlined,
 } from '@ant-design/icons';
 import { message } from 'antd';
+import { membershipApi } from '../../api/membership';
 import { paymentApi } from '../../api/payment';
 import type { PaymentOrder } from '../../types/payment';
 import { formatDateTime } from '../../utils/format';
@@ -16,17 +17,24 @@ import './modal-dialogs.css';
 
 interface RechargeDialogProps {
   onClose: () => void;
+  initialPointBalance?: number;
+  initialPointsPerTen?: number;
 }
 
-const RechargeDialog = ({ onClose }: RechargeDialogProps) => {
-  const [amount, setAmount] = useState('100');
+const RechargeDialog = ({ onClose, initialPointBalance, initialPointsPerTen }: RechargeDialogProps) => {
+  const [amount, setAmount] = useState('50');
+  const [pointBalance, setPointBalance] = useState<number | null>(initialPointBalance ?? null);
+  const [pointsPerTen, setPointsPerTen] = useState(initialPointsPerTen ?? 0);
   const [payMethod, setPayMethod] = useState('wechat');
   const [submitting, setSubmitting] = useState(false);
   const [order, setOrder] = useState<PaymentOrder | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const pollingRef = useRef<number | null>(null);
   const completedRef = useRef(false);
-  const amounts = ['50', '100', '300', '500'];
+  const amounts = ['10', '50', '100', '300'];
+  const pointsForAmount = (value: string | number) => Math.round((Number(value) / 10) * pointsPerTen);
+  const previewPointsPerTen = pointsPerTen > 0 ? pointsPerTen : 500;
+  const previewPointsForAmount = (value: string | number) => Math.round((Number(value) / 10) * previewPointsPerTen);
 
   const methodLabel = payMethod === 'alipay' ? '支付宝' : '微信支付';
 
@@ -56,7 +64,7 @@ const RechargeDialog = ({ onClose }: RechargeDialogProps) => {
     if (completedRef.current) return;
     completedRef.current = true;
     clearPolling();
-    message.success('充值成功');
+    message.success('积分包购买成功');
     onClose();
   };
 
@@ -85,26 +93,46 @@ const RechargeDialog = ({ onClose }: RechargeDialogProps) => {
 
   const submit = async () => {
     const value = Number(amount);
-    if (!value || value <= 0) {
-      message.warning('请输入有效充值金额');
+    if (!value || value <= 0 || value % 10 !== 0) {
+      message.warning('请选择有效的积分包');
+      return;
+    }
+    if (pointsPerTen <= 0) {
+      message.warning('当前套餐暂不支持购买积分包，请先订阅会员');
       return;
     }
     setSubmitting(true);
     try {
-      const order = await paymentApi.recharge({ amount: value, payMethod });
+      const order = await paymentApi.pointOrder({ amount: value, payMethod, idempotencyKey: crypto.randomUUID() });
       completedRef.current = false;
       if (handleOrderState(order)) {
         return;
       }
       setOrder(order);
-      message.success(`充值订单已创建：${order.orderNo}`);
+      message.success(`积分包订单已创建：${order.orderNo}`);
     } catch (error) {
       const errorMessage = (error as { message?: string })?.message;
-      message.error(errorMessage || '充值下单失败');
+      message.error(errorMessage || '积分包下单失败');
     } finally {
       if (!completedRef.current) setSubmitting(false);
     }
   };
+
+
+  useEffect(() => {
+    if (initialPointBalance !== undefined && initialPointsPerTen !== undefined) return;
+    Promise.all([membershipApi.current(), membershipApi.plans(), membershipApi.points()])
+      .then(([membership, plans, account]) => {
+        setPointBalance(account.availablePoints);
+        const currentPlan = plans.find((plan) => plan.id === membership.planId);
+        const rateBenefit = currentPlan?.benefits?.find((benefit) => benefit.code === 'POINTS_PER_10_YUAN' && benefit.enabled);
+        setPointsPerTen(Math.max(0, Number(rateBenefit?.value || 0)));
+      })
+      .catch(() => {
+        setPointBalance(null);
+        setPointsPerTen(0);
+      });
+  }, [initialPointBalance, initialPointsPerTen]);
 
   useEffect(() => {
     if (!order?.orderNo || isFinished) return undefined;
@@ -149,12 +177,12 @@ const RechargeDialog = ({ onClose }: RechargeDialogProps) => {
   const qrContent = order?.qrContent || order?.payParams?.qrCode || order?.payParams?.payUrl || '';
 
   return (
-    <div className="modal-backdrop commerce-backdrop" role="dialog" aria-modal="true" aria-labelledby="recharge-title">
-      <section className="modal-card commerce-modal recharge-modal">
+    <div className="modal-backdrop commerce-backdrop" role="dialog" aria-modal="true" aria-labelledby="point-pack-title">
+      <section className="modal-card commerce-modal recharge-modal point-pack-dialog">
         <header className="modal-head">
           <div>
-            <span>Balance</span>
-            <h2 id="recharge-title">充值中心</h2>
+            <span>Points</span>
+            <h2 id="point-pack-title">购买积分包</h2>
           </div>
           <button aria-label="关闭" onClick={handleClose}>×</button>
         </header>
@@ -178,7 +206,7 @@ const RechargeDialog = ({ onClose }: RechargeDialogProps) => {
 
             <section className="payment-summary-grid">
               <article className="payment-summary-item">
-                <span>充值金额</span>
+                <span>积分包金额</span>
                 <strong>¥{Number(order.amount || amount || 0).toFixed(2)}</strong>
               </article>
               <article className="payment-summary-item">
@@ -233,27 +261,29 @@ const RechargeDialog = ({ onClose }: RechargeDialogProps) => {
         ) : (
           <>
             <div className="balance-card">
-              <span>当前余额</span>
-              <strong>¥0.00</strong>
-              <p>充值后可用于会员、生成额度和视频导出。</p>
+              <span>当前积分</span>
+              <strong>{pointBalance ?? '--'}</strong>
+              <p>购买后积分直接进入账户，可用于 Brief 检测、爆款解析等积分消费功能。</p>
             </div>
 
-            <section className="recharge-amount-grid">
+            <section className="recharge-amount-grid" aria-label="积分包列表">
               {amounts.map((item) => (
                 <button
                   key={item}
                   className={item === amount ? 'active' : ''}
                   onClick={() => setAmount(item)}
+                  disabled={pointsPerTen <= 0}
                 >
-                  ¥{item}
+                  <strong>¥{item}</strong>
+                  <small>{`${previewPointsForAmount(item)} 积分`}</small>
                 </button>
               ))}
             </section>
-
-            <label className="custom-amount-field">
-              <span>自定义金额</span>
-              <input value={amount} onChange={(e) => setAmount(e.target.value)} />
-            </label>
+            <p className={`point-pack-rate${pointsPerTen > 0 ? '' : ' is-disabled'}`}>
+              {pointsPerTen > 0
+                ? `当前套餐购买比例：每 10 元 = ${pointsPerTen} 积分，本次预计到账 ${pointsForAmount(amount)} 积分。`
+                : `免费体验版暂不支持购买；订阅轻量版后每 10 元可得 ${previewPointsPerTen} 积分，本次积分包为 ${previewPointsForAmount(amount)} 积分。`}
+            </p>
 
             <section className="payment-method-panel">
               <h3>支付方式</h3>
@@ -269,7 +299,7 @@ const RechargeDialog = ({ onClose }: RechargeDialogProps) => {
 
             <footer className="commerce-actions">
               <button onClick={handleClose}>取消</button>
-              <button className="primary" disabled={submitting} onClick={submit}>{submitting ? '下单中...' : `确认充值 ¥${amount || '0'}`}</button>
+              <button className="primary" disabled={submitting || pointsPerTen <= 0} onClick={submit}>{submitting ? '下单中...' : `购买积分包 ¥${amount || '0'}`}</button>
             </footer>
           </>
         )}
