@@ -269,7 +269,7 @@ const HomePage = () => {
               <button className={`hot-card ${work.tone}`} key={work.key} onClick={() => handleWorkClick(work)}>
                 <div className={`hot-thumb ${work.imageUrl || work.videoUrl ? 'has-image' : ''}`}>
                   {work.videoUrl
-                    ? <video src={work.videoUrl} muted loop autoPlay playsInline />
+                    ? <video src={work.videoUrl} muted playsInline preload="none" />
                     : work.imageUrl
                       ? <img src={work.imageUrl} alt="" />
                       : null}
