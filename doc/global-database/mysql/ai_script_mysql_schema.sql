@@ -49,6 +49,8 @@ CREATE TABLE sys_user (
   password_hash VARCHAR(255) NOT NULL COMMENT '密码哈希',
   phone VARCHAR(40) DEFAULT NULL COMMENT '手机号',
   email VARCHAR(160) DEFAULT NULL COMMENT '邮箱',
+  wechat_open_id VARCHAR(128) DEFAULT NULL COMMENT '微信开放平台 OpenID',
+  wechat_union_id VARCHAR(128) DEFAULT NULL COMMENT '微信开放平台 UnionID',
   avatar_url VARCHAR(500) DEFAULT NULL COMMENT '头像',
   user_type VARCHAR(32) NOT NULL DEFAULT 'front' COMMENT '用户类型：front/admin',
   member_level INT NOT NULL DEFAULT 0 COMMENT '会员等级',
@@ -64,7 +66,9 @@ CREATE TABLE sys_user (
   UNIQUE KEY uk_sys_user_account (account),
   KEY idx_sys_user_tenant (tenant_id),
   KEY idx_sys_user_phone (phone),
-  KEY idx_sys_user_email (email)
+  KEY idx_sys_user_email (email),
+  UNIQUE KEY uk_sys_user_wechat_open_id (wechat_open_id),
+  KEY idx_sys_user_wechat_union_id (wechat_union_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表，包含前台用户和后台管理员';
 
 DROP TABLE IF EXISTS sys_role;

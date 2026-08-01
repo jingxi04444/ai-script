@@ -21,6 +21,7 @@ const SiteConfigPage = lazy(() => import('./pages/System/SiteConfigPage'));
 const HomeBannersPage = lazy(() => import('./pages/System/HomeBannersPage'));
 const PageVisualPage = lazy(() => import('./pages/System/PageVisualPage'));
 const ConfigDictionaryPage = lazy(() => import('./pages/System/ConfigDictionaryPage'));
+const LegalDocumentsPage = lazy(() => import('./pages/System/LegalDocumentsPage'));
 const ScriptGeneratorManagementPage = lazy(() => import('./pages/ScriptGenerator/ScriptGeneratorManagementPage'));
 const BriefManagementPage = lazy(() => import('./pages/Brief/BriefManagementPage'));
 
@@ -57,6 +58,22 @@ export const router: RouteObject[] = [
       },
       {
         path: 'billing',
+        element: <Navigate to="/membership/plans" replace />,
+      },
+      {
+        path: 'membership/plans',
+        element: <LazyLoad><BillingPage /></LazyLoad>,
+      },
+      {
+        path: 'membership/subscriptions',
+        element: <LazyLoad><BillingPage /></LazyLoad>,
+      },
+      {
+        path: 'membership/points',
+        element: <LazyLoad><BillingPage /></LazyLoad>,
+      },
+      {
+        path: 'membership/refunds',
         element: <LazyLoad><BillingPage /></LazyLoad>,
       },
       {
@@ -146,6 +163,10 @@ export const router: RouteObject[] = [
       {
         path: 'system/config-dictionary',
         element: <LazyLoad><ConfigDictionaryPage /></LazyLoad>,
+      },
+      {
+        path: 'system/legal-documents',
+        element: <LazyLoad><LegalDocumentsPage /></LazyLoad>,
       },
       {
         path: 'system/script-formats',

@@ -1,15 +1,15 @@
 import { config } from '../config';
 import { mockAuthApi } from '../mock/auth';
 import api from './request';
-import type { LoginParams, RegisterParams, UserInfo } from '../types/user';
+import type { AuthResult, LoginParams, RegisterParams, SmsScene, UserInfo, WechatLoginStart, WechatLoginStatus } from '../types/user';
 
 export const authApi = {
-  login: (params: LoginParams): Promise<{ token: string; user: UserInfo }> => {
+  login: (params: LoginParams): Promise<AuthResult> => {
     if (config.useMock) return mockAuthApi.login(params.username, params.password);
     return api.post('/auth/login', params);
   },
 
-  register: (params: RegisterParams): Promise<{ token: string; user: UserInfo }> => {
+  register: (params: RegisterParams): Promise<AuthResult> => {
     if (config.useMock) return mockAuthApi.register(params);
     return api.post('/auth/register', params);
   },
@@ -24,8 +24,28 @@ export const authApi = {
     return api.get('/auth/user-info');
   },
 
-  sendCode: (phone: string): Promise<void> => {
-    if (config.useMock) return mockAuthApi.sendCode(phone);
-    return api.post('/auth/send-code', { phone });
+  smsLogin: (phone: string, code: string): Promise<AuthResult> => {
+    if (config.useMock) return mockAuthApi.smsLogin(phone, code);
+    return api.post('/auth/sms-login', { phone, code });
+  },
+
+  bindPhone: (phone: string, code: string): Promise<AuthResult> => {
+    if (config.useMock) return mockAuthApi.bindPhone(phone, code);
+    return api.post('/auth/bind-phone', { phone, code });
+  },
+
+  sendCode: (phone: string, scene: SmsScene): Promise<void> => {
+    if (config.useMock) return mockAuthApi.sendCode(phone, scene);
+    return api.post('/auth/send-code', { phone, scene });
+  },
+
+  startWechatLogin: (): Promise<WechatLoginStart> => {
+    if (config.useMock) return mockAuthApi.startWechatLogin();
+    return api.post('/auth/wechat/start');
+  },
+
+  getWechatLoginStatus: (state: string): Promise<WechatLoginStatus> => {
+    if (config.useMock) return mockAuthApi.getWechatLoginStatus(state);
+    return api.get('/auth/wechat/status', { params: { state } });
   },
 };

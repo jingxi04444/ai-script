@@ -9,6 +9,8 @@ public class SiteConfigVO {
     public String originalScenarioPrompts;
     public String homeVisualConfig;
     public String scriptVisualConfig;
+    public String userAgreementConfig;
+    public String privacyPolicyConfig;
     public Integer status;
     public String createdAt;
     public String updatedAt;

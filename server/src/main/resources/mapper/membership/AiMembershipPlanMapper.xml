@@ -14,6 +14,7 @@
             CASE WHEN p.is_free = 1 THEN TRUE ELSE FALSE END AS free,
             p.description,
             p.display_order,
+            p.status,
             p.price,
             p.period_days,
             COALESCE(
@@ -29,7 +30,8 @@
                             'price', s.price,
                             'originalPrice', s.original_price,
                             'refundDays', s.refund_days,
-                            'displayOrder', s.display_order
+                            'displayOrder', s.display_order,
+                            'status', s.status
                         )
                     )
                     FROM ai_membership_plan_sku s

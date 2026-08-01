@@ -99,6 +99,8 @@ export interface SiteConfig {
   originalScenarioPrompts?: string;
   homeVisualConfig?: string;
   scriptVisualConfig?: string;
+  userAgreementConfig?: string;
+  privacyPolicyConfig?: string;
   [key: string]: unknown;
 }
 

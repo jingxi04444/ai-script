@@ -11,6 +11,7 @@ export interface MembershipSku {
   originalPrice?: number;
   refundDays: number;
   displayOrder?: number;
+  status: number;
 }
 
 export interface MembershipBenefit {
@@ -34,6 +35,7 @@ export interface MembershipPlan {
   free: boolean;
   description?: string;
   displayOrder?: number;
+  status: number;
   price: number;
   periodDays: number;
   skus: MembershipSku[];

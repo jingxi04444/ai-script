@@ -303,6 +303,7 @@ public class MembershipServiceImpl implements MembershipService {
         vo.setFree(row.getFree());
         vo.setDescription(row.getDescription());
         vo.setDisplayOrder(row.getDisplayOrder());
+        vo.setStatus(row.getStatus());
         vo.setPrice(row.getPrice());
         vo.setPeriodDays(row.getPeriodDays());
 

@@ -12,6 +12,12 @@ spring:
       database: ${REDIS_DATABASE:0}
 
 app:
+  auth:
+    wechat:
+      enabled: ${WECHAT_LOGIN_ENABLED:false}
+      app-id: ${WECHAT_LOGIN_APP_ID:}
+      app-secret: ${WECHAT_LOGIN_APP_SECRET:}
+      callback-url: ${WECHAT_LOGIN_CALLBACK_URL:http://localhost:8080/api/auth/wechat/callback}
   jwt:
     secret: ${JWT_SECRET:change-me-provider-secret-cipher-key}
     access-token-expire-minutes: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:720}

@@ -12,6 +12,7 @@ public class MembershipPlanCatalogRow {
     private Boolean free;
     private String description;
     private Integer displayOrder;
+    private Integer status;
     private BigDecimal price;
     private Integer periodDays;
     private String skusJson;

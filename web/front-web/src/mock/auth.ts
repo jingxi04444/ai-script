@@ -1,4 +1,5 @@
 import type { UserInfo } from '../types/user';
+import type { RegisterParams, SmsScene } from '../types/user';
 
 const mockUser: UserInfo = {
   id: 'user-1',
@@ -21,12 +22,22 @@ export const mockAuthApi = {
     };
   },
 
-  register: async (_params: { username: string; password: string; email?: string; phone?: string }) => {
+  register: async (_params: RegisterParams) => {
     await delay(500);
     return {
       token: 'mock-token-123456',
       user: mockUser,
     };
+  },
+
+  smsLogin: async (phone: string, _code: string) => {
+    await delay(500);
+    return { token: 'mock-token-123456', user: { ...mockUser, phone }, needsPhoneBinding: false };
+  },
+
+  bindPhone: async (phone: string, _code: string) => {
+    await delay(500);
+    return { token: 'mock-token-123456', user: { ...mockUser, phone }, needsPhoneBinding: false };
   },
 
   logout: async () => {
@@ -38,7 +49,29 @@ export const mockAuthApi = {
     return mockUser;
   },
 
-  sendCode: async (_phone: string) => {
+  sendCode: async (_phone: string, _scene: SmsScene) => {
     await delay(300);
+  },
+
+  startWechatLogin: async () => {
+    await delay(300);
+    const state = `mock-wechat-${Date.now()}`;
+    sessionStorage.setItem(`wechat-poll:${state}`, '0');
+    return { state, authorizationUrl: `https://open.weixin.qq.com/mock-login?state=${state}`, expiresIn: 300 };
+  },
+
+  getWechatLoginStatus: async (state: string) => {
+    await delay(300);
+    const count = Number(sessionStorage.getItem(`wechat-poll:${state}`) || '0') + 1;
+    sessionStorage.setItem(`wechat-poll:${state}`, String(count));
+    if (count < 3) return { status: 'waiting' as const };
+    return {
+      status: 'complete' as const,
+      login: {
+        token: 'mock-wechat-token-123456',
+        user: { ...mockUser, phone: undefined, username: '微信用户' },
+        needsPhoneBinding: true,
+      },
+    };
   },
 };

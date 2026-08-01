@@ -161,6 +161,8 @@ public class ConfigDictionaryServiceImpl implements ConfigDictionaryService {
             parentKey = "content.viral";
         } else if (configKey.startsWith("content.original.")) {
             parentKey = "content.original";
+        } else if (configKey.startsWith("legal.")) {
+            parentKey = "legal";
         } else {
             return null;
         }

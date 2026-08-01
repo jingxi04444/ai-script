@@ -16,6 +16,8 @@ public class SysUser extends TenantBaseEntity {
     private String passwordHash;
     private String phone;
     private String email;
+    private String wechatOpenId;
+    private String wechatUnionId;
     private String avatarUrl;
     private String userType;
     private Integer memberLevel;

@@ -8,4 +8,6 @@ public class SiteConfigSaveDTO {
     public String originalScenarioPrompts;
     public String homeVisualConfig;
     public String scriptVisualConfig;
+    public String userAgreementConfig;
+    public String privacyPolicyConfig;
 }

@@ -1,68 +1,180 @@
-# Membership Subscription Design QA
+# Login and registration design QA
 
-- Source visual truth: `C:\Java\ai\ai-script\doc\references\membership-subscription-reference.png`
-- Browser-rendered implementation: `C:\Java\ai\ai-script\membership-implementation-final.png`
-- Full-view comparison: `C:\Java\ai\ai-script\membership-design-comparison.png`
-- Focused comparison: `C:\Java\ai\ai-script\membership-design-focus-comparison.png`
-- Route: `http://localhost:4000/membership`
-- Viewport: 1626 x 900 CSS px, device scale factor 1
-- Source pixels: 1626 x 792
-- Implementation pixels: 1626 x 900
-- Normalization: full comparison cropped both images to the first 792 px and downsampled both to 50%; focused comparison separately aligned the plans + checkout regions to equal 760 px widths.
-- State: authenticated demo user, dark mode, annual billing selected, Ultimate plan selected, payment not yet submitted.
-
-## Full-view comparison evidence
-
-The implementation preserves the reference hierarchy: centered membership/recharge tabs, annual/monthly cycle control, three horizontally aligned plan cards, a visually featured premium tier, and a right-side order summary. The product's fixed 112 px application navigation is intentionally retained because the user explicitly requested that the real left menu remain fixed.
-
-## Focused comparison evidence
-
-The focused plans + checkout comparison confirms matching card proportions, border hierarchy, price emphasis, benefit rows, period selector placement, payment-method placement, totals, and primary CTA location. A focused comparison was required because plan benefit typography is too small to judge reliably in the 50% full-page board.
-
-## Required fidelity surfaces
-
-- Fonts and typography: existing Plus Jakarta Sans/product fallbacks are retained; price, plan name, metadata, benefit, and total hierarchies match the reference closely. Small benefit text remains readable at the target viewport.
-- Spacing and layout rhythm: three-card catalog and checkout rail align horizontally; card padding, gaps, radii, section separators, and sticky checkout behavior follow the reference. The fixed product sidebar is an intentional addition.
-- Colors and visual tokens: dark neutral shell, blue standard tiers, red featured tier, muted metadata, and green primary CTA match the reference intent while using project theme variables where appropriate.
-- Image quality and asset fidelity: no fake raster assets or placeholder QR image were introduced. The checkout renders an Ant Design QR code only from real provider order content; before order creation it shows actual payment-method controls.
-- Copy and content: labels use the product's real package names, prices, benefit names, quotas, and upgrade/downgrade rules returned by the membership APIs rather than copying unrelated example data from the reference.
-
-## Primary interactions tested
-
-- Annual/monthly billing switch updates the selected real SKU and price.
-- Plan selection updates checkout details.
-- Payment-method selection is interactive.
-- Recharge tab opens the existing recharge center and closes normally.
-- Scrolling the page left the navigation rail at top position `0` before and after scrolling.
-- Browser console contained no membership-page runtime errors after a clean reload; only React Router future-version warnings were present.
-- Production build completed successfully.
-
-## Comparison history
-
-### Iteration 1
-
-- Earlier P0: the membership page did not establish a fixed-width application rail, so the navigation occupied the viewport and pushed subscription content below the fold.
-- Fix: changed the membership rail to a fixed 112 px column and offset only the scrollable content area.
-- Post-fix evidence: `membership-implementation-final.png`; browser measurements reported rail top `0` both before and after page scroll.
-
-### Iteration 2
-
-- Earlier P1: the original membership page used generic stacked cards and lacked the source's period selector and right-side checkout hierarchy.
-- Fix: rebuilt the page around tabs, annual/monthly SKU selection, three tier cards, real benefits, payment-method controls, sticky checkout, totals, and real order QR state.
-- Post-fix evidence: `membership-design-comparison.png` and `membership-design-focus-comparison.png`.
+- Source visual truth: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-bce928c6-054b-4aab-8480-9f09697db749.png`
+- Implementation screenshot: `/private/tmp/ai-script-login-implementation-1920.png`
+- Full-view comparison: `/private/tmp/ai-script-login-comparison.png`
+- Focused form comparison: `/private/tmp/ai-script-login-form-comparison.png`
+- Browser/CSS viewport: `1920 x 1080`
+- Source pixels: `3018 x 1626`
+- Implementation screenshot pixels: `1280 x 720` (the in-app browser downsampled the `1920 x 1080` CSS viewport capture)
+- Density normalization: both images were aspect-fit into equal-height comparison frames; the focused form regions were cropped independently and aspect-fit into equal `700 x 600` frames.
+- State: desktop SMS login, empty form, agreement unchecked.
 
 ## Findings
 
 No actionable P0, P1, or P2 differences remain.
 
-Intentional differences:
+- Fonts and typography: hierarchy is clear and restored above the project's global 14px text lock. The left product statement and right login title retain appropriate display weights, while form labels and helper copy remain compact.
+- Spacing and layout rhythm: the page uses the reference's full-height left brand panel and centered right form. The final `38% / 62%` split is slightly wider than the reference brand panel to accommodate AI Script's longer product copy without harmful wrapping.
+- Colors and visual tokens: the layout follows the reference, while colors intentionally use AI Script's existing green theme as requested. Focus, selected, and primary-action colors use `--theme-accent`.
+- Image quality and asset fidelity: no source logo or QR asset was copied. Product and form icons use Ant Design's icon set; the working QR is generated by Ant Design's QRCode component from the backend authorization URL.
+- Copy and content: copy reflects AI Script and the implemented authentication rules: SMS auto-registration, email-password login, WeChat QR login, required registration email, and phone binding.
+- Interaction states: SMS/password/WeChat tabs, agreement requirement, code countdown, QR refresh, WeChat completion, phone-binding modal, registration validation, loading, and disabled states are present.
+- Responsiveness: the `390 x 844` mobile check produced `scrollWidth: 390` with no horizontal overflow. Registration content scrolls vertically as expected.
+- Accessibility: form controls have visible labels or accessible names, the login-mode selector exposes a tablist label, keyboard focus styling is retained, and reduced-motion preferences are respected.
 
-- The fixed product sidebar remains visible because the user explicitly requested it.
-- A QR code appears only after a real payment order returns provider QR content; showing a fabricated QR before order creation would be misleading.
-- Package names, prices, and benefits use current backend configuration rather than the reference product's example values.
+## Comparison history
+
+1. Initial browser comparison found a P1 typography issue: the project's global `#root` text-size lock forced headings and brand copy to 14px. The auth stylesheet now applies scoped, explicit display sizes; the final screenshot shows the corrected hierarchy.
+2. Initial full-view comparison found a P2 major-region proportion drift at `43% / 57%`. The layout was tightened to `38% / 62%`, bringing it closer to the reference while preserving the longer AI Script message. The post-fix evidence is `/private/tmp/ai-script-login-implementation-1920.png` and `/private/tmp/ai-script-login-comparison.png`.
+
+## Browser verification
+
+- Primary interactions tested: login-mode switching, agreement selection, mock WeChat QR generation, mock WeChat completion, phone-binding modal, complete registration form submission, and redirect to `/home`.
+- Mobile breakpoint tested at `390 x 844`.
+- Console errors checked on login and registration flows: none.
+- Frontend production build passed.
+- Backend test suite passed: 14 tests, 0 failures, 0 errors.
 
 ## Follow-up polish
 
-- P3: consider reducing the introductory account summary height if a denser, modal-like presentation is preferred on shorter desktop screens.
+- P3: replace the temporary Ant Design video icon with a supplied production brand-logo asset when one becomes available.
+
+final result: passed
+
+---
+
+# Single membership card preview and card editor QA
+
+- Source visual truth: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-00355f20-79cb-485e-9acf-da9e8c6b58e1.png`
+- Implementation preview screenshot: `/Users/jingxi/Desktop/projectmoneny/ai-script/.tmp-membership-single-card-preview.jpg`
+- Focused editor screenshot: `/Users/jingxi/Desktop/projectmoneny/ai-script/.tmp-membership-card-editor.jpg`
+- Full-view comparison evidence: `/Users/jingxi/Desktop/projectmoneny/ai-script/.tmp-membership-card-comparison.jpg`
+- Browser/CSS viewport: `1280 x 720`
+- Source pixels: `2244 x 1532`
+- Implementation pixels: `1280 x 720`
+- Density normalization: source and implementation were both scaled to `720px` high and placed side by side in a `2335 x 720` comparison. The source shows the complete user catalog for visual truth; the implementation intentionally isolates the selected card in an admin modal.
+- State: dark theme, Light plan selected, one-time month mode in Preview; Light plan annual mode and unsaved title update in Edit.
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain.
+
+- Fonts and typography: the isolated preview preserves the user card hierarchy for plan name, price, period, description, benefit title, benefit rows, values, and CTA.
+- Spacing and layout rhythm: Preview renders exactly one centered card. Edit uses the same card in a sticky left preview column and groups only that card's content, prices, and benefits on the right.
+- Colors and visual tokens: card surface, green selection border, muted text, status pill, and original-price strike-through use the same established admin/user dark-theme direction.
+- Image quality and asset fidelity: the source card has no required raster imagery. Check and recommendation icons use the project's existing Lucide icon system.
+- Copy and content: card title, description, SKU price, original price, period label, benefit names, formatted values, and status copy all come from the selected plan draft.
+- Interaction fidelity: clicking Preview opens only the clicked row's card; period buttons change that card's SKU; clicking Edit opens the card editor; changing the plan name updated the card title immediately; switching to annual changed the live price to `¥499/年卡`.
+- Responsiveness: editor changes from split layout to stacked layout below `760px`; purchase-cycle controls and form fields also collapse safely.
+- Accessibility: Preview/Edit controls retain readable labels, cycle controls expose named groups, fields have visible labels, and modal close actions remain named.
+
+## Comparison history
+
+1. The previous implementation opened a four-card catalog from each row. That was a P1 interaction mismatch with the clarified requirement. Preview now isolates the clicked plan and reuses a single shared membership-card renderer.
+2. The previous editor was a conventional full-width form. It now keeps the selected user-facing card visible as a live preview beside card-specific content, SKU, and benefit controls.
+3. The browser pass confirmed the shared card renderer, single-card modal, period switching, unsaved title updates, annual price updates, and modal actions.
+
+## Browser verification
+
+- Primary interactions tested: open Light-plan Preview, verify only one card, close Preview, open Light-plan Edit, rename the draft to `轻量创作版`, switch to annual mode, and verify the live card shows `¥499/年卡`.
+- Admin frontend production build passed.
+- Visual comparison completed against the supplied user-facing membership screenshot.
+
+## Follow-up polish
+
+- P3: on short browser windows the modal body scrolls to expose the full tall card; a future compact-preview density can reduce scrolling without changing the user-card proportions.
+
+final result: passed
+
+---
+
+# Membership catalog preview fidelity QA (historical, superseded by single-card requirement)
+
+- Source visual truth: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-00355f20-79cb-485e-9acf-da9e8c6b58e1.png`
+- Implementation screenshot: `/Users/jingxi/Desktop/projectmoneny/ai-script/.tmp-membership-catalog-preview-qa.png`
+- Full-view and focused catalog comparison: `/Users/jingxi/Desktop/projectmoneny/ai-script/.tmp-membership-catalog-comparison-final.png`
+- Browser/CSS viewport: `1800 x 1100`
+- Source pixels: `2244 x 1532`
+- Implementation screenshot pixels: `1800 x 1100`
+- Density normalization: both captures were scaled to `766px` high and placed side by side. The implementation includes the surrounding admin modal chrome; the catalog region itself is compared directly.
+- State: dark theme, annual auto-renew mode selected, Free plan simulated as subscribed, four active product tiers shown, Ultimate marked recommended.
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain.
+
+- Fonts and typography: plan names, large prices, period suffixes, descriptions, benefit labels, and values follow the same hierarchy as the user-facing catalog.
+- Spacing and layout rhythm: the preview reproduces the four-column cycle selector and four equal-height plan cards. Benefits scroll inside each card so the action row stays aligned.
+- Colors and visual tokens: dark catalog/card surfaces, green active and selected states, muted secondary text, and orange recommendation treatment match the source direction.
+- Image quality and asset fidelity: the source contains no required raster assets. Check and action icons use the project's existing Lucide system; no placeholders or approximate image assets were introduced.
+- Copy and content: cycle labels, hints, limited-offer badge, subscription/recommendation states, plan descriptions, benefit titles, values, and CTA labels match the user-facing membership page.
+- Data fidelity: plan names, descriptions, prices, original prices, SKUs, benefits, enabled states, and ordering come from the membership backend. Only cycle-label copy and the highest-level recommendation rule remain UI presentation rules, matching the user-facing implementation.
+- Responsiveness: the four-column catalog becomes two columns at the admin medium breakpoint and one column at the narrow breakpoint.
+- Accessibility: the cycle selector exposes a labeled group, all cycle controls and CTAs are buttons, and the preview modal retains a named close control.
+
+## Comparison history
+
+1. The previous admin preview showed only one conceptual membership card, a P1 structural mismatch from the selected user-facing four-plan comparison. It was replaced with the same four-plan catalog composition and formatting rules used by the user-facing page.
+2. Review found a P1 control risk: admin plan and SKU status were displayed and saved as always enabled. Real `status` fields are now returned by the backend, rendered in the admin list/editor, and preserved on save; stopped plans and SKUs are excluded from the user-style preview.
+3. The final browser pass confirmed four visible product tiers, annual pricing (`¥499`, `¥1499`, `¥3999`), original-price strike-through, benefit formatting, recommended/current states, and aligned bottom CTAs.
+
+## Browser verification
+
+- Primary interactions tested: annual preview, monthly auto-renew switch, live SKU price change (`Light` changed to `¥59/month`), closing and reopening preview, package status control, and four SKU status controls.
+- Preview renders four active product tiers from seven admin records; inactive legacy plans are not shown, matching the user-facing active-only query.
+- Console errors checked: none.
+- Admin frontend production build passed.
+- Backend test suite passed: 14 tests, 0 failures, 0 errors.
+
+## Follow-up polish
+
+- P3: if the user-facing checkout sidebar is later required in admin preview, add a read-only order summary panel without payment controls.
+
+final result: passed
+
+---
+
+# Membership and orders admin design QA
+
+- Source visual truth: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-a536e890-5366-4958-8888-a28b666d3d68.png`
+- Implementation screenshot: `/Users/jingxi/Desktop/projectmoneny/ai-script/.tmp-membership-plans-final.png`
+- Full-view comparison: `/Users/jingxi/Desktop/projectmoneny/ai-script/.tmp-membership-comparison-final.png`
+- Focused editor evidence: `/Users/jingxi/Desktop/projectmoneny/ai-script/.tmp-membership-editor.png`
+- Focused preview evidence: `/Users/jingxi/Desktop/projectmoneny/ai-script/.tmp-membership-preview-final.png`
+- Browser/CSS viewport: `1840 x 1032`
+- Source pixels: `2762 x 1550`
+- Implementation screenshot pixels: `1840 x 1032`
+- Density normalization: source and implementation were both scaled to `1381 x 775`, then placed side by side in a `2762 x 775` comparison image.
+- State: desktop dark theme, package list loaded with seven real backend records; editor checked with the Professional plan and preview opened from its unsaved draft.
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain.
+
+- Fonts and typography: the implementation retains the admin console's existing Chinese system-font stack, heading weights, muted helper text, compact table labels, and readable price emphasis.
+- Spacing and layout rhythm: the four in-page tabs are now four sidebar destinations under a dedicated Membership and Orders group. The package list fits above the fold, while the editor separates basic data, SKUs, and benefits into three clear sections.
+- Colors and visual tokens: the existing dark surfaces and green semantic accent are preserved. New components use the current `--green`, `--line`, `--panel-soft`, and text tokens.
+- Image quality and asset fidelity: this management screen does not require raster imagery. All functional icons come from the project's existing Lucide icon system; no placeholder illustration, emoji, or custom SVG was introduced.
+- Copy and content: menu labels, page descriptions, column names, edit sections, safety hints, and preview disclaimer match the membership-management task.
+- Interaction states: all four sidebar routes navigate independently; package editing, benefit enable/disable controls, draft preview, refresh, subscription filters, point adjustment, and refund review controls remain functional.
+- Accessibility: modal close controls and benefit toggles expose accessible names; fields retain visible labels; table actions use readable text alongside icons.
+
+## Comparison history
+
+1. The initial browser pass found a P2 token mismatch: two new selectors referenced obsolete `--primary` and `--border` variables, leaving the preview level badge transparent and some borders inconsistent. These were replaced with the admin console's active `--green` and `--line` tokens.
+2. The initial preview pass found a P2 vertical-overflow issue: eight benefit rows pushed the primary preview button below the modal body. The preview summary was reduced to six primary benefits, making the CTA visible in the default viewport while retaining scroll access where needed.
+3. The post-fix screenshots show consistent green emphasis, clear modal layering, visible preview CTA, and no clipped persistent controls.
+
+## Browser verification
+
+- Primary interactions tested: all four menu routes, opening the Professional-plan editor, opening draft preview from the editor, closing both modal layers, and returning to the package list.
+- Backend data was loaded successfully: seven plans, including SKU and benefit details.
+- Console errors checked on the final package-list route: none.
+- Admin frontend production build passed.
+
+## Follow-up polish
+
+- P3: plan and SKU status are now editable and reflected in the list; a future pass can add a dedicated status filter when the number of plans grows.
 
 final result: passed

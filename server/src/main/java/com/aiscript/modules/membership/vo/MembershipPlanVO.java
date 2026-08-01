@@ -14,6 +14,7 @@ public class MembershipPlanVO {
     private Boolean free;
     private String description;
     private Integer displayOrder;
+    private Integer status;
 
     /** 兼容旧版购买弹窗，后续下单统一使用 skuId。 */
     private BigDecimal price;

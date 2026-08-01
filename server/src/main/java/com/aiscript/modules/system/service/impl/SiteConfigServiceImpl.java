@@ -23,6 +23,8 @@ public class SiteConfigServiceImpl implements SiteConfigService {
     private static final String ORIGINAL_SCENARIO_PROMPTS = "content.original.scenario-prompts";
     private static final String HOME_VISUAL_CONFIG = "visual.home.config";
     private static final String SCRIPT_VISUAL_CONFIG = "visual.script-generator.config";
+    private static final String USER_AGREEMENT_CONFIG = "legal.user-agreement.config";
+    private static final String PRIVACY_POLICY_CONFIG = "legal.privacy-policy.config";
     private static final List<String> SITE_CONFIG_KEYS = List.of(
         HOME_LOGO_URL,
         HOME_LOGO_KEY,
@@ -30,7 +32,9 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         VIRAL_DEEP_EXAMPLE,
         ORIGINAL_SCENARIO_PROMPTS,
         HOME_VISUAL_CONFIG,
-        SCRIPT_VISUAL_CONFIG
+        SCRIPT_VISUAL_CONFIG,
+        USER_AGREEMENT_CONFIG,
+        PRIVACY_POLICY_CONFIG
     );
 
     private final SysSiteConfigMapper siteConfigMapper;
@@ -62,6 +66,8 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         vo.originalScenarioPrompts = valueOrLegacy(values, ORIGINAL_SCENARIO_PROMPTS, config == null ? null : config.getFrontOriginalScenarioPrompts());
         vo.homeVisualConfig = valueOrLegacy(values, HOME_VISUAL_CONFIG, config == null ? null : config.getFrontHomeVisualConfig());
         vo.scriptVisualConfig = valueOrLegacy(values, SCRIPT_VISUAL_CONFIG, config == null ? null : config.getFrontScriptVisualConfig());
+        vo.userAgreementConfig = values.get(USER_AGREEMENT_CONFIG);
+        vo.privacyPolicyConfig = values.get(PRIVACY_POLICY_CONFIG);
         return vo;
     }
 
@@ -108,6 +114,8 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         vo.originalScenarioPrompts = valueOrLegacy(values, ORIGINAL_SCENARIO_PROMPTS, config == null ? null : config.getFrontOriginalScenarioPrompts());
         vo.homeVisualConfig = valueOrLegacy(values, HOME_VISUAL_CONFIG, config == null ? null : config.getFrontHomeVisualConfig());
         vo.scriptVisualConfig = valueOrLegacy(values, SCRIPT_VISUAL_CONFIG, config == null ? null : config.getFrontScriptVisualConfig());
+        vo.userAgreementConfig = values.get(USER_AGREEMENT_CONFIG);
+        vo.privacyPolicyConfig = values.get(PRIVACY_POLICY_CONFIG);
         return vo;
     }
 
@@ -133,6 +141,8 @@ public class SiteConfigServiceImpl implements SiteConfigService {
         putIfPresent(ORIGINAL_SCENARIO_PROMPTS, dto.originalScenarioPrompts, "json", "AI智能脚本分类提示词", "script-generator");
         putIfPresent(HOME_VISUAL_CONFIG, dto.homeVisualConfig, "json", "主页视觉配置", "page-visual");
         putIfPresent(SCRIPT_VISUAL_CONFIG, dto.scriptVisualConfig, "json", "脚本生成器视觉配置", "page-visual");
+        putIfPresent(USER_AGREEMENT_CONFIG, dto.userAgreementConfig, "json", "用户协议", "legal");
+        putIfPresent(PRIVACY_POLICY_CONFIG, dto.privacyPolicyConfig, "json", "隐私政策", "legal");
     }
 
     private void putIfPresent(String key, String value, String type, String name, String groupCode) {

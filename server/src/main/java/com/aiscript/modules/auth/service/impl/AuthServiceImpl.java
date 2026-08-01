@@ -4,8 +4,10 @@ import com.aiscript.common.api.ResultCode;
 import com.aiscript.common.exception.BusinessException;
 import com.aiscript.integration.sms.SmsClient;
 import com.aiscript.modules.auth.dto.LoginDTO;
+import com.aiscript.modules.auth.dto.BindPhoneDTO;
 import com.aiscript.modules.auth.dto.RegisterDTO;
 import com.aiscript.modules.auth.dto.SendCodeDTO;
+import com.aiscript.modules.auth.dto.SmsLoginDTO;
 import com.aiscript.modules.auth.entity.SysVerificationCode;
 import com.aiscript.modules.auth.entity.SysUser;
 import com.aiscript.modules.auth.mapper.SysVerificationCodeMapper;
@@ -29,6 +31,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.UUID;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -75,7 +78,9 @@ public class AuthServiceImpl implements AuthService {
     @Transactional(rollbackFor = Exception.class)
     public LoginVO login(LoginDTO dto, String userType) {
         SysUser user = sysUserMapper.selectOne(new LambdaQueryWrapper<SysUser>()
-            .eq(SysUser::getAccount, dto.getUsername())
+            .and(wrapper -> wrapper.eq(SysUser::getAccount, dto.getUsername())
+                .or()
+                .eq(SysUser::getEmail, dto.getUsername()))
             .eq(SysUser::getUserType, userType)
             .last("limit 1"));
         if (user == null) {
@@ -91,6 +96,11 @@ public class AuthServiceImpl implements AuthService {
         if (user.getStatus() != null && user.getStatus() == 0) {
             throw new BusinessException(ResultCode.FORBIDDEN, "账号已被禁用");
         }
+        return issueLogin(user, userType);
+    }
+
+    private LoginVO issueLogin(SysUser user, String userType) {
+        ensureEnabled(user);
         ensureDefaultFrontRole(user);
         LoginUser loginUser = LoginUser.builder()
             .userId(user.getId())
@@ -103,6 +113,7 @@ public class AuthServiceImpl implements AuthService {
         LoginVO loginVO = new LoginVO();
         loginVO.setToken(token);
         loginVO.setUser(toUserInfoVO(user));
+        loginVO.setNeedsPhoneBinding(user.getPhone() == null || user.getPhone().isBlank());
         return loginVO;
     }
 
@@ -135,19 +146,17 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public LoginVO register(RegisterDTO dto) {
-        if (dto.getPhone() != null && !dto.getPhone().isBlank()) {
-            verifyCode(dto.getPhone(), "register", dto.getCode());
-        }
-        Long exists = sysUserMapper.selectCount(new LambdaQueryWrapper<SysUser>().eq(SysUser::getAccount, dto.getUsername()));
-        if (exists > 0) {
-            throw new BusinessException("账号已存在");
-        }
+        verifyCode(dto.getPhone(), "register", dto.getCode());
+        ensurePhoneAndEmailAvailable(dto.getPhone(), dto.getEmail(), null);
         SysUser user = new SysUser();
         user.setTenantId(DEFAULT_TENANT_ID);
-        user.setUsername(dto.getUsername());
-        user.setAccount(dto.getUsername());
+        String displayName = dto.getUsername() == null || dto.getUsername().isBlank()
+            ? dto.getEmail().substring(0, dto.getEmail().indexOf('@'))
+            : dto.getUsername().trim();
+        user.setUsername(displayName);
+        user.setAccount(dto.getEmail().trim().toLowerCase());
         user.setPasswordHash(passwordEncoder.encode(dto.getPassword()));
-        user.setEmail(dto.getEmail());
+        user.setEmail(dto.getEmail().trim().toLowerCase());
         user.setPhone(dto.getPhone());
         user.setUserType("front");
         user.setMemberLevel(0);
@@ -155,20 +164,85 @@ public class AuthServiceImpl implements AuthService {
         user.setStatus(1);
         sysUserMapper.insert(user);
         membershipService.ensureFreeSubscription(user.getTenantId(), user.getId());
-        LoginDTO loginDTO = new LoginDTO();
-        loginDTO.setUsername(dto.getUsername());
-        loginDTO.setPassword(dto.getPassword());
-        return login(loginDTO, "front");
+        return issueLogin(user, "front");
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public LoginVO smsLogin(SmsLoginDTO dto) {
+        verifyCode(dto.getPhone(), "login", dto.getCode());
+        SysUser user = findFrontUserByPhone(dto.getPhone());
+        if (user == null) {
+            user = new SysUser();
+            user.setTenantId(DEFAULT_TENANT_ID);
+            user.setUsername("用户" + dto.getPhone().substring(7));
+            user.setAccount(dto.getPhone());
+            user.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+            user.setPhone(dto.getPhone());
+            user.setUserType("front");
+            user.setMemberLevel(0);
+            user.setBalance(BigDecimal.ZERO);
+            user.setStatus(1);
+            sysUserMapper.insert(user);
+            membershipService.ensureFreeSubscription(user.getTenantId(), user.getId());
+        }
+        return issueLogin(user, "front");
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public LoginVO bindPhone(BindPhoneDTO dto) {
+        verifyCode(dto.getPhone(), "bind", dto.getCode());
+        SysUser current = currentUser();
+        SysUser existing = findFrontUserByPhone(dto.getPhone());
+        if (existing != null && !existing.getId().equals(current.getId())) {
+            if (current.getWechatOpenId() == null || current.getWechatOpenId().isBlank()) {
+                throw new BusinessException("该手机号已绑定其他账号");
+            }
+            existing.setWechatOpenId(current.getWechatOpenId());
+            existing.setWechatUnionId(current.getWechatUnionId());
+            sysUserMapper.updateById(existing);
+            current.setWechatOpenId(null);
+            current.setWechatUnionId(null);
+            sysUserMapper.updateById(current);
+            sysUserMapper.deleteById(current.getId());
+            return issueLogin(existing, "front");
+        }
+        current.setPhone(dto.getPhone());
+        if (current.getAccount() == null || current.getAccount().startsWith("wx_")) {
+            current.setAccount(dto.getPhone());
+        }
+        sysUserMapper.updateById(current);
+        return issueLogin(current, "front");
+    }
+
+    @Override
+    public LoginVO loginWechatUser(Integer userId) {
+        SysUser user = sysUserMapper.selectById(userId);
+        if (user == null || !"front".equals(user.getUserType())) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED, "微信登录用户不存在");
+        }
+        return issueLogin(user, "front");
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void sendCode(SendCodeDTO dto) {
+        String scene = dto.getScene() == null || dto.getScene().isBlank() ? "login" : dto.getScene();
+        SysVerificationCode latest = verificationCodeMapper.selectOne(new LambdaQueryWrapper<SysVerificationCode>()
+            .eq(SysVerificationCode::getTarget, dto.getPhone())
+            .eq(SysVerificationCode::getScene, scene)
+            .orderByDesc(SysVerificationCode::getCreateTime)
+            .last("limit 1"));
+        if (latest != null && latest.getCreateTime() != null
+            && latest.getCreateTime().isAfter(LocalDateTime.now().minusSeconds(60))) {
+            throw new BusinessException(ResultCode.TOO_MANY_REQUESTS, "验证码发送过于频繁，请稍后再试");
+        }
         String code = String.valueOf(ThreadLocalRandom.current().nextInt(100000, 1000000));
         SysVerificationCode verificationCode = new SysVerificationCode();
         verificationCode.setTarget(dto.getPhone());
         verificationCode.setChannel("sms");
-        verificationCode.setScene("register");
+        verificationCode.setScene(scene);
         verificationCode.setCodeHash(passwordEncoder.encode(code));
         verificationCode.setExpireTime(LocalDateTime.now().plusMinutes(5));
         verificationCodeMapper.insert(verificationCode);
@@ -205,6 +279,36 @@ public class AuthServiceImpl implements AuthService {
             throw new BusinessException(ResultCode.UNAUTHORIZED, "用户不存在");
         }
         return user;
+    }
+
+    private SysUser findFrontUserByPhone(String phone) {
+        return sysUserMapper.selectOne(new LambdaQueryWrapper<SysUser>()
+            .eq(SysUser::getPhone, phone)
+            .eq(SysUser::getUserType, "front")
+            .last("limit 1"));
+    }
+
+    private void ensurePhoneAndEmailAvailable(String phone, String email, Integer ignoredUserId) {
+        LambdaQueryWrapper<SysUser> wrapper = new LambdaQueryWrapper<SysUser>()
+            .eq(SysUser::getUserType, "front")
+            .and(query -> query.eq(SysUser::getPhone, phone)
+                .or()
+                .eq(SysUser::getEmail, email.trim().toLowerCase()));
+        if (ignoredUserId != null) {
+            wrapper.ne(SysUser::getId, ignoredUserId);
+        }
+        if (sysUserMapper.selectCount(wrapper) > 0) {
+            throw new BusinessException("手机号或邮箱已注册");
+        }
+    }
+
+    private void ensureEnabled(SysUser user) {
+        if (user == null) {
+            throw new BusinessException(ResultCode.UNAUTHORIZED, "用户不存在");
+        }
+        if (user.getStatus() != null && user.getStatus() == 0) {
+            throw new BusinessException(ResultCode.FORBIDDEN, "账号已被禁用");
+        }
     }
 
     private UserInfoVO toUserInfoVO(SysUser user) {

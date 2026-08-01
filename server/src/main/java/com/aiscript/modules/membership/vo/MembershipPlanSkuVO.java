@@ -15,4 +15,5 @@ public class MembershipPlanSkuVO {
     private BigDecimal originalPrice;
     private Integer refundDays;
     private Integer displayOrder;
+    private Integer status;
 }

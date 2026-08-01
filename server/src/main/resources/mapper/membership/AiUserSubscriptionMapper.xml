@@ -23,4 +23,63 @@
         FOR UPDATE
     </select>
 
+    <sql id="adminPageFilters">
+        s.deleted = 0
+        <if test="status != null and status != ''">
+            AND s.status = #{status}
+        </if>
+        <if test="keyword != null and keyword != ''">
+            AND (
+                CAST(s.user_id AS CHAR) LIKE CONCAT('%', #{keyword}, '%')
+                OR u.username LIKE CONCAT('%', #{keyword}, '%')
+                OR u.account LIKE CONCAT('%', #{keyword}, '%')
+            )
+        </if>
+    </sql>
+
+    <select id="selectAdminPage"
+            resultType="com.aiscript.modules.membership.vo.AdminSubscriptionVO">
+        SELECT
+            s.id,
+            s.user_id AS userId,
+            u.username,
+            u.account,
+            s.plan_id AS planId,
+            p.plan_name AS planName,
+            s.sku_id AS skuId,
+            sku.sku_name AS skuName,
+            s.status,
+            s.auto_renew AS autoRenew,
+            s.cancel_at_period_end AS cancelAtPeriodEnd,
+            s.current_period_start AS currentPeriodStart,
+            s.current_period_end AS currentPeriodEnd,
+            pending_plan.plan_name AS pendingPlanName,
+            s.create_time AS createTime
+        FROM ai_user_subscription s
+        LEFT JOIN sys_user u
+            ON u.id = s.user_id
+           AND u.deleted = 0
+        LEFT JOIN ai_membership_plan p
+            ON p.id = s.plan_id
+           AND p.deleted = 0
+        LEFT JOIN ai_membership_plan_sku sku
+            ON sku.id = s.sku_id
+           AND sku.deleted = 0
+        LEFT JOIN ai_membership_plan pending_plan
+            ON pending_plan.id = s.pending_plan_id
+           AND pending_plan.deleted = 0
+        WHERE <include refid="adminPageFilters" />
+        ORDER BY s.create_time DESC, s.id DESC
+        LIMIT #{offset}, #{pageSize}
+    </select>
+
+    <select id="countAdminPage" resultType="long">
+        SELECT COUNT(*)
+        FROM ai_user_subscription s
+        LEFT JOIN sys_user u
+            ON u.id = s.user_id
+           AND u.deleted = 0
+        WHERE <include refid="adminPageFilters" />
+    </select>
+
 </mapper>

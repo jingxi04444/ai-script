@@ -6,4 +6,5 @@ import lombok.Data;
 public class LoginVO {
     private String token;
     private UserInfoVO user;
+    private Boolean needsPhoneBinding;
 }

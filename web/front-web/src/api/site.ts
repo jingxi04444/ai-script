@@ -19,6 +19,8 @@ export interface SiteConfig {
   originalScenarioPrompts?: string;
   homeVisualConfig?: string;
   scriptVisualConfig?: string;
+  userAgreementConfig?: string;
+  privacyPolicyConfig?: string;
 }
 
 let siteConfigCache: SiteConfig | null = null;
