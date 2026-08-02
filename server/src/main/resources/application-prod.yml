@@ -1,51 +1,138 @@
+# ============================================================
+# AI Script 服务端 - 生产环境配置
+# 作用：部署到线上服务器时覆盖 application.yml 中的默认值
+# 使用方式：启动时指定 --spring.profiles.active=prod（也是 application.yml 默认激活的环境）
+#
+# 配置继承规则：
+#   1. 公共默认值在 application.yml 中维护
+#   2. 本文件保留完整配置结构，方便生产环境逐项核对
+#   3. 所有密钥、密码、连接串、回调地址都必须通过环境变量注入
+#      禁止将真实凭据提交到代码仓库
+# ============================================================
+
+# ------------------------------------------------------
+# 数据库与缓存配置
+# ------------------------------------------------------
 spring:
   datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
-    url: ${MYSQL_URL}
-    username: ${MYSQL_USERNAME}
-    password: ${MYSQL_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver  # MySQL 8 驱动类
+    url: ${MYSQL_URL}  # 生产 MySQL 连接串，例如：jdbc:mysql://prod-mysql:3306/ai_script?...
+    username: ${MYSQL_USERNAME}  # 生产数据库用户名
+    password: ${MYSQL_PASSWORD}  # 生产数据库密码
+
   data:
     redis:
-      host: ${REDIS_HOST:localhost}
-      port: ${REDIS_PORT:6379}
-      password: ${REDIS_PASSWORD:}
-      database: ${REDIS_DATABASE:0}
+      host: ${REDIS_HOST:localhost}  # Redis 主机地址
+      port: ${REDIS_PORT:6379}  # Redis 端口
+      password: ${REDIS_PASSWORD:}  # Redis 访问密码（无密码则留空）
+      database: ${REDIS_DATABASE:0}  # Redis 数据库索引
 
+# ------------------------------------------------------
+# 支付模块配置（生产环境）
+# ------------------------------------------------------
+payment:
+  enabled: ${PAYMENT_ENABLED:false}  # 总开关：是否启用支付功能
+  dev-mode: ${PAYMENT_DEV_MODE:false}  # 生产环境必须关闭开发模式
+  base-notify-url: ${PAYMENT_BASE_NOTIFY_URL:}  # 回调基础地址，例如：https://api.aiscript.com
+  front-return-url: ${PAYMENT_FRONT_RETURN_URL:}  # 前端支付结果页地址
+
+  # 微信支付（APIv3）
+  wechat:
+    enabled: ${PAYMENT_WECHAT_ENABLED:false}  # 微信支付开关
+    app-id: ${WECHAT_PAY_APP_ID:}  # 微信 AppID
+    mch-id: ${WECHAT_PAY_MCH_ID:}  # 微信商户号
+    api-v3-key: ${WECHAT_PAY_API_V3_KEY:}  # APIv3 密钥
+    private-key-path: ${WECHAT_PAY_PRIVATE_KEY_PATH:}  # 商户 API 证书私钥路径
+    mch-serial-no: ${WECHAT_PAY_MCH_SERIAL_NO:}  # 证书序列号
+    notify-url: ${WECHAT_PAY_NOTIFY_URL:}  # 微信支付回调地址
+
+    auto-deduct:
+      enabled: ${WECHAT_PAY_AUTO_DEDUCT_ENABLED:false}  # 微信自动续费开关
+      plan-id: ${WECHAT_PAY_AUTO_DEDUCT_PLAN_ID:}  # 自动续费协议模板 ID
+      contract-notify-url: ${WECHAT_PAY_CONTRACT_NOTIFY_URL:}  # 签约回调
+      deduct-notify-url: ${WECHAT_PAY_DEDUCT_NOTIFY_URL:}  # 扣款回调
+
+  # 支付宝支付
+  alipay:
+    enabled: ${PAYMENT_ALIPAY_ENABLED:true}  # 支付宝支付开关
+    app-id: ${ALIPAY_APP_ID:}  # 支付宝 AppID
+    merchant-private-key: ${ALIPAY_MERCHANT_PRIVATE_KEY:}  # 应用私钥
+    alipay-public-key: ${ALIPAY_PUBLIC_KEY:}  # 支付宝公钥
+    notify-url: ${ALIPAY_NOTIFY_URL:}  # 支付宝回调地址
+    server-url: ${ALIPAY_SERVER_URL:https://openapi.alipay.com/gateway.do}  # 支付宝生产网关
+    sign-type: ${ALIPAY_SIGN_TYPE:RSA2}  # 签名算法
+    seller-id: ${ALIPAY_SELLER_ID:}  # 收款账号 ID
+
+    auto-deduct:
+      enabled: ${PAYMENT_ALIPAY_AUTO_DEDUCT_ENABLED:false}  # 支付宝自动续费开关
+      product-code: ${ALIPAY_AUTO_DEDUCT_PRODUCT_CODE:GENERAL_WITHHOLDING}  # 代扣产品码
+      sign-scene: ${ALIPAY_AUTO_DEDUCT_SIGN_SCENE:}  # 签约场景码
+      contract-notify-url: ${ALIPAY_CONTRACT_NOTIFY_URL:}  # 签约回调
+      deduct-notify-url: ${ALIPAY_DEDUCT_NOTIFY_URL:}  # 扣款回调
+
+# ------------------------------------------------------
+# 短信服务配置（生产环境）
+# ------------------------------------------------------
+sms:
+  enabled: ${SMS_ENABLED:false}  # 短信总开关
+  provider: ${SMS_PROVIDER:aliyun}  # 短信服务商
+  endpoint: ${SMS_ENDPOINT:https://dysmsapi.aliyuncs.com/}  # 阿里云短信接入地址
+  access-key-id: ${SMS_ACCESS_KEY_ID:}  # AccessKey ID
+  access-key-secret: ${SMS_ACCESS_KEY_SECRET:}  # AccessKey Secret
+  sign-name: ${SMS_SIGN_NAME:}  # 短信签名
+  template-code: ${SMS_TEMPLATE_CODE:}  # 短信模板 CODE
+  region-id: ${SMS_REGION_ID:cn-hangzhou}  # 阿里云 Region
+
+# ------------------------------------------------------
+# 应用自定义安全配置（生产环境）
+# ------------------------------------------------------
 app:
+  # 微信扫码登录
   auth:
     wechat:
-      enabled: ${WECHAT_LOGIN_ENABLED:false}
-      app-id: ${WECHAT_LOGIN_APP_ID:}
-      app-secret: ${WECHAT_LOGIN_APP_SECRET:}
+      enabled: ${WECHAT_LOGIN_ENABLED:false}  # 微信登录开关
+      app-id: ${WECHAT_LOGIN_APP_ID:}  # 微信登录 AppID
+      app-secret: ${WECHAT_LOGIN_APP_SECRET:}  # 微信登录 AppSecret
       callback-url: ${WECHAT_LOGIN_CALLBACK_URL:http://localhost:8080/api/auth/wechat/callback}
+      # 微信授权回调地址；生产环境必须改为 https://你的域名/api/auth/wechat/callback
+
+  # JWT 令牌
   jwt:
     secret: ${JWT_SECRET:change-me-provider-secret-cipher-key}
-    access-token-expire-minutes: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:720}
+    # JWT 签名密钥：生产环境必须通过 JWT_SECRET 传入强随机字符串，默认值不可用
+    access-token-expire-minutes: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:720}  # Access Token 有效期，默认 12 小时
+
+  # 敏感字段加密
   secret:
     cipher-key: ${APP_SECRET_CIPHER_KEY:change-me-provider-secret-cipher-key}
+    # 敏感字段加密密钥：生产环境必须通过环境变量传入，默认值不可用
+
+  # 文件存储
   storage:
-    provider: ${STORAGE_PROVIDER:aliyun-oss}
-    endpoint: ${STORAGE_ENDPOINT:oss-cn-hangzhou.aliyuncs.com}
-    bucket: ${STORAGE_BUCKET:rxbtanhua}
-    access-key: ${STORAGE_ACCESS_KEY:}
-    secret-key: ${STORAGE_SECRET_KEY:}
-    region: ${STORAGE_REGION:cn-hangzhou}
-    public-base-url: ${STORAGE_PUBLIC_BASE_URL:}
-    local-path: ${STORAGE_LOCAL_PATH:/opt/ai-script/uploads}
+    provider: ${STORAGE_PROVIDER:aliyun-oss}  # 文件存储服务商
+    endpoint: ${STORAGE_ENDPOINT:oss-cn-hangzhou.aliyuncs.com}  # 存储 Endpoint
+    bucket: ${STORAGE_BUCKET:rxbtanhua}  # 存储空间名
+    access-key: ${STORAGE_ACCESS_KEY:}  # 存储 AccessKey
+    secret-key: ${STORAGE_SECRET_KEY:}  # 存储 SecretKey
+    region: ${STORAGE_REGION:cn-hangzhou}  # 存储 Region
+    public-base-url: ${STORAGE_PUBLIC_BASE_URL:}  # 文件公开访问基础 URL
+    local-path: ${STORAGE_LOCAL_PATH:/opt/ai-script/uploads}  # provider=local 时本地保存路径
+
+  # OCR 图文识别
   ocr:
-    enabled: ${OCR_ENABLED:true}
-    provider: ${OCR_PROVIDER:aliyun}
-    fallback-to-tesseract: ${OCR_FALLBACK_TO_TESSERACT:true}
-    command: ${OCR_COMMAND:tesseract}
-    language: ${OCR_LANGUAGE:chi_sim+eng}
-    page-segmentation-mode: ${OCR_PAGE_SEGMENTATION_MODE:6}
-    timeout-seconds: ${OCR_TIMEOUT_SECONDS:30}
-    max-text-length: ${OCR_MAX_TEXT_LENGTH:30000}
+    enabled: ${OCR_ENABLED:true}  # OCR 总开关
+    provider: ${OCR_PROVIDER:aliyun}  # OCR 服务商：aliyun / tesseract
+    fallback-to-tesseract: ${OCR_FALLBACK_TO_TESSERACT:true}  # 阿里云 OCR 失败时是否回退本地 Tesseract
+    command: ${OCR_COMMAND:tesseract}  # 本地 Tesseract 命令
+    language: ${OCR_LANGUAGE:chi_sim+eng}  # Tesseract 语言包
+    page-segmentation-mode: ${OCR_PAGE_SEGMENTATION_MODE:6}  # 页面分割模式
+    timeout-seconds: ${OCR_TIMEOUT_SECONDS:30}  # 超时时间
+    max-text-length: ${OCR_MAX_TEXT_LENGTH:30000}  # 最大识别文本长度
     aliyun:
-      access-key-id: ${STORAGE_ACCESS_KEY:}
-      access-key-secret: ${STORAGE_SECRET_KEY:}
-      endpoint: ocr-api.cn-hangzhou.aliyuncs.com
-      region-id: cn-hangzhou
-      connect-timeout-millis: ${ALIYUN_OCR_CONNECT_TIMEOUT_MILLIS:5000}
-      read-timeout-millis: ${ALIYUN_OCR_READ_TIMEOUT_MILLIS:30000}
-      max-file-size-bytes: ${ALIYUN_OCR_MAX_FILE_SIZE_BYTES:10485760}
+      access-key-id: ${STORAGE_ACCESS_KEY:}  # 复用存储 AccessKey
+      access-key-secret: ${STORAGE_SECRET_KEY:}  # 复用存储 SecretKey
+      endpoint: ocr-api.cn-hangzhou.aliyuncs.com  # 阿里云 OCR 接入地址
+      region-id: cn-hangzhou  # 阿里云 Region
+      connect-timeout-millis: ${ALIYUN_OCR_CONNECT_TIMEOUT_MILLIS:5000}  # 连接超时
+      read-timeout-millis: ${ALIYUN_OCR_READ_TIMEOUT_MILLIS:30000}  # 读取超时
+      max-file-size-bytes: ${ALIYUN_OCR_MAX_FILE_SIZE_BYTES:10485760}  # 单文件最大 10MB

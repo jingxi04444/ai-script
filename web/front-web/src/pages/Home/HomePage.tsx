@@ -12,8 +12,6 @@ import {
 import { message } from 'antd';
 import { siteApi, type HomeBanner } from '../../api/site';
 import HomeRail from '../../components/Layout/HomeRail';
-import MemberPaymentDialog from '../../components/Modal/MemberPaymentDialog';
-import RechargeDialog from '../../components/Modal/RechargeDialog';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import './home-page.css';
 
@@ -67,7 +65,6 @@ const HomePage = () => {
   const resetWorkspace = useWorkspaceStore((state) => state.reset);
   const setActiveStep = useWorkspaceStore((state) => state.setActiveStep);
   const setScriptMode = useWorkspaceStore((state) => state.setScriptMode);
-  const [commerceDialog, setCommerceDialog] = useState<'member' | 'recharge' | null>(null);
   const [banners, setBanners] = useState<HomeBanner[]>([]);
   const [bannerLoading, setBannerLoading] = useState(true);
   const [bannerLoadFailed, setBannerLoadFailed] = useState(false);
@@ -205,8 +202,6 @@ const HomePage = () => {
       <HomeRail
         activeLabel="首页"
         onCreate={handleOpen}
-        onMember={() => setCommerceDialog('member')}
-        onRecharge={() => setCommerceDialog('recharge')}
       />
 
       <section className="home-stage">
@@ -311,16 +306,6 @@ const HomePage = () => {
             />
           </section>
         </div>
-      )}
-
-      {commerceDialog === 'member' && (
-        <MemberPaymentDialog
-          onClose={() => setCommerceDialog(null)}
-          onRecharge={() => setCommerceDialog('recharge')}
-        />
-      )}
-      {commerceDialog === 'recharge' && (
-        <RechargeDialog onClose={() => setCommerceDialog(null)} />
       )}
     </main>
   );

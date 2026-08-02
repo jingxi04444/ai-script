@@ -18,4 +18,6 @@ public interface MembershipService {
     AiUserSubscription ensureActiveSubscription(Integer tenantId, Integer userId);
 
     AiMembershipBenefitCycle ensureCurrentBenefitCycle(AiUserSubscription subscription);
+
+    int processDueSubscriptionLifecycle();
 }

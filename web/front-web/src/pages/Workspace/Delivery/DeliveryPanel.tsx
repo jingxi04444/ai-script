@@ -10,7 +10,7 @@ import type { AbTest, AnalyticsMetric, MonitorLink } from '../../../types/analyt
 import type { ComplianceCheckResult } from '../../../types/compliance';
 import type { ExportJob } from '../../../types/generation';
 import type { Notification } from '../../../types/notification';
-import type { Quota, Wallet } from '../../../types/payment';
+import type { Quota } from '../../../types/payment';
 import './delivery-panel.css';
 
 interface DeliveryPanelProps {
@@ -27,7 +27,6 @@ const DeliveryPanel = ({ projectId, ensureProjectId }: DeliveryPanelProps) => {
   const [metrics, setMetrics] = useState<AnalyticsMetric[]>([]);
   const [abTests, setAbTests] = useState<AbTest[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [wallet, setWallet] = useState<Wallet | null>(null);
   const [quotas, setQuotas] = useState<Quota[]>([]);
   const [monitorUrl, setMonitorUrl] = useState('');
   const [abTestName, setAbTestName] = useState('');
@@ -37,13 +36,12 @@ const DeliveryPanel = ({ projectId, ensureProjectId }: DeliveryPanelProps) => {
 
   const loadDelivery = useCallback(async () => {
     try {
-      const [exportPage, linkPage, metricPage, testPage, notificationPage, walletInfo, quotaList] = await Promise.all([
+      const [exportPage, linkPage, metricPage, testPage, notificationPage, quotaList] = await Promise.all([
         generationApi.exports({ projectId: projectId || undefined, page: 1, pageSize: 8 }),
         analyticsApi.monitorLinks({ projectId: projectId || undefined, page: 1, pageSize: 8 }),
         analyticsApi.metrics({ projectId: projectId || undefined, page: 1, pageSize: 8 }),
         analyticsApi.abTests({ projectId: projectId || undefined, page: 1, pageSize: 8 }),
         notificationApi.list({ page: 1, pageSize: 8 }),
-        paymentApi.wallet().catch(() => null),
         paymentApi.quotas().catch(() => []),
       ]);
       setExports(exportPage.list || []);
@@ -51,7 +49,6 @@ const DeliveryPanel = ({ projectId, ensureProjectId }: DeliveryPanelProps) => {
       setMetrics(metricPage.list || []);
       setAbTests(testPage.list || []);
       setNotifications(notificationPage.list || []);
-      setWallet(walletInfo);
       setQuotas(quotaList);
     } catch {
       message.error('预览与投放数据加载失败');
@@ -219,11 +216,7 @@ const DeliveryPanel = ({ projectId, ensureProjectId }: DeliveryPanelProps) => {
         </section>
 
         <section className="delivery-card">
-          <h3>会员钱包额度</h3>
-          <div className="wallet-card">
-            <strong>{wallet ? wallet.balance.toFixed(2) : '--'}</strong>
-            <span>可用余额</span>
-          </div>
+          <h3>配额</h3>
           <div className="simple-list">
             {quotas.map((item) => (
               <article key={item.id}>

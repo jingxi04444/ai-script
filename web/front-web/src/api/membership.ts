@@ -20,6 +20,8 @@ export const membershipApi = {
     api.post('/membership/subscription/downgrade/revoke'),
   cancelRenewal: (): Promise<UserMembership> =>
     api.post('/membership/subscription/cancel-renewal'),
+  cancelAutoRenew: (): Promise<UserMembership> =>
+    api.post('/membership/auto-renew/cancel'),
   points: (): Promise<PointAccount> => api.get('/membership/points'),
   pointTransactions: (params?: PaginationParams): Promise<PaginatedResponse<PointTransaction>> =>
     api.get('/membership/points/transactions', { params }),

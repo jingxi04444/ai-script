@@ -14,4 +14,5 @@ public class PayCreateRequest {
     private String description;
     private String notifyUrl;
     private String returnUrl;
+    private String contractId;
 }

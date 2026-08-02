@@ -9,6 +9,10 @@ public interface MembershipEntitlementService {
 
     long getLimit(Integer tenantId, Integer userId, String benefitCode);
 
+    long getPointCost(Integer tenantId, Integer userId, String operationCode);
+
+    void clearEntitlementCache(Integer tenantId, Integer userId);
+
     void requireFeature(Integer tenantId, Integer userId, String benefitCode);
 
     QuotaReservationVO reserveQuota(

@@ -18,6 +18,7 @@ import com.aiscript.modules.membership.vo.MembershipPlanCatalogRow;
 import com.aiscript.modules.membership.vo.MembershipPlanSkuVO;
 import com.aiscript.modules.membership.vo.MembershipPlanVO;
 import com.aiscript.modules.membership.vo.UserMembershipVO;
+import com.aiscript.modules.payment.service.PaymentService;
 import com.aiscript.security.LoginUser;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
@@ -28,6 +29,8 @@ import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -43,6 +46,8 @@ public class MembershipServiceImpl implements MembershipService {
     private final AiSubscriptionChangeRecordMapper changeMapper;
     private final AiMembershipBenefitCycleMapper cycleMapper;
     private final ObjectMapper objectMapper;
+    private final ObjectProvider<PaymentService> paymentServiceProvider;
+    private final StringRedisTemplate redisTemplate;
 
     public MembershipServiceImpl(
         AiMembershipPlanMapper planMapper,
@@ -50,7 +55,9 @@ public class MembershipServiceImpl implements MembershipService {
         AiUserSubscriptionMapper subscriptionMapper,
         AiSubscriptionChangeRecordMapper changeMapper,
         AiMembershipBenefitCycleMapper cycleMapper,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        ObjectProvider<PaymentService> paymentServiceProvider,
+        StringRedisTemplate redisTemplate
     ) {
         this.planMapper = planMapper;
         this.skuMapper = skuMapper;
@@ -58,6 +65,8 @@ public class MembershipServiceImpl implements MembershipService {
         this.changeMapper = changeMapper;
         this.cycleMapper = cycleMapper;
         this.objectMapper = objectMapper;
+        this.paymentServiceProvider = paymentServiceProvider;
+        this.redisTemplate = redisTemplate;
     }
 
     @Override
@@ -104,6 +113,7 @@ public class MembershipServiceImpl implements MembershipService {
                 || !existing.getPendingEffectiveTime().isAfter(now))) {
             applyScheduledChange(existing, now);
             ensureCurrentCycle(existing, now);
+            clearEntitlementCache(existing);
             return existing;
         }
         if (existing != null) {
@@ -114,6 +124,7 @@ public class MembershipServiceImpl implements MembershipService {
             subscriptionMapper.update(null, new LambdaUpdateWrapper<AiUserSubscription>()
                 .eq(AiUserSubscription::getId, existing.getId())
                 .set(AiUserSubscription::getNextRenewTime, null));
+            clearEntitlementCache(existing);
         }
 
         AiMembershipPlan freePlan = planMapper.selectOne(new LambdaQueryWrapper<AiMembershipPlan>()
@@ -167,6 +178,117 @@ public class MembershipServiceImpl implements MembershipService {
     @Transactional(rollbackFor = Exception.class)
     public AiMembershipBenefitCycle ensureCurrentBenefitCycle(AiUserSubscription subscription) {
         return ensureCurrentCycle(subscription, LocalDateTime.now());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public int processDueSubscriptionLifecycle() {
+        LocalDateTime now = LocalDateTime.now();
+        List<AiUserSubscription> due = subscriptionMapper.selectList(new LambdaQueryWrapper<AiUserSubscription>()
+            .in(AiUserSubscription::getStatus, "active", "canceling", "past_due")
+            .and(wrapper -> wrapper
+                .le(AiUserSubscription::getPendingEffectiveTime, now)
+                .or().le(AiUserSubscription::getCurrentPeriodEnd, now)
+                .or().le(AiUserSubscription::getNextRenewTime, now))
+            .last("LIMIT 200"));
+        int processed = 0;
+        for (AiUserSubscription subscription : due) {
+            AiUserSubscription locked = subscriptionMapper.selectActiveByUserForUpdate(subscription.getUserId());
+            if (locked == null || !subscription.getId().equals(locked.getId())) {
+                continue;
+            }
+            boolean changed = false;
+            if (locked.getPendingPlanId() != null && locked.getPendingSkuId() != null
+                && (locked.getPendingEffectiveTime() == null || !locked.getPendingEffectiveTime().isAfter(now))) {
+                applyScheduledChange(locked, now);
+                ensureCurrentCycle(locked, now);
+                clearEntitlementCache(locked);
+                changed = true;
+            } else if (locked.getAutoRenew() != null && locked.getAutoRenew() == 1
+                && locked.getNextRenewTime() != null && !locked.getNextRenewTime().isAfter(now)) {
+                String idempotencyKey = "subscription_renewal:" + locked.getId() + ":" + locked.getNextRenewTime();
+                try {
+                    paymentServiceProvider.getObject().renewMembershipSubscription(
+                        locked.getTenantId() == null ? null : Math.toIntExact(locked.getTenantId()),
+                        Math.toIntExact(locked.getUserId()), locked.getId(), locked.getSkuId(),
+                        locked.getNextRenewTime(), idempotencyKey
+                    );
+                } catch (BusinessException exception) {
+                    LocalDateTime graceEnd = (locked.getCurrentPeriodEnd() == null ? now : locked.getCurrentPeriodEnd()).plusHours(72);
+                    subscriptionMapper.update(null, new LambdaUpdateWrapper<AiUserSubscription>()
+                        .eq(AiUserSubscription::getId, locked.getId())
+                        .set(AiUserSubscription::getStatus, "past_due")
+                        .set(AiUserSubscription::getNextRenewTime, null)
+                        .set(AiUserSubscription::getGraceEndTime, graceEnd));
+                    clearEntitlementCache(locked);
+                }
+                changed = true;
+            } else if (!"past_due".equals(locked.getStatus())
+                && locked.getCurrentPeriodEnd() != null && !locked.getCurrentPeriodEnd().isAfter(now)) {
+                locked.setStatus("expired");
+                locked.setAutoRenew(0);
+                locked.setNextRenewTime(null);
+                subscriptionMapper.updateById(locked);
+                subscriptionMapper.update(null, new LambdaUpdateWrapper<AiUserSubscription>()
+                    .eq(AiUserSubscription::getId, locked.getId())
+                    .set(AiUserSubscription::getNextRenewTime, null));
+                createFreeSubscriptionIfAbsent(
+                    locked.getTenantId() == null ? null : Math.toIntExact(locked.getTenantId()),
+                    Math.toIntExact(locked.getUserId()),
+                    now
+                );
+                clearEntitlementCache(locked);
+                changed = true;
+            }
+            if (changed) {
+                processed++;
+            }
+        }
+        return processed;
+    }
+
+    private AiUserSubscription createFreeSubscriptionIfAbsent(Integer tenantId, Integer userId, LocalDateTime now) {
+        AiUserSubscription active = findActiveSubscription(userId.longValue());
+        if (active != null && active.getCurrentPeriodEnd() != null && active.getCurrentPeriodEnd().isAfter(now)) {
+            return active;
+        }
+        AiMembershipPlan freePlan = planMapper.selectOne(new LambdaQueryWrapper<AiMembershipPlan>()
+            .eq(AiMembershipPlan::getPlanCode, "free")
+            .eq(AiMembershipPlan::getStatus, 1)
+            .last("LIMIT 1"));
+        if (freePlan == null) {
+            throw new BusinessException("免费会员套餐未配置");
+        }
+        AiMembershipPlanSku freeSku = skuMapper.selectOne(new LambdaQueryWrapper<AiMembershipPlanSku>()
+            .eq(AiMembershipPlanSku::getPlanId, freePlan.getId())
+            .eq(AiMembershipPlanSku::getSkuCode, "free_default")
+            .eq(AiMembershipPlanSku::getStatus, 1)
+            .last("LIMIT 1"));
+        AiUserSubscription free = new AiUserSubscription();
+        free.setTenantId(tenantId == null ? null : tenantId.longValue());
+        free.setUserId(userId.longValue());
+        free.setPlanId(freePlan.getId().longValue());
+        free.setSkuId(freeSku == null ? null : freeSku.getId());
+        free.setStatus("active");
+        free.setAutoRenew(0);
+        free.setStartTime(now);
+        free.setCurrentPeriodStart(now);
+        free.setCurrentPeriodEnd(FREE_SUBSCRIPTION_END);
+        free.setBenefitAnchorTime(now);
+        free.setCancelAtPeriodEnd(0);
+        free.setPlanSnapshotJson(planSnapshot(freePlan.getId().longValue()));
+        free.setVersion(0);
+        try {
+            subscriptionMapper.insert(free);
+        } catch (DuplicateKeyException duplicate) {
+            AiUserSubscription concurrent = findActiveSubscription(userId.longValue());
+            if (concurrent == null) {
+                throw duplicate;
+            }
+            return concurrent;
+        }
+        ensureCurrentCycle(free, now);
+        return free;
     }
 
     private AiMembershipBenefitCycle ensureCurrentCycle(AiUserSubscription subscription, LocalDateTime now) {
@@ -366,6 +488,16 @@ public class MembershipServiceImpl implements MembershipService {
 
     private String format(LocalDateTime time) {
         return time == null ? null : time.toString();
+    }
+
+    private void clearEntitlementCache(AiUserSubscription subscription) {
+        if (subscription == null || subscription.getUserId() == null) {
+            return;
+        }
+        String key = "membership:entitlement:"
+            + (subscription.getTenantId() == null ? "default" : Math.toIntExact(subscription.getTenantId()))
+            + ":" + Math.toIntExact(subscription.getUserId());
+        redisTemplate.delete(key);
     }
 
     private LoginUser currentLoginUser() {

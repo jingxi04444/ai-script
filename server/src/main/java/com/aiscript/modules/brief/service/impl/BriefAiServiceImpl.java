@@ -59,8 +59,8 @@ public class BriefAiServiceImpl implements BriefAiService {
         entitlementService.requireFeature(
             user.getTenantId(), user.getUserId(), "BRIEF_DETECT_ACCESS"
         );
-        long pointCost = entitlementService.getLimit(
-            user.getTenantId(), user.getUserId(), "BRIEF_DETECT_POINT_COST"
+        long pointCost = entitlementService.getPointCost(
+            user.getTenantId(), user.getUserId(), "brief_detect"
         );
         if (pointCost > 0) {
             String requestNo = dto != null && dto.getRequestNo() != null && !dto.getRequestNo().isBlank()

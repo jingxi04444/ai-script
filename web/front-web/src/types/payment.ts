@@ -8,6 +8,16 @@ export interface PaymentParams {
   rawPayload?: string;
 }
 
+export interface MemberOrderParams {
+  skuId: string;
+  payMethod: string;
+  idempotencyKey: string;
+  /** @deprecated auto renew is derived from the selected SKU billingMode. */
+  autoRenew?: boolean;
+  openid?: string;
+  contractChannel?: 'jsapi' | 'h5' | 'app' | 'mini-program';
+}
+
 export interface PaymentOrder {
   id: string;
   orderNo: string;
@@ -24,6 +34,10 @@ export interface PaymentOrder {
   fulfillStatus?: string;
   fulfillError?: string;
   qrContent?: string;
+  contractCode?: string;
+  preEntrustwebId?: string;
+  contractRedirectUrl?: string;
+  contractFormHtml?: string;
   expireTime?: string;
   payTime?: string;
   createdAt?: string;
@@ -39,27 +53,40 @@ export interface PaymentOrderListParams {
   pageSize?: number;
   keyword?: string;
   status?: string;
+  orderType?: string;
 }
 
-export interface Wallet {
+export interface RefundRequestParams {
+  orderNo: string;
+  reason?: string;
+}
+
+export interface RefundOrderListParams {
+  page?: number;
+  pageSize?: number;
+  keyword?: string;
+  status?: string;
+}
+
+export interface RefundOrder {
   id: string;
+  refundNo: string;
+  paymentOrderId: string;
+  paymentOrderNo: string;
+  subscriptionId?: string;
   userId: string;
-  balance: number;
-  frozenBalance: number;
-  updatedAt?: string;
-}
-
-export interface WalletTransaction {
-  id: string;
-  walletId?: string;
-  userId?: string;
-  transactionType?: string;
-  amount?: number;
-  balanceAfter?: number;
-  bizType?: string;
-  bizId?: string;
-  remark?: string;
-  createdAt?: string;
+  refundAmount: number;
+  refundReason?: string;
+  provider?: string;
+  providerRefundNo?: string;
+  providerStatus?: string;
+  status: string;
+  reviewBy?: string;
+  reviewTime?: string;
+  reviewRemark?: string;
+  requestedTime?: string;
+  completedTime?: string;
+  failureReason?: string;
 }
 
 export interface Quota {

@@ -14,31 +14,43 @@ import com.aiscript.modules.membership.service.MembershipService;
 import com.aiscript.modules.membership.vo.MembershipEntitlementRow;
 import com.aiscript.modules.membership.vo.QuotaReservationVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
+import java.time.Duration;
 
 @Service
 public class MembershipEntitlementServiceImpl implements MembershipEntitlementService {
     private static final long UNLIMITED = -1L;
+    private static final Duration ENTITLEMENT_CACHE_TTL = Duration.ofMinutes(10);
+    private static final TypeReference<List<MembershipEntitlementRow>> ENTITLEMENT_ROWS_TYPE = new TypeReference<>() { };
 
     private final MembershipService membershipService;
     private final AiMembershipPlanBenefitMapper planBenefitMapper;
     private final AiUserBenefitUsageMapper usageMapper;
     private final AiBenefitUsageTransactionMapper usageTransactionMapper;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
     public MembershipEntitlementServiceImpl(
         MembershipService membershipService,
         AiMembershipPlanBenefitMapper planBenefitMapper,
         AiUserBenefitUsageMapper usageMapper,
-        AiBenefitUsageTransactionMapper usageTransactionMapper
+        AiBenefitUsageTransactionMapper usageTransactionMapper,
+        StringRedisTemplate redisTemplate,
+        ObjectMapper objectMapper
     ) {
         this.membershipService = membershipService;
         this.planBenefitMapper = planBenefitMapper;
         this.usageMapper = usageMapper;
         this.usageTransactionMapper = usageTransactionMapper;
+        this.redisTemplate = redisTemplate;
+        this.objectMapper = objectMapper;
     }
 
     @Override
@@ -59,6 +71,19 @@ public class MembershipEntitlementServiceImpl implements MembershipEntitlementSe
             return 0L;
         }
         return parseLimit(row.getBenefitValue(), benefitCode);
+    }
+
+    @Override
+    public long getPointCost(Integer tenantId, Integer userId, String operationCode) {
+        return getLimit(tenantId, userId, pointCostBenefitCode(operationCode));
+    }
+
+    @Override
+    public void clearEntitlementCache(Integer tenantId, Integer userId) {
+        if (userId == null) {
+            return;
+        }
+        redisTemplate.delete(cacheKey(tenantId, userId));
     }
 
     @Override
@@ -195,7 +220,19 @@ public class MembershipEntitlementServiceImpl implements MembershipEntitlementSe
             throw new BusinessException("权益查询参数不完整");
         }
         AiUserSubscription subscription = membershipService.ensureActiveSubscription(tenantId, userId);
-        return findEntitlement(subscription.getPlanId(), benefitCode);
+        return findUserEntitlement(tenantId, userId, subscription.getPlanId(), benefitCode);
+    }
+
+    private String pointCostBenefitCode(String operationCode) {
+        if (!StringUtils.hasText(operationCode)) {
+            throw new BusinessException("积分消耗操作编码不能为空");
+        }
+        return switch (operationCode) {
+            case "brief_detect", "BRIEF_DETECT_POINT_COST" -> "BRIEF_DETECT_POINT_COST";
+            case "viral_simple", "VIRAL_SIMPLE_POINT_COST" -> "VIRAL_SIMPLE_POINT_COST";
+            case "viral_deep", "VIRAL_DEEP_POINT_COST" -> "VIRAL_DEEP_POINT_COST";
+            default -> throw new BusinessException("积分消耗操作未配置：" + operationCode);
+        };
     }
 
     private MembershipEntitlementRow findEntitlement(Long planId, String benefitCode) {
@@ -204,6 +241,36 @@ public class MembershipEntitlementServiceImpl implements MembershipEntitlementSe
             .filter(row -> benefitCode.equals(row.getBenefitCode()))
             .findFirst()
             .orElseThrow(() -> new BusinessException("会员权益未配置：" + benefitCode));
+    }
+
+    private MembershipEntitlementRow findUserEntitlement(Integer tenantId, Integer userId, Long planId, String benefitCode) {
+        return getCachedEntitlements(tenantId, userId, planId).stream()
+            .filter(row -> benefitCode.equals(row.getBenefitCode()))
+            .findFirst()
+            .orElseThrow(() -> new BusinessException("会员权益未配置：" + benefitCode));
+    }
+
+    private List<MembershipEntitlementRow> getCachedEntitlements(Integer tenantId, Integer userId, Long planId) {
+        String key = cacheKey(tenantId, userId);
+        String cached = redisTemplate.opsForValue().get(key);
+        if (StringUtils.hasText(cached)) {
+            try {
+                return objectMapper.readValue(cached, ENTITLEMENT_ROWS_TYPE);
+            } catch (Exception ignored) {
+                redisTemplate.delete(key);
+            }
+        }
+        List<MembershipEntitlementRow> rows = planBenefitMapper.selectActiveEntitlements(planId);
+        try {
+            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(rows), ENTITLEMENT_CACHE_TTL);
+        } catch (Exception ignored) {
+            // Cache failures must not block entitlement checks.
+        }
+        return rows;
+    }
+
+    private String cacheKey(Integer tenantId, Integer userId) {
+        return "membership:entitlement:" + (tenantId == null ? "default" : tenantId) + ":" + userId;
     }
 
     private AiUserBenefitUsage ensureUsage(

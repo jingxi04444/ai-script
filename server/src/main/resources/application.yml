@@ -1,60 +1,104 @@
-server:
-  port: 8080
+# ============================================================
+# AI Script 服务端主配置文件
+# 作用：定义 Spring Boot 应用的基础行为、持久层、接口文档、监控、支付、短信等公共配置
+# 环境切换：通过 spring.profiles.active 指定 dev / prod，具体环境参数在对应文件中覆盖
+# ============================================================
 
+# 服务端口配置
+server:
+  port: 8080  # 应用监听端口，本地访问 http://localhost:8080
+
+# Spring 应用基础配置
 spring:
   application:
-    name: ai-script-server
+    name: ai-script-server  # 应用名称，用于日志、监控、服务注册等
   profiles:
-    active: prod
+    active: prod  # 默认激活的环境：prod=生产，dev=本地开发；启动时可用 --spring.profiles.active=dev 覆盖
   servlet:
     multipart:
-      max-file-size: 120MB
-      max-request-size: 150MB
+      max-file-size: 120MB   # 单个上传文件最大限制
+      max-request-size: 150MB  # 单次请求（含多个文件）最大限制
 
+# MyBatis-Plus 持久层配置
 mybatis-plus:
-  mapper-locations: classpath*:/mapper/**/*.xml
-  type-aliases-package: com.aiscript.modules.*.entity
+  mapper-locations: classpath*:/mapper/**/*.xml  # Mapper XML 文件扫描路径
+  type-aliases-package: com.aiscript.modules.*.entity  # 实体类包路径，用于 XML 中简化类型名
   global-config:
     db-config:
-      id-type: auto
-      logic-delete-field: deleted
-      logic-delete-value: 1
-      logic-not-delete-value: 0
+      id-type: auto  # 主键生成策略：auto 表示使用数据库自增或雪花算法
+      logic-delete-field: deleted  # 逻辑删除字段名
+      logic-delete-value: 1  # 已删除标记值
+      logic-not-delete-value: 0  # 未删除标记值
   configuration:
-    map-underscore-to-camel-case: true
-    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+    map-underscore-to-camel-case: true  # 自动将数据库下划线命名映射为 Java 驼峰命名
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl  # SQL 日志输出到 slf4j
 
+# Knife4j / OpenAPI 接口文档配置
 springdoc:
   api-docs:
-    enabled: true
+    enabled: true  # 是否启用 /v3/api-docs 接口文档 JSON
   swagger-ui:
-    enabled: true
+    enabled: true  # 是否启用 Swagger UI 页面（开发/测试常用）
 
+# Spring Boot Actuator 监控端点
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info  # 对外暴露健康检查和基本信息接口
 
+# ============================================================
+# 支付模块配置（会员购买、自动续费）
+# ============================================================
 payment:
-  enabled: ${PAYMENT_ENABLED:false}
-  dev-mode: ${PAYMENT_DEV_MODE:false}
-  base-notify-url: ${PAYMENT_BASE_NOTIFY_URL:http://localhost:8080}
-  front-return-url: ${PAYMENT_FRONT_RETURN_URL:http://localhost:5173/payment/result}
+  enabled: ${PAYMENT_ENABLED:false}  # 总开关：是否启用支付功能
+  dev-mode: ${PAYMENT_DEV_MODE:false}  # 开发模式开关（true 时可能绕过真实支付调用，仅用于本地调试）
+  base-notify-url: ${PAYMENT_BASE_NOTIFY_URL:http://localhost:8080}  # 支付回调通知基础 URL，回调地址 = 该值 + 固定路径
+  front-return-url: ${PAYMENT_FRONT_RETURN_URL:http://localhost:5173/payment/result}  # 支付完成后前端跳转页面
+
+  # 微信支付配置（APIv3）
   wechat:
-    enabled: ${PAYMENT_WECHAT_ENABLED:false}
-    app-id: ${WECHAT_PAY_APP_ID:}
-    mch-id: ${WECHAT_PAY_MCH_ID:}
-    api-v3-key: ${WECHAT_PAY_API_V3_KEY:}
-    private-key-path: ${WECHAT_PAY_PRIVATE_KEY_PATH:}
-    mch-serial-no: ${WECHAT_PAY_MCH_SERIAL_NO:}
-    notify-url: ${WECHAT_PAY_NOTIFY_URL:}
+    enabled: ${PAYMENT_WECHAT_ENABLED:false}  # 微信支付总开关
+    app-id: ${WECHAT_PAY_APP_ID:}  # 微信支付 AppID（公众号/小程序/移动应用）
+    mch-id: ${WECHAT_PAY_MCH_ID:}  # 微信支付商户号
+    api-v3-key: ${WECHAT_PAY_API_V3_KEY:}  # 微信支付 APIv3 密钥（用于回调通知解密）
+    private-key-path: ${WECHAT_PAY_PRIVATE_KEY_PATH:}  # 商户 API 证书私钥文件路径（PEM 格式）
+    mch-serial-no: ${WECHAT_PAY_MCH_SERIAL_NO:}  # 商户 API 证书序列号
+    notify-url: ${WECHAT_PAY_NOTIFY_URL:}  # 微信支付结果回调通知地址
+
+    auto-deduct:
+      enabled: ${WECHAT_PAY_AUTO_DEDUCT_ENABLED:false}  # 微信自动续费开关
+      plan-id: ${WECHAT_PAY_AUTO_DEDUCT_PLAN_ID:}  # 微信自动续费协议模板 ID
+      contract-notify-url: ${WECHAT_PAY_CONTRACT_NOTIFY_URL:}  # 签约成功回调地址
+      deduct-notify-url: ${WECHAT_PAY_DEDUCT_NOTIFY_URL:}  # 周期扣款回调地址
+
+  # 支付宝支付配置
   alipay:
-    enabled: ${PAYMENT_ALIPAY_ENABLED:false}
-    app-id: ${ALIPAY_APP_ID:}
-    merchant-private-key: ${ALIPAY_MERCHANT_PRIVATE_KEY:}
-    alipay-public-key: ${ALIPAY_PUBLIC_KEY:}
-    notify-url: ${ALIPAY_NOTIFY_URL:}
-    server-url: ${ALIPAY_SERVER_URL:https://openapi.alipay.com/gateway.do}
-    sign-type: ${ALIPAY_SIGN_TYPE:RSA2}
-    seller-id: ${ALIPAY_SELLER_ID:}
+    enabled: ${PAYMENT_ALIPAY_ENABLED:false}  # 支付宝支付总开关
+    app-id: ${ALIPAY_APP_ID:}  # 支付宝开放平台应用 AppID
+    merchant-private-key: ${ALIPAY_MERCHANT_PRIVATE_KEY:}  # 支付宝应用私钥
+    alipay-public-key: ${ALIPAY_PUBLIC_KEY:}  # 支付宝公钥
+    notify-url: ${ALIPAY_NOTIFY_URL:}  # 支付宝回调通知地址
+    server-url: ${ALIPAY_SERVER_URL:https://openapi.alipay.com/gateway.do}  # 支付宝网关
+                                              # 沙箱环境请改为：https://openapi-sandbox.dl.alipaydev.com/gateway.do
+    sign-type: ${ALIPAY_SIGN_TYPE:RSA2}  # 支付宝签名算法
+    seller-id: ${ALIPAY_SELLER_ID:}  # 支付宝卖家/收款账号 ID
+    auto-deduct:
+      enabled: ${ALIPAY_AUTO_DEDUCT_ENABLED:false}  # 支付宝自动续费开关
+      product-code: ${ALIPAY_AUTO_DEDUCT_PRODUCT_CODE:GENERAL_WITHHOLDING}  # 支付宝代扣产品码
+      sign-scene: ${ALIPAY_AUTO_DEDUCT_SIGN_SCENE:}  # 支付宝签约场景码
+      contract-notify-url: ${ALIPAY_CONTRACT_NOTIFY_URL:}  # 签约回调地址
+      deduct-notify-url: ${ALIPAY_DEDUCT_NOTIFY_URL:}  # 扣款回调地址
+
+# ============================================================
+# 阿里云短信服务配置（登录/注册验证码）
+# ============================================================
+sms:
+  enabled: ${SMS_ENABLED:false}  # 短信服务总开关
+  provider: ${SMS_PROVIDER:aliyun}  # 短信服务商，当前仅支持 aliyun
+  endpoint: ${SMS_ENDPOINT:https://dysmsapi.aliyuncs.com/}  # 阿里云短信服务接入地址
+  access-key-id: ${SMS_ACCESS_KEY_ID:}  # 阿里云 RAM 账号 AccessKey ID
+  access-key-secret: ${SMS_ACCESS_KEY_SECRET:}  # 阿里云 RAM 账号 AccessKey Secret
+  sign-name: ${SMS_SIGN_NAME:}  # 短信签名（阿里云控制台申请）
+  template-code: ${SMS_TEMPLATE_CODE:}  # 短信模板 CODE（阿里云控制台申请）
+  region-id: ${SMS_REGION_ID:cn-hangzhou}  # 阿里云 Region

@@ -47,6 +47,10 @@ public class SecurityConfig {
                     "/v3/api-docs/**",
                     "/actuator/health",
                     "/api/payments/notify/wechat/native",
+                    "/api/payments/notify/wechat/contract",
+                    "/api/payments/notify/wechat/deduct",
+                    "/api/payments/notify/alipay/contract",
+                    "/api/payments/notify/alipay/deduct",
                     "/api/payments/notify/alipay/scan"
                 ).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/site-config").permitAll()

@@ -8,7 +8,6 @@ const mockUser: UserInfo = {
   phone: '13800138000',
   avatar: '',
   memberLevel: 1,
-  balance: 100,
 };
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));

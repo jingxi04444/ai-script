@@ -26,7 +26,6 @@ import com.aiscript.security.LoginUser;
 import com.aiscript.security.PermissionService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -160,7 +159,6 @@ public class AuthServiceImpl implements AuthService {
         user.setPhone(dto.getPhone());
         user.setUserType("front");
         user.setMemberLevel(0);
-        user.setBalance(BigDecimal.ZERO);
         user.setStatus(1);
         sysUserMapper.insert(user);
         membershipService.ensureFreeSubscription(user.getTenantId(), user.getId());
@@ -181,7 +179,6 @@ public class AuthServiceImpl implements AuthService {
             user.setPhone(dto.getPhone());
             user.setUserType("front");
             user.setMemberLevel(0);
-            user.setBalance(BigDecimal.ZERO);
             user.setStatus(1);
             sysUserMapper.insert(user);
             membershipService.ensureFreeSubscription(user.getTenantId(), user.getId());
@@ -319,7 +316,6 @@ public class AuthServiceImpl implements AuthService {
         vo.setPhone(user.getPhone());
         vo.setAvatar(user.getAvatarUrl());
         vo.setMemberLevel(user.getMemberLevel());
-        vo.setBalance(user.getBalance() == null ? BigDecimal.ZERO : user.getBalance());
         List<String> roles = permissionService.loadRoleCodes(user.getId());
         vo.setRole("admin".equals(user.getUserType()) ? primaryAdminRole(roles) : (roles.isEmpty() ? "user" : roles.get(0)));
         vo.setRoles(roles);

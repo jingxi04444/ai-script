@@ -9,5 +9,6 @@ public class ExportJobVO {
     public String fileName;
     public String assetId;
     public String status;
+    public Boolean removeWatermark;
     public String createdAt;
 }

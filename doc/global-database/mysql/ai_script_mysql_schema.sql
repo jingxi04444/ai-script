@@ -54,7 +54,6 @@ CREATE TABLE sys_user (
   avatar_url VARCHAR(500) DEFAULT NULL COMMENT '头像',
   user_type VARCHAR(32) NOT NULL DEFAULT 'front' COMMENT '用户类型：front/admin',
   member_level INT NOT NULL DEFAULT 0 COMMENT '会员等级',
-  balance DECIMAL(14,2) NOT NULL DEFAULT 0.00 COMMENT '冗余余额，正式余额以钱包表为准',
   status TINYINT NOT NULL DEFAULT 1 COMMENT '状态：0禁用 1启用',
   last_login_time DATETIME DEFAULT NULL COMMENT '最近登录时间',
   create_by INT DEFAULT NULL COMMENT '创建人',
@@ -1118,41 +1117,6 @@ CREATE TABLE ai_user_membership (
   UNIQUE KEY uk_ai_user_membership_source_order (source_order_no)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户会员表';
 
-DROP TABLE IF EXISTS ai_wallet_account;
-CREATE TABLE ai_wallet_account (
-  id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  tenant_id INT DEFAULT NULL COMMENT '租户ID',
-  user_id INT NOT NULL COMMENT '用户ID',
-  balance DECIMAL(14,2) NOT NULL DEFAULT 0.00 COMMENT '可用余额',
-  frozen_balance DECIMAL(14,2) NOT NULL DEFAULT 0.00 COMMENT '冻结余额',
-  version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本',
-  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
-  PRIMARY KEY (id),
-  UNIQUE KEY uk_ai_wallet_user (user_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='钱包账户表';
-
-DROP TABLE IF EXISTS ai_wallet_transaction;
-CREATE TABLE ai_wallet_transaction (
-  id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
-  tenant_id INT DEFAULT NULL COMMENT '租户ID',
-  wallet_id INT NOT NULL COMMENT '钱包ID',
-  user_id INT NOT NULL COMMENT '用户ID',
-  transaction_type VARCHAR(40) NOT NULL COMMENT '类型：recharge/consume/refund/freeze/unfreeze',
-  amount DECIMAL(14,2) NOT NULL COMMENT '变动金额',
-  balance_after DECIMAL(14,2) NOT NULL COMMENT '变动后余额',
-  biz_type VARCHAR(60) DEFAULT NULL COMMENT '业务类型',
-  biz_id INT DEFAULT NULL COMMENT '业务ID',
-  order_no VARCHAR(80) DEFAULT NULL COMMENT '支付订单号',
-  request_no VARCHAR(100) DEFAULT NULL COMMENT '幂等请求号',
-  remark VARCHAR(500) DEFAULT NULL COMMENT '备注',
-  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-  PRIMARY KEY (id),
-  KEY idx_ai_wallet_transaction_user (user_id, create_time),
-  KEY idx_ai_wallet_transaction_biz (biz_type, biz_id),
-  UNIQUE KEY uk_ai_wallet_tx_order_type (order_no, transaction_type)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='钱包流水表';
-
 DROP TABLE IF EXISTS ai_payment_order;
 CREATE TABLE ai_payment_order (
   id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
@@ -1162,7 +1126,7 @@ CREATE TABLE ai_payment_order (
   idempotency_key VARCHAR(100) DEFAULT NULL COMMENT '下单幂等键',
   order_type VARCHAR(40) NOT NULL COMMENT '订单类型：recharge/member',
   order_scene VARCHAR(30) DEFAULT NULL COMMENT '订单场景',
-  pay_method VARCHAR(40) NOT NULL COMMENT '支付方式：wechat/alipay/balance',
+  pay_method VARCHAR(40) NOT NULL COMMENT '支付方式：wechat/alipay',
   provider VARCHAR(40) DEFAULT NULL COMMENT '支付渠道',
   trade_type VARCHAR(40) DEFAULT NULL COMMENT '交易类型',
   plan_id INT DEFAULT NULL COMMENT '会员套餐ID',

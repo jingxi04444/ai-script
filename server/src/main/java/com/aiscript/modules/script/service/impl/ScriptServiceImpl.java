@@ -345,8 +345,10 @@ public class ScriptServiceImpl implements ScriptService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ScriptTemplateVO createTemplate(TemplateSaveDTO dto) {
+        enforceCustomTemplateLimit(dto);
         AiScriptTemplate template = new AiScriptTemplate();
         fillTemplate(template, dto);
+        template.setTenantId(currentTenantId());
         template.setAuditStatus("draft");
         template.setPublishStatus("offline");
         template.setStatus(0);
@@ -539,11 +541,15 @@ public class ScriptServiceImpl implements ScriptService {
     }
 
     private Integer currentUserId() {
+        return currentUser().getUserId();
+    }
+
+    private LoginUser currentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !(authentication.getPrincipal() instanceof LoginUser loginUser)) {
             throw new BusinessException("请先登录");
         }
-        return loginUser.getUserId();
+        return loginUser;
     }
 
     private String buildScriptContentContext(GenerateScriptDTO dto, String productInfo, String templateText, String userPrompt, ScriptFormatInfo formatInfo) {
@@ -773,5 +779,26 @@ public class ScriptServiceImpl implements ScriptService {
         if (dto.getLocked() != null || template.getLocked() == null) {
             template.setLocked(Boolean.TRUE.equals(dto.getLocked()) ? 1 : 0);
         }
+    }
+
+    private void enforceCustomTemplateLimit(TemplateSaveDTO dto) {
+        LoginUser user = currentUser();
+        if ("admin".equals(user.getUserType()) && isPlatformTemplate(dto)) {
+            return;
+        }
+        long limit = entitlementService.getLimit(currentTenantId(), currentUserId(), "CUSTOM_TEMPLATE_LIMIT");
+        if (limit < 0) {
+            return;
+        }
+        Long existing = templateMapper.selectCount(new LambdaQueryWrapper<AiScriptTemplate>()
+            .eq(AiScriptTemplate::getTenantId, currentTenantId())
+            .eq(AiScriptTemplate::getCreateBy, currentUserId()));
+        if (existing != null && existing >= limit) {
+            throw new BusinessException("自定义模板保存数量已达当前会员套餐上限");
+        }
+    }
+
+    private boolean isPlatformTemplate(TemplateSaveDTO dto) {
+        return dto == null || !StringUtils.hasText(dto.getTemplateSource()) || "平台模板".equals(dto.getTemplateSource().trim());
     }
 }

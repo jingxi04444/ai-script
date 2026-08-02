@@ -8,9 +8,8 @@ import com.aiscript.modules.payment.dto.QuotaAdjustDTO;
 import com.aiscript.integration.pay.PayNotifyMessage;
 import com.aiscript.modules.payment.vo.QuotaVO;
 import com.aiscript.modules.payment.vo.PaymentOrderVO;
-import com.aiscript.modules.payment.vo.WalletTransactionVO;
-import com.aiscript.modules.payment.vo.WalletVO;
 import java.util.List;
+import java.time.LocalDateTime;
 
 public interface PaymentService {
     PaymentOrderVO recharge(PaymentOrderDTO dto);
@@ -28,11 +27,19 @@ public interface PaymentService {
     PaymentOrderVO adminGetOrder(String orderNo);
     PaymentOrderVO adminQueryProviderOrder(String orderNo);
     PaymentOrderVO handleProviderNotify(PayNotifyMessage msg);
-    PaymentOrderVO handleBalanceMemberOrder(PaymentOrderDTO dto);
 
-    WalletVO wallet();
+    PaymentOrderVO renewMembershipSubscription(
+        Integer tenantId,
+        Integer userId,
+        Long subscriptionId,
+        Long skuId,
+        LocalDateTime renewalDueTime,
+        String idempotencyKey
+    );
 
-    PageResult<WalletTransactionVO> walletTransactions(com.aiscript.common.pagination.PageQuery query);
+    void handleContractNotify(PayNotifyMessage msg);
+
+    void cancelWechatAutoRenew();
 
     List<QuotaVO> quotas();
 

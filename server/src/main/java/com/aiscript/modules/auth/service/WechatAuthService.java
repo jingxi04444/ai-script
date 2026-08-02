@@ -8,7 +8,6 @@ import com.aiscript.modules.auth.vo.WechatLoginStartVO;
 import com.aiscript.modules.auth.vo.WechatLoginStatusVO;
 import com.aiscript.modules.membership.service.MembershipService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
-import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
@@ -75,7 +74,6 @@ public class WechatAuthService {
             user.setWechatUnionId(unionId);
             user.setUserType("front");
             user.setMemberLevel(0);
-            user.setBalance(BigDecimal.ZERO);
             user.setStatus(1);
             userMapper.insert(user);
             membershipService.ensureFreeSubscription(user.getTenantId(), user.getId());

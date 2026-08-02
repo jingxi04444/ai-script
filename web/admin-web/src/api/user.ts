@@ -7,7 +7,6 @@ export interface User {
   email?: string;
   phone?: string;
   memberLevel?: number | string;
-  balance?: number | string;
   status?: 'active' | 'disabled' | 'enabled';
   createdAt?: string;
   updateTime?: string;

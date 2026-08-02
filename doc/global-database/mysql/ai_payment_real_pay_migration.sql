@@ -30,8 +30,6 @@ ALTER TABLE ai_payment_callback
   ADD COLUMN IF NOT EXISTS error_msg VARCHAR(1000) DEFAULT NULL COMMENT '错误信息' AFTER verified,
   ADD COLUMN IF NOT EXISTS received_time DATETIME DEFAULT NULL COMMENT '接收时间' AFTER error_msg;
 
-ALTER TABLE ai_wallet_account ADD COLUMN IF NOT EXISTS version INT NOT NULL DEFAULT 0 COMMENT '乐观锁版本' AFTER frozen_balance;
-ALTER TABLE ai_wallet_transaction ADD COLUMN IF NOT EXISTS order_no VARCHAR(80) DEFAULT NULL COMMENT '支付订单号' AFTER biz_id, ADD COLUMN IF NOT EXISTS request_no VARCHAR(100) DEFAULT NULL COMMENT '幂等请求号' AFTER order_no;
 ALTER TABLE ai_user_membership ADD COLUMN IF NOT EXISTS source_order_no VARCHAR(80) DEFAULT NULL COMMENT '来源支付订单号' AFTER status, ADD COLUMN IF NOT EXISTS source_pay_method VARCHAR(40) DEFAULT NULL COMMENT '来源支付方式' AFTER source_order_no, ADD COLUMN IF NOT EXISTS plan_snapshot_json JSON DEFAULT NULL COMMENT '套餐快照' AFTER source_pay_method;
 
 -- Required unique indexes (check existence before executing on versions without IF NOT EXISTS):
@@ -40,5 +38,4 @@ ALTER TABLE ai_payment_order ADD UNIQUE KEY uk_ai_payment_order_provider_trade (
 -- ALTER TABLE ai_payment_order ADD INDEX idx_ai_payment_order_status_expire (status, expire_time);
 -- ALTER TABLE ai_payment_callback ADD INDEX idx_ai_payment_callback_notify (provider, notify_id);
 ALTER TABLE ai_payment_callback ADD UNIQUE KEY uk_ai_payment_callback_notify (provider, notify_id);
-ALTER TABLE ai_wallet_transaction ADD UNIQUE KEY uk_ai_wallet_tx_order_type (order_no, transaction_type);
 ALTER TABLE ai_user_membership ADD UNIQUE KEY uk_ai_user_membership_source_order (source_order_no);

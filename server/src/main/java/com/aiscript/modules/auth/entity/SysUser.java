@@ -4,7 +4,6 @@ import lombok.Data;
 
 import com.aiscript.common.model.TenantBaseEntity;
 import com.baomidou.mybatisplus.annotation.TableName;
-import java.math.BigDecimal;
 import lombok.EqualsAndHashCode;
 
 @TableName("sys_user")
@@ -21,6 +20,5 @@ public class SysUser extends TenantBaseEntity {
     private String avatarUrl;
     private String userType;
     private Integer memberLevel;
-    private BigDecimal balance;
     private Integer status;
 }

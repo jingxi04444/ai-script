@@ -2,9 +2,7 @@ package com.aiscript.integration.sms;
 
 import com.aiscript.common.exception.BusinessException;
 import com.aiscript.common.util.JsonUtils;
-import com.aiscript.framework.secret.SecretCipherService;
-import com.aiscript.modules.system.entity.SysApiProviderConfig;
-import com.aiscript.modules.system.service.ProviderConfigService;
+import com.aiscript.config.SmsProperties;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -25,38 +23,33 @@ import org.springframework.util.StringUtils;
 
 @Component
 public class AliyunSmsClient implements SmsClient {
-    private static final String DEFAULT_ENDPOINT = "https://dysmsapi.aliyuncs.com/";
-    private final ProviderConfigService providerConfigService;
-    private final SecretCipherService secretCipherService;
+    private final SmsProperties smsProperties;
     private final HttpClient httpClient;
 
-    public AliyunSmsClient(ProviderConfigService providerConfigService, SecretCipherService secretCipherService) {
-        this.providerConfigService = providerConfigService;
-        this.secretCipherService = secretCipherService;
+    public AliyunSmsClient(SmsProperties smsProperties) {
+        this.smsProperties = smsProperties;
         this.httpClient = HttpClient.newHttpClient();
     }
 
     @Override
     public void sendVerificationCode(String phone, String code) {
-        SysApiProviderConfig provider = providerConfigService.firstEnabled("sms");
-        if (provider == null) {
-            throw new BusinessException("未配置短信Provider");
+        if (!smsProperties.isEnabled() || !"aliyun".equalsIgnoreCase(smsProperties.getProvider())) {
+            throw new BusinessException("短信服务未启用或Provider不支持");
         }
-        Map<String, Object> config = JsonUtils.toMap(provider.getConfigJson());
-        String accessKeyId = String.valueOf(config.getOrDefault("accessKeyId", ""));
-        String accessKeySecret = secretCipherService.decrypt(provider.getApiKeyEncrypted());
-        String signName = String.valueOf(config.getOrDefault("signName", ""));
-        String templateCode = String.valueOf(config.getOrDefault("templateCode", ""));
+        String accessKeyId = smsProperties.getAccessKeyId();
+        String accessKeySecret = smsProperties.getAccessKeySecret();
+        String signName = smsProperties.getSignName();
+        String templateCode = smsProperties.getTemplateCode();
         if (!StringUtils.hasText(accessKeyId) || !StringUtils.hasText(accessKeySecret)
             || !StringUtils.hasText(signName) || !StringUtils.hasText(templateCode)) {
-            throw new BusinessException("短信Provider配置不完整");
+            throw new BusinessException("短信配置不完整");
         }
         TreeMap<String, String> params = new TreeMap<>();
         params.put("AccessKeyId", accessKeyId);
         params.put("Action", "SendSms");
         params.put("Format", "JSON");
         params.put("PhoneNumbers", phone);
-        params.put("RegionId", String.valueOf(config.getOrDefault("regionId", "cn-hangzhou")));
+        params.put("RegionId", StringUtils.hasText(smsProperties.getRegionId()) ? smsProperties.getRegionId() : "cn-hangzhou");
         params.put("SignName", signName);
         params.put("SignatureMethod", "HMAC-SHA1");
         params.put("SignatureNonce", UUID.randomUUID().toString());
@@ -66,11 +59,11 @@ public class AliyunSmsClient implements SmsClient {
         params.put("Timestamp", DateTimeFormatter.ISO_INSTANT.format(Instant.now().atOffset(ZoneOffset.UTC)));
         params.put("Version", "2017-05-25");
         params.put("Signature", signature(params, accessKeySecret));
-        String endpoint = StringUtils.hasText(provider.getEndpointUrl()) ? provider.getEndpointUrl() : DEFAULT_ENDPOINT;
+        String endpoint = StringUtils.hasText(smsProperties.getEndpoint()) ? smsProperties.getEndpoint() : "https://dysmsapi.aliyuncs.com/";
         String url = endpoint + "?" + canonicalizedQuery(params);
         HttpRequest request = HttpRequest.newBuilder()
             .uri(URI.create(url))
-            .timeout(Duration.ofMillis(provider.getTimeoutMs() == null ? 8000 : provider.getTimeoutMs()))
+            .timeout(Duration.ofMillis(8000))
             .GET()
             .build();
         try {

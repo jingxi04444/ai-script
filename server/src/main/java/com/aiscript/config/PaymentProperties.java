@@ -24,6 +24,14 @@ public class PaymentProperties {
         private String privateKeyPath;
         private String mchSerialNo;
         private String notifyUrl;
+        private AutoDeduct autoDeduct = new AutoDeduct();
+        @Data
+        public static class AutoDeduct {
+            private boolean enabled = false;
+            private String planId;
+            private String contractNotifyUrl;
+            private String deductNotifyUrl;
+        }
     }
 
     @Data
@@ -36,5 +44,15 @@ public class PaymentProperties {
         private String serverUrl = "https://openapi.alipay.com/gateway.do";
         private String signType = "RSA2";
         private String sellerId;
+        private AutoDeduct autoDeduct = new AutoDeduct();
+
+        @Data
+        public static class AutoDeduct {
+            private boolean enabled = false;
+            private String productCode = "GENERAL_WITHHOLDING";
+            private String signScene;
+            private String contractNotifyUrl;
+            private String deductNotifyUrl;
+        }
     }
 }

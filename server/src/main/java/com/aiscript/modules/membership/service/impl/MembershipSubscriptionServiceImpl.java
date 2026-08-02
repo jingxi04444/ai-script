@@ -10,9 +10,11 @@ import com.aiscript.modules.membership.mapper.AiMembershipPlanMapper;
 import com.aiscript.modules.membership.mapper.AiMembershipPlanSkuMapper;
 import com.aiscript.modules.membership.mapper.AiSubscriptionChangeRecordMapper;
 import com.aiscript.modules.membership.mapper.AiUserSubscriptionMapper;
+import com.aiscript.modules.membership.service.MembershipEntitlementService;
 import com.aiscript.modules.membership.service.MembershipService;
 import com.aiscript.modules.membership.service.MembershipSubscriptionService;
 import com.aiscript.modules.membership.vo.MembershipChangeQuoteVO;
+import com.aiscript.modules.membership.vo.MembershipEntitlementRow;
 import com.aiscript.modules.payment.entity.AiPaymentOrder;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
@@ -30,19 +32,22 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
     private final AiUserSubscriptionMapper subscriptionMapper;
     private final AiSubscriptionChangeRecordMapper changeMapper;
     private final MembershipService membershipService;
+    private final MembershipEntitlementService entitlementService;
 
     public MembershipSubscriptionServiceImpl(
         AiMembershipPlanMapper planMapper,
         AiMembershipPlanSkuMapper skuMapper,
         AiUserSubscriptionMapper subscriptionMapper,
         AiSubscriptionChangeRecordMapper changeMapper,
-        MembershipService membershipService
+        MembershipService membershipService,
+        MembershipEntitlementService entitlementService
     ) {
         this.planMapper = planMapper;
         this.skuMapper = skuMapper;
         this.subscriptionMapper = subscriptionMapper;
         this.changeMapper = changeMapper;
         this.membershipService = membershipService;
+        this.entitlementService = entitlementService;
     }
 
     @Override
@@ -66,7 +71,10 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
             return requireActiveSubscription(order.getTenantId(), order.getUserId());
         }
 
-        membershipService.ensureActiveSubscription(order.getTenantId(), order.getUserId());
+        boolean automaticRenewal = "renewal".equals(order.getOrderScene()) && order.getSubscriptionId() != null;
+        if (!automaticRenewal) {
+            membershipService.ensureActiveSubscription(order.getTenantId(), order.getUserId());
+        }
         AiUserSubscription subscription = subscriptionMapper.selectActiveByUserForUpdate(order.getUserId().longValue());
         if (subscription == null) {
             throw new BusinessException("用户有效订阅不存在");
@@ -95,6 +103,14 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
         Long beforePlanId = subscription.getPlanId();
         Long beforeSkuId = subscription.getSkuId();
         if ("renewal".equals(quote.getChangeType())) {
+            LocalDateTime base = automaticRenewal && subscription.getCurrentPeriodEnd() != null
+                ? subscription.getCurrentPeriodEnd()
+                : subscription.getCurrentPeriodEnd() != null
+                && subscription.getCurrentPeriodEnd().isAfter(now)
+                ? subscription.getCurrentPeriodEnd()
+                : now;
+            subscription.setCurrentPeriodEnd(addPeriod(base, target.sku()));
+        } else if ("upgrade".equals(quote.getChangeType())) {
             LocalDateTime base = subscription.getCurrentPeriodEnd() != null
                 && subscription.getCurrentPeriodEnd().isAfter(now)
                 ? subscription.getCurrentPeriodEnd()
@@ -117,6 +133,7 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
         subscription.setPendingSkuId(null);
         subscription.setPendingEffectiveTime(null);
         subscription.setProvider(order.getProvider());
+        subscription.setGraceEndTime(null);
         subscription.setPlanSnapshotJson(order.getProductSnapshotJson());
         subscription.setSourceOrderNo(order.getOrderNo());
         subscriptionMapper.updateById(subscription);
@@ -135,6 +152,7 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
             order.getOrderNo(),
             "renewal".equals(quote.getChangeType()) ? subscription.getCurrentPeriodStart() : now
         );
+        entitlementService.clearEntitlementCache(order.getTenantId(), order.getUserId());
         return subscription;
     }
 
@@ -161,6 +179,7 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
         subscription.setPendingSkuId(target.sku().getId());
         subscription.setPendingEffectiveTime(subscription.getCurrentPeriodEnd());
         subscriptionMapper.updateById(subscription);
+        entitlementService.clearEntitlementCache(tenantId, userId);
         recordChange(
             subscription, "downgrade", subscription.getPlanId(), subscription.getSkuId(),
             target.plan().getId().longValue(), target.sku().getId(), quote,
@@ -179,6 +198,7 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
         }
         revokePendingRecords(subscription.getId());
         clearPendingChange(subscription);
+        entitlementService.clearEntitlementCache(tenantId, userId);
         recordSimpleChange(subscription, "revoke_downgrade", "effective", LocalDateTime.now());
         return subscription;
     }
@@ -200,6 +220,7 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
         subscriptionMapper.update(null, new LambdaUpdateWrapper<AiUserSubscription>()
             .eq(AiUserSubscription::getId, subscription.getId())
             .set(AiUserSubscription::getNextRenewTime, null));
+        entitlementService.clearEntitlementCache(tenantId, userId);
         recordSimpleChange(subscription, "cancel", "effective", subscription.getCurrentPeriodEnd());
         return subscription;
     }
@@ -238,6 +259,7 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
             .set(AiUserSubscription::getPendingEffectiveTime, null));
         recordSimpleChange(subscription, "refund_revoke", "effective", LocalDateTime.now());
         membershipService.ensureFreeSubscription(order.getTenantId(), order.getUserId());
+        entitlementService.clearEntitlementCache(order.getTenantId(), order.getUserId());
     }
     private MembershipChangeQuoteVO buildQuote(
         AiUserSubscription subscription,

@@ -42,6 +42,20 @@ export interface MembershipPlan {
   benefits: MembershipBenefit[];
 }
 
+export interface MembershipPlanCreatePayload {
+  code: string;
+  name: string;
+  level: number;
+  free?: boolean;
+  price: number;
+  periodDays: number;
+  description?: string;
+  displayOrder?: number;
+  status: number;
+}
+
+export type MembershipSkuCreatePayload = Omit<MembershipSku, 'id'>;
+
 export interface AdminSubscription {
   id: string;
   userId: string;
@@ -76,10 +90,16 @@ export interface RefundOrder {
 
 export const membershipApi = {
   getPlans: (): Promise<MembershipPlan[]> => api.get('/membership/plans'),
+  createPlan: (payload: MembershipPlanCreatePayload): Promise<MembershipPlan> =>
+    api.post('/membership/plans', payload),
   updatePlan: (id: string, payload: { name: string; description?: string; price: number; periodDays: number; displayOrder?: number; status: number }): Promise<MembershipPlan> =>
     api.put(`/membership/plans/${id}`, payload),
+  createSku: (planId: string, payload: MembershipSkuCreatePayload): Promise<MembershipPlan> =>
+    api.post(`/membership/plans/${planId}/skus`, payload),
   updateSku: (id: string, payload: Omit<MembershipSku, 'id' | 'code'> & { status: number }): Promise<MembershipPlan> =>
     api.put(`/membership/skus/${id}`, payload),
+  createBenefit: (planId: string, payload: { code: string; value: string; enabled?: boolean }): Promise<MembershipPlan> =>
+    api.post(`/membership/plans/${planId}/benefits`, payload),
   updateBenefit: (planId: string, code: string, payload: { value: string; enabled: boolean }): Promise<MembershipPlan> =>
     api.put(`/membership/plans/${planId}/benefits/${encodeURIComponent(code)}`, payload),
   subscriptions: (params: { page: number; pageSize: number; keyword?: string; status?: string }): Promise<PageResult<AdminSubscription>> =>

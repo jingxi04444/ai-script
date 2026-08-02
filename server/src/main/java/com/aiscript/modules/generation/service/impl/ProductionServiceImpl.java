@@ -24,11 +24,15 @@ import com.aiscript.modules.generation.vo.DubbingAssetVO;
 import com.aiscript.modules.generation.vo.ExportJobVO;
 import com.aiscript.modules.generation.vo.TimelineConfigVO;
 import com.aiscript.modules.generation.vo.VideoSegmentVO;
+import com.aiscript.modules.membership.service.MembershipEntitlementService;
+import com.aiscript.security.LoginUser;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.time.LocalDateTime;
 import java.util.Map;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -42,19 +46,22 @@ public class ProductionServiceImpl implements ProductionService {
     private final AiDubbingAssetMapper dubbingAssetMapper;
     private final AiTimelineConfigMapper timelineConfigMapper;
     private final AiExportJobMapper exportJobMapper;
+    private final MembershipEntitlementService entitlementService;
 
     public ProductionServiceImpl(
         AiGenerationTaskMapper taskMapper,
         AiVideoSegmentMapper videoSegmentMapper,
         AiDubbingAssetMapper dubbingAssetMapper,
         AiTimelineConfigMapper timelineConfigMapper,
-        AiExportJobMapper exportJobMapper
+        AiExportJobMapper exportJobMapper,
+        MembershipEntitlementService entitlementService
     ) {
         this.taskMapper = taskMapper;
         this.videoSegmentMapper = videoSegmentMapper;
         this.dubbingAssetMapper = dubbingAssetMapper;
         this.timelineConfigMapper = timelineConfigMapper;
         this.exportJobMapper = exportJobMapper;
+        this.entitlementService = entitlementService;
     }
 
     @Override
@@ -127,6 +134,9 @@ public class ProductionServiceImpl implements ProductionService {
     @Transactional(rollbackFor = Exception.class)
     public ExportJobVO createExport(ExportCreateDTO dto) {
         Integer projectId = StringUtils.hasText(dto.projectId) ? parseLong(dto.projectId, "项目ID格式不正确") : null;
+        if (Boolean.TRUE.equals(dto.removeWatermark)) {
+            entitlementService.requireFeature(currentTenantId(), currentUserId(), "REMOVE_WATERMARK");
+        }
         AiGenerationTask task = createTask(projectId, "export", "导出任务", JsonUtils.toJson(dto));
         AiExportJob job = new AiExportJob();
         job.setTenantId(currentTenantId());
@@ -222,12 +232,33 @@ public class ProductionServiceImpl implements ProductionService {
         vo.fileName = item.getFileName();
         vo.assetId = item.getAssetId() == null ? null : String.valueOf(item.getAssetId());
         vo.status = item.getStatus();
+        vo.removeWatermark = exportTaskRemoveWatermark(item.getTaskId());
         vo.createdAt = item.getCreateTime() == null ? null : item.getCreateTime().toString();
         return vo;
     }
 
     private Integer currentTenantId() {
         return TenantContext.getTenantId() == null ? DEFAULT_TENANT_ID : TenantContext.getTenantId();
+    }
+
+    private Integer currentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getPrincipal() instanceof LoginUser loginUser) {
+            return loginUser.getUserId();
+        }
+        return DEFAULT_USER_ID;
+    }
+
+    private Boolean exportTaskRemoveWatermark(Integer taskId) {
+        if (taskId == null) {
+            return false;
+        }
+        AiGenerationTask task = taskMapper.selectById(taskId);
+        if (task == null || !StringUtils.hasText(task.getInputPayload())) {
+            return false;
+        }
+        Object value = JsonUtils.toMap(task.getInputPayload()).get("removeWatermark");
+        return value instanceof Boolean enabled && enabled;
     }
 
     private Integer parseLong(String value, String message) {

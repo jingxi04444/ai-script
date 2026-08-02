@@ -93,15 +93,14 @@ const UserListPage = () => {
         {rows.length ? (
           <>
             <div className="admin-table">
-              <div className="table-head" style={{ gridTemplateColumns: '1.2fr 1fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr' }}>
-                <span>用户名</span><span>邮箱 / 手机</span><span>会员等级</span><span>余额</span><span>状态</span><span>注册时间</span><span>操作</span>
+              <div className="table-head" style={{ gridTemplateColumns: '1.2fr 1fr 0.8fr 0.8fr 0.8fr 1fr' }}>
+                <span>用户名</span><span>邮箱 / 手机</span><span>会员等级</span><span>状态</span><span>注册时间</span><span>操作</span>
               </div>
               {rows.map((user) => (
-                <div className="table-row" style={{ gridTemplateColumns: '1.2fr 1fr 0.8fr 0.8fr 0.8fr 0.8fr 1fr' }} key={user.id}>
+                <div className="table-row" style={{ gridTemplateColumns: '1.2fr 1fr 0.8fr 0.8fr 0.8fr 1fr' }} key={user.id}>
                   <strong>{user.username || user.nickname || '-'}</strong>
                   <span>{user.email || user.phone || '-'}</span>
                   <span>{user.memberLevel ?? '-'}</span>
-                  <span>{typeof user.balance === 'number' || typeof user.balance === 'string' ? `¥${user.balance}` : '-'}</span>
                   <StatusBadge tone={user.status === 'disabled' ? 'gray' : 'green'}>{user.status || '-'}</StatusBadge>
                   <span>{user.createdAt || user.updateTime || '-'}</span>
                   <div className="table-actions">
@@ -130,7 +129,6 @@ const UserListPage = () => {
           <label className="field"><span>邮箱</span><input value={form.email || ''} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
           <label className="field"><span>手机号</span><input value={form.phone || ''} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
           <label className="field"><span>会员等级</span><input value={String(form.memberLevel ?? '')} onChange={(e) => setForm({ ...form, memberLevel: e.target.value })} /></label>
-          <label className="field"><span>余额</span><input value={String(form.balance ?? '')} onChange={(e) => setForm({ ...form, balance: e.target.value })} /></label>
           <label className="field"><span>状态</span><input value={form.status || ''} onChange={(e) => setForm({ ...form, status: e.target.value as User['status'] })} placeholder="active / disabled" /></label>
         </div>
       </Modal>

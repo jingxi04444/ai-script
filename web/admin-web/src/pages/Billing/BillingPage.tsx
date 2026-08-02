@@ -1,13 +1,92 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Check, Coins, Crown, Eye, Pencil, RefreshCcw, Save } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import { membershipApi, type AdminSubscription, type MembershipBenefit, type MembershipPlan, type RefundOrder } from '../../api/membership';
+import {
+  membershipApi,
+  type AdminSubscription,
+  type MembershipBenefit,
+  type MembershipPlan,
+  type MembershipPlanCreatePayload,
+  type MembershipSkuCreatePayload,
+  type RefundOrder,
+} from '../../api/membership';
 import { EmptyState, Modal, PageHeader, Pagination, SectionCard, StatusBadge } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
 import './billing-page.css';
 
 type BillingSection = 'plans' | 'subscriptions' | 'points' | 'refunds';
 type PurchaseMode = 'once_month' | 'auto_month' | 'auto_quarter' | 'auto_year';
+type PlanSku = MembershipPlan['skus'][number];
+
+interface PlanSkuCard {
+  plan: MembershipPlan;
+  sku: PlanSku;
+  mode: PurchaseMode;
+}
+
+interface PlanCreateFormState {
+  code: string;
+  name: string;
+  level: string;
+  free: boolean;
+  price: string;
+  periodDays: string;
+  description: string;
+  displayOrder: string;
+  status: '1' | '0';
+}
+
+interface SkuCreateFormState {
+  code: string;
+  name: string;
+  billingMode: MembershipSkuCreatePayload['billingMode'];
+  periodUnit: MembershipSkuCreatePayload['periodUnit'];
+  periodCount: string;
+  price: string;
+  originalPrice: string;
+  refundDays: string;
+  displayOrder: string;
+  status: '1' | '0';
+}
+
+interface BenefitCreateFormState {
+  code: string;
+  value: string;
+  enabled: boolean;
+}
+
+const createPlanFormState = (): PlanCreateFormState => ({
+  code: '',
+  name: '',
+  level: '1',
+  free: false,
+  price: '0',
+  periodDays: '30',
+  description: '',
+  displayOrder: '0',
+  status: '1',
+});
+
+const createSkuFormState = (plan?: MembershipPlan, sku?: PlanSku): SkuCreateFormState => ({
+  code: '',
+  name: '',
+  billingMode: sku?.billingMode || 'one_time',
+  periodUnit: sku?.periodUnit || 'month',
+  periodCount: String(sku?.periodCount || 1),
+  price: '0',
+  originalPrice: '',
+  refundDays: String(sku?.refundDays || 0),
+  displayOrder: String((plan?.skus?.length || 0) + 1),
+  status: '1',
+});
+
+const createBenefitFormState = (): BenefitCreateFormState => ({
+  code: '',
+  value: '',
+  enabled: true,
+});
+
+const parseOptionalNumber = (value: string) => (value.trim() ? Number(value) : undefined);
 
 const purchaseModeOptions: Array<{ value: PurchaseMode; label: string; hint: string; badge?: string }> = [
   { value: 'once_month', label: '单月购买', hint: '购买一个月' },
@@ -24,7 +103,7 @@ const sectionByPath: Record<string, BillingSection> = {
 };
 
 const sectionMeta: Record<BillingSection, { title: string; description: string }> = {
-  plans: { title: '套餐权益', description: '以列表查看全部会员套餐，通过弹窗完成套餐、SKU 和权益配置。' },
+  plans: { title: '套餐权益', description: '以 SKU 为维度查看全部会员卡，通过弹窗完成前台预览与编辑。' },
   subscriptions: { title: '用户订阅', description: '查看用户当前会员、续费状态和待生效套餐。' },
   points: { title: '积分调整', description: '人工增加或扣减用户积分，并自动记录积分流水。' },
   refunds: { title: '退款审核', description: '审核会员退款申请，跟踪退款状态和权益回收结果。' },
@@ -37,6 +116,19 @@ const copyPlan = (plan: MembershipPlan): MembershipPlan => ({
 });
 
 const formatPrice = (value: number | undefined) => `¥${Number(value || 0).toFixed(2)}`;
+
+const inferPurchaseMode = (sku: PlanSku): PurchaseMode => purchaseModeOptions.find((option) => matchesPurchaseMode(sku, option.value))?.value || 'once_month';
+
+const resolveSkuForMode = (plan: MembershipPlan, mode: PurchaseMode, includeInactive = false) => (
+  plan.skus.find((sku) => (includeInactive || sku.status !== 0) && matchesPurchaseMode(sku, mode))
+  || plan.skus.find((sku) => includeInactive || sku.status !== 0)
+  || plan.skus[0]
+);
+
+const resolveSkuByIdOrMode = (plan: MembershipPlan, skuId: string | null, mode: PurchaseMode, includeInactive = false) => (
+  (skuId ? plan.skus.find((sku) => sku.id === skuId) : undefined)
+  || resolveSkuForMode(plan, mode, includeInactive)
+);
 
 const benefitValue = (benefit: MembershipBenefit) => {
   const normalized = String(benefit.value ?? '').trim().toLowerCase();
@@ -59,19 +151,16 @@ const matchesPurchaseMode = (sku: MembershipPlan['skus'][number], mode: Purchase
   return sku.periodUnit === 'year' && sku.billingMode === 'auto_renew';
 };
 
-const resolvePreviewSku = (plan: MembershipPlan, mode: PurchaseMode) => (
-  plan.skus.find((sku) => sku.status !== 0 && matchesPurchaseMode(sku, mode))
-  || plan.skus.find((sku) => sku.status !== 0)
-);
-
-const resolveEditorSku = (plan: MembershipPlan, mode: PurchaseMode) => (
-  plan.skus.find((sku) => matchesPurchaseMode(sku, mode))
-  || plan.skus[0]
-);
-
-const formatPreviewPeriod = (plan: MembershipPlan, mode: PurchaseMode, editor = false) => {
-  const sku = editor ? resolveEditorSku(plan, mode) : resolvePreviewSku(plan, mode);
+const formatPreviewPeriod = (plan: MembershipPlan, mode: PurchaseMode, editor = false, skuId?: string) => {
+  const sku = skuId ? plan.skus.find((item) => item.id === skuId) : resolveSkuForMode(plan, mode, editor);
   if (!sku) return plan.periodDays > 0 ? `${plan.periodDays}天` : '长期';
+  const count = sku.periodCount || 1;
+  if (sku.periodUnit === 'year') return count === 1 ? '年卡' : `${count}年`;
+  if (sku.periodUnit === 'quarter') return count === 1 ? '季卡' : `${count}季度`;
+  return count === 1 ? '月卡' : `${count}个月`;
+};
+
+const formatSkuPeriod = (sku: PlanSku) => {
   const count = sku.periodCount || 1;
   if (sku.periodUnit === 'year') return count === 1 ? '年卡' : `${count}年`;
   if (sku.periodUnit === 'quarter') return count === 1 ? '季卡' : `${count}季度`;
@@ -86,24 +175,31 @@ const visibleBenefits = (plan: MembershipPlan) => plan.benefits.filter((benefit)
 
 interface MembershipCardViewProps {
   plan: MembershipPlan;
+  sku?: PlanSku;
   mode: PurchaseMode;
   editor?: boolean;
 }
 
-const MembershipCardView = ({ plan, mode, editor = false }: MembershipCardViewProps) => {
-  const sku = editor ? resolveEditorSku(plan, mode) : resolvePreviewSku(plan, mode);
-  const price = Number(sku?.price ?? plan.price ?? 0);
-  const originalPrice = Number(sku?.originalPrice ?? price);
+const MembershipCardView = ({ plan, sku, mode, editor = false }: MembershipCardViewProps) => {
+  const activeSku = sku || resolveSkuForMode(plan, mode, editor);
+  const price = Number(activeSku?.price ?? plan.price ?? 0);
+  const originalPrice = activeSku?.originalPrice;
   const featured = (plan.level || 0) >= 3;
 
   return <article className={`membership-preview-card is-selected${featured ? ' is-featured' : ''}`}>
     <header>
-      <h3>{plan.name || '未命名套餐'}</h3>
+      <div className="membership-preview-card-title">
+        <span className="membership-preview-level">L{plan.level || 0}</span>
+        <div>
+          <h3>{plan.name || '未命名套餐'}</h3>
+          <p>{activeSku?.name || '未命名 SKU'} · {activeSku?.code || '—'}</p>
+        </div>
+      </div>
       {featured
         ? <span className="membership-preview-status is-recommended"><Crown size={14} />推荐</span>
         : <span className="membership-preview-status is-current"><Check size={15} />{editor ? '实时预览' : '已订阅'}</span>}
     </header>
-    <div className="membership-preview-price-row"><small>¥</small><strong>{price.toFixed(0)}</strong><span>/{formatPreviewPeriod(plan, mode, editor)}</span>{originalPrice > price ? <del>¥{originalPrice.toFixed(0)}</del> : null}</div>
+    <div className="membership-preview-price-row"><small>¥</small><strong>{price.toFixed(0)}</strong><span>/{activeSku ? formatSkuPeriod(activeSku) : formatPreviewPeriod(plan, mode, editor)}</span>{originalPrice != null ? <del>{formatPrice(originalPrice)}</del> : null}</div>
     <p>{plan.description || '适合稳定进行短视频内容生产的创作者与团队。'}</p>
     <div className="membership-preview-benefit-title">套餐权益</div>
     <ul>{visibleBenefits(plan).map((benefit) => <li key={benefit.code}><Check size={15} /><span>{benefit.name}</span><b>{benefitValue(benefit)}</b></li>)}</ul>
@@ -126,23 +222,53 @@ const BillingPage = () => {
   const [loading, setLoading] = useState(false);
   const [editingPlan, setEditingPlan] = useState<MembershipPlan | null>(null);
   const [previewPlan, setPreviewPlan] = useState<MembershipPlan | null>(null);
+  const [editingSkuId, setEditingSkuId] = useState<string | null>(null);
+  const [previewSkuId, setPreviewSkuId] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState<PurchaseMode>('auto_year');
   const [editingMode, setEditingMode] = useState<PurchaseMode>('auto_year');
   const [pointForm, setPointForm] = useState({ userId: '', changePoints: '', remark: '' });
+  const [planCreateOpen, setPlanCreateOpen] = useState(false);
+  const [planCreateForm, setPlanCreateForm] = useState<PlanCreateFormState>(createPlanFormState());
+  const [skuCreateOpen, setSkuCreateOpen] = useState(false);
+  const [skuCreateForm, setSkuCreateForm] = useState<SkuCreateFormState>(createSkuFormState());
+  const [benefitCreateOpen, setBenefitCreateOpen] = useState(false);
+  const [benefitCreateForm, setBenefitCreateForm] = useState<BenefitCreateFormState>(createBenefitFormState());
 
-  const preferredMode = (plan: MembershipPlan, includeInactive = false): PurchaseMode => (
-    purchaseModeOptions.find((option) => plan.skus.some((sku) => (includeInactive || sku.status !== 0) && matchesPurchaseMode(sku, option.value)))?.value
-    || 'once_month'
-  );
+  const skuCards = useMemo<PlanSkuCard[]>(() => plans.flatMap((plan) => (plan.skus || []).map((sku) => ({
+    plan,
+    sku,
+    mode: inferPurchaseMode(sku),
+  }))), [plans]);
 
-  const openPreview = (plan: MembershipPlan) => {
-    setPreviewMode(preferredMode(plan));
-    setPreviewPlan(copyPlan(plan));
+  const openPreview = (card: PlanSkuCard) => {
+    setPreviewMode(card.mode);
+    setPreviewSkuId(card.sku.id);
+    setPreviewPlan(copyPlan(card.plan));
   };
 
-  const openEditor = (plan: MembershipPlan) => {
-    setEditingMode(preferredMode(plan, true));
-    setEditingPlan(copyPlan(plan));
+  const openEditor = (card: PlanSkuCard) => {
+    setEditingMode(card.mode);
+    setEditingSkuId(card.sku.id);
+    setEditingPlan(copyPlan(card.plan));
+    setSkuCreateOpen(false);
+    setBenefitCreateOpen(false);
+  };
+
+  const openPlanCreate = () => {
+    setPlanCreateForm(createPlanFormState());
+    setPlanCreateOpen(true);
+  };
+
+  const openSkuCreate = () => {
+    if (!editingPlan) return;
+    setSkuCreateForm(createSkuFormState(editingPlan, activeEditingSku));
+    setSkuCreateOpen(true);
+  };
+
+  const openBenefitCreate = () => {
+    if (!editingPlan) return;
+    setBenefitCreateForm(createBenefitFormState());
+    setBenefitCreateOpen(true);
   };
 
   const loadPlans = async () => {
@@ -201,6 +327,102 @@ const BillingPage = () => {
     } : current);
   };
 
+  const createPlan = async () => {
+    if (!planCreateForm.code.trim() || !planCreateForm.name.trim()) {
+      notify('请填写套餐编码和名称');
+      return;
+    }
+    setLoading(true);
+    try {
+      const payload: MembershipPlanCreatePayload = {
+        code: planCreateForm.code.trim(),
+        name: planCreateForm.name.trim(),
+        level: Number(planCreateForm.level || 0),
+        free: planCreateForm.free,
+        price: Number(planCreateForm.price || 0),
+        periodDays: Number(planCreateForm.periodDays || 0),
+        description: planCreateForm.description.trim() || undefined,
+        displayOrder: parseOptionalNumber(planCreateForm.displayOrder),
+        status: Number(planCreateForm.status),
+      };
+      await membershipApi.createPlan(payload);
+      notify('套餐已创建');
+      setPlanCreateOpen(false);
+      setPlanCreateForm(createPlanFormState());
+      await loadPlans();
+    } catch {
+      notify('套餐创建失败，请检查字段格式');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createSku = async () => {
+    if (!editingPlan) return;
+    if (!skuCreateForm.code.trim() || !skuCreateForm.name.trim()) {
+      notify('请填写 SKU 编码和名称');
+      return;
+    }
+    setLoading(true);
+    try {
+      const payload: MembershipSkuCreatePayload = {
+        code: skuCreateForm.code.trim(),
+        name: skuCreateForm.name.trim(),
+        billingMode: skuCreateForm.billingMode,
+        periodUnit: skuCreateForm.periodUnit,
+        periodCount: Number(skuCreateForm.periodCount || 0),
+        price: Number(skuCreateForm.price || 0),
+        originalPrice: parseOptionalNumber(skuCreateForm.originalPrice),
+        refundDays: Number(skuCreateForm.refundDays || 0),
+        displayOrder: parseOptionalNumber(skuCreateForm.displayOrder),
+        status: Number(skuCreateForm.status),
+      };
+      const updatedPlan = await membershipApi.createSku(editingPlan.id, payload);
+      const nextSku = updatedPlan.skus.find((sku) => sku.code === payload.code) || updatedPlan.skus[updatedPlan.skus.length - 1];
+      notify('SKU 已创建');
+      setSkuCreateOpen(false);
+      setSkuCreateForm(createSkuFormState(updatedPlan, nextSku));
+      setEditingPlan(copyPlan(updatedPlan));
+      if (nextSku) {
+        setEditingSkuId(nextSku.id);
+        setEditingMode(inferPurchaseMode(nextSku));
+      }
+      await loadPlans();
+    } catch {
+      notify('SKU 创建失败，请检查字段格式');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createBenefit = async () => {
+    if (!editingPlan) return;
+    if (!benefitCreateForm.code.trim()) {
+      notify('请填写权益编码');
+      return;
+    }
+    setLoading(true);
+    try {
+      const updatedPlan = await membershipApi.createBenefit(editingPlan.id, {
+        code: benefitCreateForm.code.trim(),
+        value: benefitCreateForm.value.trim(),
+        enabled: benefitCreateForm.enabled,
+      });
+      notify('权益已添加到套餐');
+      setBenefitCreateOpen(false);
+      setBenefitCreateForm(createBenefitFormState());
+      setEditingPlan(copyPlan(updatedPlan));
+      await loadPlans();
+    } catch {
+      notify('权益添加失败，请检查权益编码和权益值');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const activeEditingSku = editingPlan ? resolveSkuByIdOrMode(editingPlan, editingSkuId, editingMode, true) : undefined;
+  const activePreviewSku = previewPlan ? resolveSkuByIdOrMode(previewPlan, previewSkuId, previewMode, false) : undefined;
+
   const savePlan = async () => {
     if (!editingPlan) return;
     if (!editingPlan.name.trim()) {
@@ -236,6 +458,7 @@ const BillingPage = () => {
       ]);
       notify(`${editingPlan.name} 已保存`);
       setEditingPlan(null);
+      setEditingSkuId(null);
       await loadPlans();
     } catch { notify('套餐保存失败，请检查字段格式'); }
     finally { setLoading(false); }
@@ -280,29 +503,67 @@ const BillingPage = () => {
       />
 
       {section === 'plans' && <SectionCard
-        title="会员套餐列表"
-        description="价格、周期和核心权益一屏可见；编辑不会改变列表布局。"
-        action={<StatusBadge tone="green">{plans.length} 个套餐</StatusBadge>}
+        title="会员 SKU 列表"
+        description="以 SKU 为维度查看全部会员卡，点击预览或编辑即可进入对应 SKU。"
+        action={<div className="toolbar-group billing-plan-actions"><StatusBadge tone="green">{skuCards.length} 个 SKU</StatusBadge><button className="toolbar-btn primary" type="button" onClick={openPlanCreate} disabled={loading}>新增套餐</button></div>}
       >
-        {plans.length ? <div className="table-wrap membership-plan-table"><table>
-          <thead><tr><th>套餐</th><th>展示价格</th><th>订阅周期</th><th>SKU</th><th>已启用权益</th><th>状态</th><th>操作</th></tr></thead>
-          <tbody>{plans.map((plan) => {
-            const activeBenefits = plan.benefits.filter((benefit) => benefit.enabled);
-            return <tr key={plan.id}>
-              <td><div className="membership-plan-name"><span className="membership-level">L{plan.level}</span><div><strong>{plan.name}</strong><small>{plan.code} · {plan.description || '暂无套餐说明'}</small></div></div></td>
-              <td><strong className="membership-price">{formatPrice(plan.price)}</strong><small>展示价</small></td>
-              <td>{plan.periodDays > 0 ? `${plan.periodDays} 天` : '长期有效'}</td>
-              <td>{plan.skus.length} 个<small>{plan.skus.slice(0, 2).map((sku) => sku.name).join('、') || '暂无 SKU'}</small></td>
-              <td>{activeBenefits.length} / {plan.benefits.length}<small>{activeBenefits.slice(0, 2).map((benefit) => benefit.name).join('、') || '暂无启用权益'}</small></td>
-              <td><StatusBadge tone={plan.status !== 0 ? 'green' : 'gray'}>{plan.status !== 0 ? '启用中' : '已停用'}</StatusBadge></td>
-              <td><div className="table-actions membership-row-actions">
-                <button type="button" onClick={() => openPreview(plan)}><Eye size={14} />预览</button>
-                <button type="button" onClick={() => openEditor(plan)}><Pencil size={14} />编辑</button>
-              </div></td>
-            </tr>;
-          })}</tbody>
-        </table></div> : <EmptyState title="暂无套餐" description="请先执行会员初始化数据脚本。" />}
+        {skuCards.length ? <div className="membership-admin-sku-table"><table><thead><tr><th>套餐 / SKU</th><th>价格 / 周期</th><th>状态</th><th>操作</th></tr></thead><tbody>{skuCards.map((card) => {
+          const { plan, sku } = card;
+          const featured = (plan.level || 0) >= 3;
+          const isDisabled = plan.status === 0 || sku.status === 0;
+          return <tr key={sku.id} className={isDisabled ? 'is-disabled' : featured ? 'is-featured' : ''}>
+            <td>
+              <div className="membership-admin-sku-title">
+                <span className="membership-level">L{plan.level || 0}</span>
+                <div>
+                  <strong>{plan.name}</strong>
+                  <small>{plan.code} · {sku.name} · {sku.code}</small>
+                </div>
+              </div>
+            </td>
+            <td>
+              <div className="membership-admin-sku-price">
+                <strong>{formatPrice(Number(sku.price || 0))}</strong>
+                <small>{formatSkuPeriod(sku)} · {sku.billingMode === 'auto_renew' ? '自动续费' : '单次购买'}</small>
+                {sku.originalPrice != null ? <span>原价 {formatPrice(sku.originalPrice)}</span> : null}
+              </div>
+            </td>
+            <td>
+              <div className="membership-admin-sku-status">
+                <StatusBadge tone={sku.status !== 0 ? 'green' : 'gray'}>{sku.status !== 0 ? 'SKU 启用' : 'SKU 停用'}</StatusBadge>
+                <small>{plan.status !== 0 ? '套餐启用' : '套餐停用'}{featured ? ' · 推荐' : ''}</small>
+              </div>
+            </td>
+            <td>
+              <div className="table-actions membership-admin-sku-actions">
+                <button type="button" onClick={() => openPreview(card)}><Eye size={14} />预览</button>
+                <button type="button" className="primary" onClick={() => openEditor(card)}><Pencil size={14} />编辑</button>
+              </div>
+            </td>
+          </tr>;
+        })}</tbody></table></div> : <EmptyState title="暂无 SKU" description="请先执行会员初始化数据脚本。" />}
       </SectionCard>}
+
+      <Modal
+        open={planCreateOpen}
+        title="新增套餐"
+        description="创建新的会员套餐，并同步生成前台展示所需的基础字段。"
+        size="lg"
+        onClose={() => setPlanCreateOpen(false)}
+        footer={<><button className="modal-btn" type="button" onClick={() => setPlanCreateOpen(false)}>取消</button><button className="modal-btn primary" type="button" onClick={() => void createPlan()} disabled={loading}>创建套餐</button></>}
+      >
+        <div className="membership-create-form field-grid">
+          <label className="field"><span>套餐编码</span><input value={planCreateForm.code} onChange={(event) => setPlanCreateForm({ ...planCreateForm, code: event.target.value })} placeholder="例如 pro_monthly" /></label>
+          <label className="field"><span>套餐名称</span><input value={planCreateForm.name} onChange={(event) => setPlanCreateForm({ ...planCreateForm, name: event.target.value })} placeholder="例如 专业版" /></label>
+          <label className="field"><span>套餐等级</span><input type="number" min="0" value={planCreateForm.level} onChange={(event) => setPlanCreateForm({ ...planCreateForm, level: event.target.value })} /></label>
+          <label className="field"><span>展示价格</span><input type="number" min="0" value={planCreateForm.price} onChange={(event) => setPlanCreateForm({ ...planCreateForm, price: event.target.value })} /></label>
+          <label className="field"><span>兼容周期天数</span><input type="number" min="0" value={planCreateForm.periodDays} onChange={(event) => setPlanCreateForm({ ...planCreateForm, periodDays: event.target.value })} /></label>
+          <label className="field"><span>展示顺序</span><input type="number" value={planCreateForm.displayOrder} onChange={(event) => setPlanCreateForm({ ...planCreateForm, displayOrder: event.target.value })} /></label>
+          <label className="field membership-checkbox-field"><span>免费套餐</span><input type="checkbox" checked={planCreateForm.free} onChange={(event) => setPlanCreateForm({ ...planCreateForm, free: event.target.checked })} /></label>
+          <label className="field"><span>套餐状态</span><select value={planCreateForm.status} onChange={(event) => setPlanCreateForm({ ...planCreateForm, status: event.target.value as '1' | '0' })}><option value="1">启用</option><option value="0">停用</option></select></label>
+          <label className="field membership-editor-wide"><span>套餐说明</span><textarea rows={4} value={planCreateForm.description} onChange={(event) => setPlanCreateForm({ ...planCreateForm, description: event.target.value })} placeholder="简要说明套餐定位和适用人群" /></label>
+        </div>
+      </Modal>
 
       {section === 'subscriptions' && <SectionCard title="用户订阅列表" description="升级立即生效，待降级套餐会单独展示。">
         <div className="membership-admin-filter"><input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="用户名、账号或用户 ID" /><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="">全部状态</option><option value="active">有效</option><option value="canceling">到期取消</option><option value="expired">已过期</option></select><button className="toolbar-btn primary" onClick={() => void loadSubscriptions(1)}>查询</button></div>
@@ -332,23 +593,31 @@ const BillingPage = () => {
 
       <Modal
         open={Boolean(editingPlan)}
-        title={editingPlan ? `编辑套餐卡 · ${editingPlan.name}` : '编辑套餐卡'}
-        description="左侧按用户端卡片实时预览，右侧修改当前卡片的内容、价格和权益。"
+        title={editingPlan && activeEditingSku ? `编辑 SKU · ${editingPlan.name} / ${activeEditingSku.name}` : '编辑 SKU'}
+        description="左侧按前台卡片实时预览，右侧修改当前 SKU、套餐共用字段和权益。"
         size="full"
         closeOnBackdrop={false}
-        onClose={() => setEditingPlan(null)}
-        footer={<><button className="modal-btn" type="button" onClick={() => setEditingPlan(null)}>取消</button><button className="modal-btn primary" type="button" onClick={() => void savePlan()} disabled={loading}><Save size={16} />{loading ? '保存中' : '保存套餐卡'}</button></>}
+        onClose={() => { setEditingPlan(null); setEditingSkuId(null); }}
+        footer={<><button className="modal-btn" type="button" onClick={() => { setEditingPlan(null); setEditingSkuId(null); }}>取消</button><button className="modal-btn primary" type="button" onClick={() => void savePlan()} disabled={loading}><Save size={16} />{loading ? '保存中' : '保存 SKU'}</button></>}
       >
         {editingPlan ? <div className="membership-card-editor-layout">
           <aside className="membership-card-editor-preview">
-            <div className="membership-card-editor-heading"><div><strong>用户端卡片</strong><span>修改右侧内容，这张卡会同步变化</span></div><StatusBadge tone={editingPlan.status !== 0 ? 'green' : 'gray'}>{editingPlan.status !== 0 ? '展示中' : '已隐藏'}</StatusBadge></div>
+            <div className="membership-card-editor-heading"><div><strong>前台预览</strong><span>修改右侧内容，这张 SKU 卡会同步变化</span></div><StatusBadge tone={editingPlan.status !== 0 ? 'green' : 'gray'}>{editingPlan.status !== 0 ? '展示中' : '已隐藏'}</StatusBadge></div>
+            <div className="membership-preview-context is-inline">
+              <div><strong>{activeEditingSku?.name || '当前 SKU'}</strong><span>{activeEditingSku?.code || '—'} · {activeEditingSku ? formatSkuPeriod(activeEditingSku) : '—'}</span></div>
+              {activeEditingSku ? <span><b>{activeEditingSku.status !== 0 ? '启用中' : '已停用'}</b> · {activeEditingSku.billingMode === 'auto_renew' ? '自动续费' : '单次购买'}</span> : null}
+            </div>
             <div className="membership-preview-cycle is-compact" role="group" aria-label="编辑套餐周期">
               {purchaseModeOptions.map((option) => {
                 const available = editingPlan.skus.some((sku) => matchesPurchaseMode(sku, option.value));
-                return <button key={option.value} className={editingMode === option.value ? 'active' : ''} type="button" disabled={!available} onClick={() => setEditingMode(option.value)}>{option.label}<small>{option.hint}</small></button>;
+                return <button key={option.value} className={editingMode === option.value ? 'active' : ''} type="button" disabled={!available} onClick={() => {
+                  setEditingMode(option.value);
+                  const nextSku = resolveSkuForMode(editingPlan, option.value, true);
+                  if (nextSku) setEditingSkuId(nextSku.id);
+                }}>{option.label}<small>{option.hint}</small></button>;
               })}
             </div>
-            <MembershipCardView plan={editingPlan} mode={editingMode} editor />
+            <MembershipCardView plan={editingPlan} sku={activeEditingSku} mode={editingMode} editor />
           </aside>
 
           <div className="membership-plan-editor">
@@ -361,7 +630,7 @@ const BillingPage = () => {
             <label className="field membership-editor-wide"><span>套餐说明</span><textarea rows={3} value={editingPlan.description || ''} onChange={(event) => patchEditingPlan({ description: event.target.value })} /></label>
           </div></section>
 
-          <section className="membership-editor-section"><div className="membership-editor-title"><span>02</span><div><h4>卡片价格</h4><p>切换左侧周期即可实时核对对应 SKU 的价格。</p></div></div><div className="membership-admin-sku-grid">{editingPlan.skus.map((sku) => <article className={resolveEditorSku(editingPlan, editingMode)?.id === sku.id ? 'is-current' : ''} key={sku.id}>
+          <section className="membership-editor-section"><div className="membership-editor-title"><span>02</span><div><h4>SKU 价格</h4><p>切换左侧周期即可实时核对对应 SKU 的价格。</p></div><div className="toolbar-group membership-editor-actions"><button className="toolbar-btn primary" type="button" onClick={openSkuCreate} disabled={loading}>新增 SKU</button></div></div><div className="membership-admin-sku-grid">{editingPlan.skus.map((sku) => <article className={activeEditingSku?.id === sku.id ? 'is-current' : ''} key={sku.id}>
             <div className="membership-sku-head"><div><strong>{sku.name}</strong><span>{sku.code}</span></div><StatusBadge tone="blue">{sku.billingMode}</StatusBadge></div>
             <div className="membership-sku-fields">
               <label className="field"><span>SKU 名称</span><input value={sku.name} onChange={(event) => patchSku(sku.id, { name: event.target.value })} /></label>
@@ -370,38 +639,32 @@ const BillingPage = () => {
               <label className="field"><span>退款天数</span><input type="number" min="0" value={sku.refundDays} onChange={(event) => patchSku(sku.id, { refundDays: Number(event.target.value) })} /></label>
               <label className="field"><span>SKU 状态</span><select value={sku.status ?? 1} onChange={(event) => patchSku(sku.id, { status: Number(event.target.value) })}><option value={1}>启用</option><option value={0}>停用</option></select></label>
             </div>
-          </article>)}</div></section>
+          </article>)}{skuCreateOpen ? <article className="membership-create-card"><div className="membership-sku-head"><div><strong>新增 SKU</strong><span>为当前套餐添加新的售卖规格</span></div><StatusBadge tone="green">新建</StatusBadge></div><div className="membership-sku-fields"><label className="field"><span>SKU 编码</span><input value={skuCreateForm.code} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, code: event.target.value })} placeholder="例如 pro_monthly_auto" /></label><label className="field"><span>SKU 名称</span><input value={skuCreateForm.name} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, name: event.target.value })} placeholder="例如 连续包月" /></label><label className="field"><span>计费方式</span><select value={skuCreateForm.billingMode} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, billingMode: event.target.value as SkuCreateFormState['billingMode'] })}><option value="one_time">单次购买</option><option value="auto_renew">自动续费</option></select></label><label className="field"><span>周期单位</span><select value={skuCreateForm.periodUnit} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, periodUnit: event.target.value as SkuCreateFormState['periodUnit'] })}><option value="month">月</option><option value="quarter">季</option><option value="year">年</option></select></label><label className="field"><span>周期数量</span><input type="number" min="1" value={skuCreateForm.periodCount} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, periodCount: event.target.value })} /></label><label className="field"><span>销售价格</span><input type="number" min="0" value={skuCreateForm.price} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, price: event.target.value })} /></label><label className="field"><span>原价</span><input type="number" min="0" value={skuCreateForm.originalPrice} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, originalPrice: event.target.value })} /></label><label className="field"><span>退款天数</span><input type="number" min="0" value={skuCreateForm.refundDays} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, refundDays: event.target.value })} /></label><label className="field"><span>展示顺序</span><input type="number" value={skuCreateForm.displayOrder} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, displayOrder: event.target.value })} /></label><label className="field"><span>SKU 状态</span><select value={skuCreateForm.status} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, status: event.target.value as '1' | '0' })}><option value="1">启用</option><option value="0">停用</option></select></label></div><div className="membership-create-actions"><button className="toolbar-btn" type="button" onClick={() => setSkuCreateOpen(false)}>取消</button><button className="toolbar-btn primary" type="button" onClick={() => void createSku()} disabled={loading}>创建 SKU</button></div></article> : null}</div></section>
 
-          <section className="membership-editor-section"><div className="membership-editor-title"><span>03</span><div><h4>卡片权益</h4><p>卡片只展示已启用且有有效值的权益。</p></div></div><div className="membership-admin-benefit-list">{editingPlan.benefits.map((benefit) => <div className={`membership-benefit-row ${benefit.enabled ? 'is-enabled' : ''}`} key={benefit.code}>
+          <section className="membership-editor-section"><div className="membership-editor-title"><span>03</span><div><h4>卡片权益</h4><p>卡片只展示已启用且有有效值的权益。</p></div><div className="toolbar-group membership-editor-actions"><button className="toolbar-btn primary" type="button" onClick={openBenefitCreate} disabled={loading}>新增权益</button></div></div><div className="membership-admin-benefit-list">{editingPlan.benefits.map((benefit) => <div className={`membership-benefit-row ${benefit.enabled ? 'is-enabled' : ''}`} key={benefit.code}>
             <button className="membership-benefit-toggle" type="button" aria-label={`${benefit.enabled ? '关闭' : '启用'}${benefit.name}`} onClick={() => patchBenefit(benefit.code, { enabled: !benefit.enabled })}><span>{benefit.enabled ? <Check size={13} /> : null}</span></button>
             <div className="membership-benefit-copy"><strong>{benefit.name}</strong><small>{benefit.code} · {benefit.description || benefit.category}</small></div>
             <label className="field"><span>权益值</span><input value={benefit.value} disabled={!benefit.enabled} onChange={(event) => patchBenefit(benefit.code, { value: event.target.value })} /></label>
             <span className="membership-benefit-unit">{benefit.unit || benefit.valueType}</span>
-          </div>)}</div></section>
+          </div>)}{benefitCreateOpen ? <div className="membership-create-card"><div className="membership-editor-title membership-create-head"><div><h4>新增权益</h4><p>输入已有权益编码，绑定到当前套餐并写入默认值。</p></div><StatusBadge tone="green">新建</StatusBadge></div><div className="membership-create-benefit-grid"><label className="field"><span>权益编码</span><input value={benefitCreateForm.code} onChange={(event) => setBenefitCreateForm({ ...benefitCreateForm, code: event.target.value })} placeholder="例如 ai_generate_count" /></label><label className="field"><span>权益值</span><input value={benefitCreateForm.value} onChange={(event) => setBenefitCreateForm({ ...benefitCreateForm, value: event.target.value })} placeholder="例如 100" /></label><label className="field membership-checkbox-field"><span>立即启用</span><input type="checkbox" checked={benefitCreateForm.enabled} onChange={(event) => setBenefitCreateForm({ ...benefitCreateForm, enabled: event.target.checked })} /></label></div><div className="membership-create-actions"><button className="toolbar-btn" type="button" onClick={() => setBenefitCreateOpen(false)}>取消</button><button className="toolbar-btn primary" type="button" onClick={() => void createBenefit()} disabled={loading}>添加权益</button></div></div> : null}</div></section>
           </div>
         </div> : null}
       </Modal>
 
       <Modal
         open={Boolean(previewPlan)}
-        title={previewPlan ? `套餐卡预览 · ${previewPlan.name}` : '套餐卡预览'}
-        description="只预览当前套餐卡，卡片内容与用户端展示规则保持一致。"
+        title={previewPlan && activePreviewSku ? `SKU 预览 · ${previewPlan.name} / ${activePreviewSku.name}` : 'SKU 预览'}
+        description="只预览当前 SKU，卡片内容与前台展示规则保持一致。"
         size="sm"
-        onClose={() => setPreviewPlan(null)}
-        footer={<button className="modal-btn primary" type="button" onClick={() => setPreviewPlan(null)}>完成预览</button>}
+        onClose={() => { setPreviewPlan(null); setPreviewSkuId(null); }}
+        footer={<button className="modal-btn primary" type="button" onClick={() => { setPreviewPlan(null); setPreviewSkuId(null); }}>完成预览</button>}
       >
-        {previewPlan ? <div className="membership-catalog-preview is-single">
+        {previewPlan && activePreviewSku ? <div className="membership-catalog-preview is-single">
           <div className="membership-preview-context">
-            <div><strong>用户端卡片效果</strong><span>选择购买周期，核对这张卡的价格、说明与权益。</span></div>
-            {previewPlan.status === 0 ? <span><b>已停用</b>，用户端不会展示</span> : null}
+            <div><strong>用户端卡片效果</strong><span>当前 SKU 在前台展示的效果。</span></div>
+            <span><b>{activePreviewSku.name}</b> · {activePreviewSku.code}</span>
           </div>
-          <div className="membership-preview-cycle is-compact" role="group" aria-label="预览购买方式">
-            {purchaseModeOptions.map((option) => {
-              const available = previewPlan.skus.some((sku) => sku.status !== 0 && matchesPurchaseMode(sku, option.value));
-              return <button key={option.value} className={previewMode === option.value ? 'active' : ''} type="button" disabled={!available} onClick={() => setPreviewMode(option.value)}>{option.label}<small>{option.hint}</small>{option.badge && available ? <em>{option.badge}</em> : null}</button>;
-            })}
-          </div>
-          <div className="membership-single-card-wrap"><MembershipCardView plan={previewPlan} mode={previewMode} /></div>
+          <div className="membership-single-card-wrap"><MembershipCardView plan={previewPlan} sku={activePreviewSku} mode={previewMode} /></div>
         </div> : null}
       </Modal>
     </div>

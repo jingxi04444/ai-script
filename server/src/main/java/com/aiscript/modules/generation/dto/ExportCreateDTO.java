@@ -5,4 +5,5 @@ public class ExportCreateDTO {
     public String exportType;
     public String resolution;
     public String fileName;
+    public Boolean removeWatermark;
 }

@@ -17,8 +17,6 @@ import {
   FolderOutlined,
 } from '@ant-design/icons';
 import HomeRail from '../../components/Layout/HomeRail';
-import MemberPaymentDialog from '../../components/Modal/MemberPaymentDialog';
-import RechargeDialog from '../../components/Modal/RechargeDialog';
 import BriefDialog from '../../components/Modal/BriefDialog';
 import BriefDetectionDialog from '../../components/Modal/BriefDetectionDialog';
 import UploadDialog from '../../components/Modal/UploadDialog';
@@ -65,7 +63,6 @@ const WorkspacePage = () => {
 
   const [titleDraft, setTitleDraft] = useState(projectTitle);
   const [productName, setProductName] = useState('');
-  const [commerceDialog, setCommerceDialog] = useState<'member' | 'recharge' | null>(null);
   const [briefDialog, setBriefDialog] = useState(false);
   const [briefDetectionBrief, setBriefDetectionBrief] = useState<Brief | null>(null);
   const [uploadDialog, setUploadDialog] = useState(false);
@@ -293,8 +290,6 @@ const WorkspacePage = () => {
         onHome={() => navigate('/home')}
         onProjects={() => navigate('/projects')}
         onAssets={() => navigate('/assets')}
-        onMember={() => setCommerceDialog('member')}
-        onRecharge={() => setCommerceDialog('recharge')}
       />
 
       <aside className="workspace-sidebar">
@@ -460,15 +455,6 @@ const WorkspacePage = () => {
             }
           }}
         />
-      )}
-      {commerceDialog === 'member' && (
-        <MemberPaymentDialog
-          onClose={() => setCommerceDialog(null)}
-          onRecharge={() => setCommerceDialog('recharge')}
-        />
-      )}
-      {commerceDialog === 'recharge' && (
-        <RechargeDialog onClose={() => setCommerceDialog(null)} />
       )}
     </main>
   );

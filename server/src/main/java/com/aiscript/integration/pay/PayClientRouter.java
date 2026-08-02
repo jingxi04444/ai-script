@@ -16,8 +16,9 @@ public class PayClientRouter {
     }
     public String providerOf(String payMethod) {
         if ("alipay".equalsIgnoreCase(payMethod) || "alipay_scan".equalsIgnoreCase(payMethod)) return "alipay";
+        if ("alipay_auto_deduct".equalsIgnoreCase(payMethod)) return "alipay_auto_deduct";
         if ("wechat".equalsIgnoreCase(payMethod) || "wechat_native".equalsIgnoreCase(payMethod)) return "wechat";
-        if ("balance".equalsIgnoreCase(payMethod)) return "balance";
+        if ("wechat_auto_deduct".equalsIgnoreCase(payMethod)) return "wechat_auto_deduct";
         throw new BusinessException("不支持的支付方式: " + payMethod);
     }
 }

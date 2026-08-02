@@ -22,19 +22,30 @@ interface AuthState {
   clearAuth: () => void;
 }
 
+const AUTH_STORAGE_KEY = 'token';
+const BINDING_STORAGE_KEY = 'needsPhoneBinding';
+
+const readStoredBinding = () => localStorage.getItem(BINDING_STORAGE_KEY) === 'true';
+const resolvePhoneBinding = (user: UserInfo | null) => {
+  const stored = localStorage.getItem(BINDING_STORAGE_KEY);
+  if (stored !== null) return stored === 'true';
+  return user ? !user.phone : false;
+};
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  token: localStorage.getItem('token'),
-  isAuthenticated: !!localStorage.getItem('token'),
+  token: localStorage.getItem(AUTH_STORAGE_KEY),
+  isAuthenticated: !!localStorage.getItem(AUTH_STORAGE_KEY),
   isLoading: false,
-  needsPhoneBinding: false,
+  needsPhoneBinding: readStoredBinding(),
 
   login: async (username, password) => {
     set({ isLoading: true });
     try {
       resetAppState();
       const { token, user, needsPhoneBinding } = await authApi.login({ username, password });
-      localStorage.setItem('token', token);
+      localStorage.setItem(AUTH_STORAGE_KEY, token);
+      localStorage.setItem(BINDING_STORAGE_KEY, String(!!needsPhoneBinding));
       set({ token, user, needsPhoneBinding: !!needsPhoneBinding, isAuthenticated: true, isLoading: false });
     } catch (error) {
       set({ isLoading: false });
@@ -47,7 +58,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       resetAppState();
       const result = await authApi.smsLogin(phone, code);
-      localStorage.setItem('token', result.token);
+      localStorage.setItem(AUTH_STORAGE_KEY, result.token);
+      localStorage.setItem(BINDING_STORAGE_KEY, String(!!result.needsPhoneBinding));
       set({ token: result.token, user: result.user, needsPhoneBinding: !!result.needsPhoneBinding, isAuthenticated: true, isLoading: false });
     } catch (error) {
       set({ isLoading: false });
@@ -60,7 +72,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       resetAppState();
       const { token, user, needsPhoneBinding } = await authApi.register(params);
-      localStorage.setItem('token', token);
+      localStorage.setItem(AUTH_STORAGE_KEY, token);
+      localStorage.setItem(BINDING_STORAGE_KEY, String(!!needsPhoneBinding));
       set({ token, user, needsPhoneBinding: !!needsPhoneBinding, isAuthenticated: true, isLoading: false });
     } catch (error) {
       set({ isLoading: false });
@@ -72,7 +85,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true });
     try {
       const result = await authApi.bindPhone(phone, code);
-      localStorage.setItem('token', result.token);
+      localStorage.setItem(AUTH_STORAGE_KEY, result.token);
+      localStorage.setItem(BINDING_STORAGE_KEY, 'false');
       set({ token: result.token, user: result.user, needsPhoneBinding: false, isAuthenticated: true, isLoading: false });
     } catch (error) {
       set({ isLoading: false });
@@ -81,7 +95,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   acceptAuth: (result) => {
-    localStorage.setItem('token', result.token);
+    localStorage.setItem(AUTH_STORAGE_KEY, result.token);
+    localStorage.setItem(BINDING_STORAGE_KEY, String(!!result.needsPhoneBinding));
     set({ token: result.token, user: result.user, needsPhoneBinding: !!result.needsPhoneBinding, isAuthenticated: true, isLoading: false });
   },
 
@@ -89,25 +104,29 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       await authApi.logout();
     } finally {
-      localStorage.removeItem('token');
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      localStorage.removeItem(BINDING_STORAGE_KEY);
       resetAppState();
       set({ user: null, token: null, needsPhoneBinding: false, isAuthenticated: false, isLoading: false });
     }
   },
 
   fetchUserInfo: async () => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem(AUTH_STORAGE_KEY);
     if (!token) {
       resetAppState();
-      set({ user: null, token: null, isAuthenticated: false, isLoading: false });
+      set({ user: null, token: null, needsPhoneBinding: false, isAuthenticated: false, isLoading: false });
       return;
     }
     set({ isLoading: true });
     try {
       const user = await authApi.getUserInfo();
-      set({ user, token, needsPhoneBinding: !user.phone, isAuthenticated: true, isLoading: false });
+      const needsPhoneBinding = resolvePhoneBinding(user);
+      localStorage.setItem(BINDING_STORAGE_KEY, String(needsPhoneBinding));
+      set({ user, token, needsPhoneBinding, isAuthenticated: true, isLoading: false });
     } catch (error) {
-      localStorage.removeItem('token');
+      localStorage.removeItem(AUTH_STORAGE_KEY);
+      localStorage.removeItem(BINDING_STORAGE_KEY);
       resetAppState();
       set({ user: null, token: null, needsPhoneBinding: false, isAuthenticated: false, isLoading: false });
       throw error;
@@ -115,12 +134,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   setToken: (token) => {
-    localStorage.setItem('token', token);
+    localStorage.setItem(AUTH_STORAGE_KEY, token);
     set({ token, isAuthenticated: true });
   },
 
   clearAuth: () => {
-    localStorage.removeItem('token');
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.removeItem(BINDING_STORAGE_KEY);
     resetAppState();
     set({ user: null, token: null, needsPhoneBinding: false, isAuthenticated: false, isLoading: false });
   },
@@ -128,6 +148,8 @@ export const useAuthStore = create<AuthState>((set) => ({
 
 if (typeof window !== 'undefined') {
   window.addEventListener('auth:expired', () => {
+    localStorage.removeItem(AUTH_STORAGE_KEY);
+    localStorage.removeItem(BINDING_STORAGE_KEY);
     resetAppState();
     useAuthStore.setState({ user: null, token: null, needsPhoneBinding: false, isAuthenticated: false, isLoading: false });
   });

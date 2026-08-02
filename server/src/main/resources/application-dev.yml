@@ -1,40 +1,57 @@
+# ============================================================
+# AI Script 服务端 - 开发环境配置
+# 作用：本地开发时覆盖 application.yml 中的默认值
+# 使用方式：启动时指定 --spring.profiles.active=dev
+#
+# 注意：
+#   1. 这里只放开发环境需要覆盖的配置，公共默认值请维护 application.yml
+#   2. 所有密钥、密码在生产环境必须通过环境变量注入，禁止写死
+# ============================================================
+
 spring:
   datasource:
-    driver-class-name: com.mysql.cj.jdbc.Driver
+    driver-class-name: com.mysql.cj.jdbc.Driver  # MySQL 8 驱动类
     url: jdbc:mysql://localhost:3306/ai_script?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
-    username: javacui
-    password: 123456
+    # 数据库连接串说明：
+    #   localhost:3306/ai_script  - 本地 MySQL 数据库名
+    #   serverTimezone=Asia/Shanghai - 东八区时间
+    #   useSSL=false - 本地开发关闭 SSL
+    #   allowPublicKeyRetrieval=true - MySQL 8 默认缓存 SHA2 密码需要开启
+    username: javacui  # 本地数据库用户名
+    password: 123456  # 本地数据库密码
+
   data:
     redis:
-      host: localhost
-      port: 6379
-      database: 0
+      host: localhost  # 本地 Redis 地址
+      port: 6379  # Redis 端口
+      database: 0  # Redis 数据库索引
 
+# 日志级别配置
 logging:
   level:
-    com.aiscript: debug
-    org.springframework.security: info
+    com.aiscript: debug  # 项目自身包打印 DEBUG，方便本地排查
+    org.springframework.security: info  # Spring Security 日志级别
 
+# 支付模块：开发环境默认关闭真实支付，回调指向本地前端
 payment:
+  enabled: ${PAYMENT_ENABLED:false}
   dev-mode: ${PAYMENT_DEV_MODE:true}
+  base-notify-url: ${PAYMENT_BASE_NOTIFY_URL:http://localhost:8080}
+  front-return-url: ${PAYMENT_FRONT_RETURN_URL:http://localhost:5173/payment/result}
 
+# 应用自定义安全配置（开发环境使用本地占位密钥）
 app:
   jwt:
-    secret: change-me-change-me-change-me-change-me
-    access-token-expire-minutes: 120
+    secret: change-me-change-me-change-me-change-me  # JWT 签名密钥（本地占位，生产必须用强随机字符串）
+    access-token-expire-minutes: 120  # Access Token 有效期：120 分钟
+
   secret:
-    cipher-key: change-me-provider-secret-cipher-key
+    cipher-key: change-me-provider-secret-cipher-key  # 敏感字段加密密钥（本地占位）
+
   auth:
     wechat:
-      enabled: ${WECHAT_LOGIN_ENABLED:false}
-      app-id: ${WECHAT_LOGIN_APP_ID:}
-      app-secret: ${WECHAT_LOGIN_APP_SECRET:}
-      callback-url: ${WECHAT_LOGIN_CALLBACK_URL:http://localhost:8080/api/auth/wechat/callback}
+      callback-url: ${WECHAT_LOGIN_CALLBACK_URL:http://localhost:8080/api/auth/wechat/callback}  # 微信授权回调地址
+
   storage:
-    provider: ${STORAGE_PROVIDER:aliyun-oss}
-    endpoint: ${STORAGE_ENDPOINT:oss-cn-hangzhou.aliyuncs.com}
-    bucket: ${STORAGE_BUCKET:datalefoss}
-    access-key: ${STORAGE_ACCESS_KEY:}
-    secret-key: ${STORAGE_SECRET_KEY:}
-    region: ${STORAGE_REGION:cn-hangzhou}
-    public-base-url: ${STORAGE_PUBLIC_BASE_URL:}
+    bucket: ${STORAGE_BUCKET:datalefoss}  # 本地开发默认存储空间
+    public-base-url: ${STORAGE_PUBLIC_BASE_URL:}  # 文件公开访问基础 URL

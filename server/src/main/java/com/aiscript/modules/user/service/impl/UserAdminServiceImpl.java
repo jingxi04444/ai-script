@@ -62,7 +62,6 @@ public class UserAdminServiceImpl implements UserAdminService {
         user.setEmail(payload.getEmail());
         user.setPhone(payload.getPhone());
         user.setMemberLevel(payload.getMemberLevel());
-        user.setBalance(payload.getBalance());
         sysUserMapper.updateById(user);
         return UserConvert.toVO(user);
     }

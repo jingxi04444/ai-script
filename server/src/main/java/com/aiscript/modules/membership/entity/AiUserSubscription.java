@@ -25,6 +25,7 @@ public class AiUserSubscription {
     private LocalDateTime currentPeriodEnd;
     private LocalDateTime benefitAnchorTime;
     private LocalDateTime nextRenewTime;
+    private LocalDateTime graceEndTime;
     private Integer cancelAtPeriodEnd;
     private LocalDateTime cancelTime;
     private Long pendingPlanId;

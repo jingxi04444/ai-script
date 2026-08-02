@@ -319,9 +319,6 @@ h1 { margin-bottom: 8px; font-size: clamp(26px, 4vw, 44px); letter-spacing: -0.0
 .payment-method-panel .alipay-pay .anticon {
   color: #42a8ff;
 }
-.payment-method-panel .balance-pay .anticon {
-  color: #f0c35e;
-}
 .payment-method-panel button.active {
   border-color: rgba(89, 234, 103, 0.76);
   color: #65f070;
@@ -794,10 +791,6 @@ body,
 
 .payment-method-panel .alipay-pay .anticon {
   color: #42a8ff;
-}
-
-.payment-method-panel .balance-pay .anticon {
-  color: #f0c35e;
 }
 
 .payment-method-panel button.active {

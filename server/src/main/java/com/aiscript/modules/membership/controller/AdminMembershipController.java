@@ -5,8 +5,11 @@ import com.aiscript.common.api.R;
 import com.aiscript.common.api.ResultCode;
 import com.aiscript.common.exception.BusinessException;
 import com.aiscript.common.pagination.PageQuery;
+import com.aiscript.modules.membership.dto.AdminMembershipPlanCreateDTO;
 import com.aiscript.modules.membership.dto.AdminMembershipPlanUpdateDTO;
+import com.aiscript.modules.membership.dto.AdminMembershipSkuCreateDTO;
 import com.aiscript.modules.membership.dto.AdminMembershipSkuUpdateDTO;
+import com.aiscript.modules.membership.dto.AdminPlanBenefitCreateDTO;
 import com.aiscript.modules.membership.dto.AdminPlanBenefitUpdateDTO;
 import com.aiscript.modules.membership.dto.AdminPointAdjustDTO;
 import com.aiscript.modules.membership.service.AdminMembershipService;
@@ -42,6 +45,12 @@ public class AdminMembershipController {
         return R.ok(adminMembershipService.plans());
     }
 
+    @PostMapping("/plans")
+    public R<MembershipPlanVO> createPlan(@Valid @RequestBody AdminMembershipPlanCreateDTO dto) {
+        currentUser();
+        return R.ok(adminMembershipService.createPlan(dto));
+    }
+
     @PutMapping("/plans/{id}")
     public R<MembershipPlanVO> updatePlan(
         @PathVariable Long id,
@@ -51,6 +60,15 @@ public class AdminMembershipController {
         return R.ok(adminMembershipService.updatePlan(id, dto));
     }
 
+    @PostMapping("/plans/{planId}/skus")
+    public R<MembershipPlanVO> createSku(
+        @PathVariable Long planId,
+        @Valid @RequestBody AdminMembershipSkuCreateDTO dto
+    ) {
+        currentUser();
+        return R.ok(adminMembershipService.createSku(planId, dto));
+    }
+
     @PutMapping("/skus/{id}")
     public R<MembershipPlanVO> updateSku(
         @PathVariable Long id,
@@ -58,6 +76,15 @@ public class AdminMembershipController {
     ) {
         currentUser();
         return R.ok(adminMembershipService.updateSku(id, dto));
+    }
+
+    @PostMapping("/plans/{planId}/benefits")
+    public R<MembershipPlanVO> createPlanBenefit(
+        @PathVariable Long planId,
+        @Valid @RequestBody AdminPlanBenefitCreateDTO dto
+    ) {
+        currentUser();
+        return R.ok(adminMembershipService.createPlanBenefit(planId, dto));
     }
 
     @PutMapping("/plans/{planId}/benefits/{benefitCode}")

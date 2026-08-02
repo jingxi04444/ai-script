@@ -35,4 +35,8 @@ public class PaymentOrderVO {
     private String fulfillTime;
     private String fulfillError;
     private PaymentParamsVO payParams;
+    private String contractCode;
+    private String preEntrustwebId;
+    private String contractRedirectUrl;
+    private String contractFormHtml;
 }

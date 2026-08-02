@@ -4,8 +4,6 @@ import { Dropdown, Modal, message } from 'antd';
 import type { MenuProps } from 'antd';
 import { DownOutlined, ExportOutlined, MoreOutlined, PlusOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons';
 import HomeRail from '../../components/Layout/HomeRail';
-import MemberPaymentDialog from '../../components/Modal/MemberPaymentDialog';
-import RechargeDialog from '../../components/Modal/RechargeDialog';
 import { useProjectStore } from '../../stores/projectStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
 import type { Project } from '../../types/project';
@@ -16,7 +14,6 @@ const ProjectsPage = () => {
   const navigate = useNavigate();
   const { projects, fetchProjects, deleteProject, isLoading } = useProjectStore();
   const { setProject, reset } = useWorkspaceStore();
-  const [commerceDialog, setCommerceDialog] = useState<'member' | 'recharge' | null>(null);
   const [detailProject, setDetailProject] = useState<Project | null>(null);
   const [keyword, setKeyword] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -99,8 +96,6 @@ const ProjectsPage = () => {
         activeLabel="我的项目"
         onCreate={handleCreate}
         onHome={() => navigate('/home')}
-        onMember={() => setCommerceDialog('member')}
-        onRecharge={() => setCommerceDialog('recharge')}
       />
 
       <section className="my-projects-page project-gallery-page" aria-label="我的项目">
@@ -196,15 +191,6 @@ const ProjectsPage = () => {
           </section>
         )}
       </section>
-
-      {commerceDialog === 'member' && (
-        <MemberPaymentDialog
-          onClose={() => setCommerceDialog(null)}
-          onRecharge={() => setCommerceDialog('recharge')}
-        />
-      )}
-      {commerceDialog === 'recharge' && <RechargeDialog onClose={() => setCommerceDialog(null)} />}
-
       {detailProject && (
         <div className="project-detail-dialog-mask" role="dialog" aria-modal="true" aria-label="项目详情">
           <article className="project-detail-dialog">

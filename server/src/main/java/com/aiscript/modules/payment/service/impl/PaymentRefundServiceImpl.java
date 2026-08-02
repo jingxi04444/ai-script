@@ -14,12 +14,8 @@ import com.aiscript.modules.membership.service.MembershipSubscriptionService;
 import com.aiscript.modules.payment.dto.RefundQueryDTO;
 import com.aiscript.modules.payment.entity.AiPaymentOrder;
 import com.aiscript.modules.payment.entity.AiRefundOrder;
-import com.aiscript.modules.payment.entity.AiWalletAccount;
-import com.aiscript.modules.payment.entity.AiWalletTransaction;
 import com.aiscript.modules.payment.mapper.AiPaymentOrderMapper;
 import com.aiscript.modules.payment.mapper.AiRefundOrderMapper;
-import com.aiscript.modules.payment.mapper.AiWalletAccountMapper;
-import com.aiscript.modules.payment.mapper.AiWalletTransactionMapper;
 import com.aiscript.modules.payment.service.PaymentRefundService;
 import com.aiscript.modules.payment.vo.RefundOrderVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -40,8 +36,6 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
     private final AiRefundOrderMapper refundMapper;
     private final AiPaymentOrderMapper paymentOrderMapper;
     private final AiMembershipPlanSkuMapper skuMapper;
-    private final AiWalletAccountMapper walletAccountMapper;
-    private final AiWalletTransactionMapper walletTransactionMapper;
     private final PayClientRouter payClientRouter;
     private final MembershipSubscriptionService subscriptionService;
     private final TransactionTemplate transactionTemplate;
@@ -50,8 +44,6 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
         AiRefundOrderMapper refundMapper,
         AiPaymentOrderMapper paymentOrderMapper,
         AiMembershipPlanSkuMapper skuMapper,
-        AiWalletAccountMapper walletAccountMapper,
-        AiWalletTransactionMapper walletTransactionMapper,
         PayClientRouter payClientRouter,
         MembershipSubscriptionService subscriptionService
         , PlatformTransactionManager transactionManager
@@ -59,8 +51,6 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
         this.refundMapper = refundMapper;
         this.paymentOrderMapper = paymentOrderMapper;
         this.skuMapper = skuMapper;
-        this.walletAccountMapper = walletAccountMapper;
-        this.walletTransactionMapper = walletTransactionMapper;
         this.payClientRouter = payClientRouter;
         this.subscriptionService = subscriptionService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -228,13 +218,6 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
             return;
         }
         try {
-            if ("balance".equalsIgnoreCase(order.getPayMethod())) {
-                transactionTemplate.executeWithoutResult(status -> {
-                    refundBalance(order, refund);
-                    completeRefundData(order, refund, "BALANCE_SUCCESS", refund.getRefundNo());
-                });
-                return;
-            }
             PayRefundRequest request = new PayRefundRequest();
             request.setOrderNo(order.getOrderNo());
             request.setProviderTradeNo(order.getProviderTradeNo());
@@ -259,45 +242,6 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
             }
             throw new BusinessException("退款渠道调用失败");
         }
-    }
-
-    private void refundBalance(AiPaymentOrder order, AiRefundOrder refund) {
-        boolean exists = walletTransactionMapper.selectCount(
-            new LambdaQueryWrapper<AiWalletTransaction>()
-                .eq(AiWalletTransaction::getOrderNo, order.getOrderNo())
-                .eq(AiWalletTransaction::getTransactionType, "refund")
-        ) > 0;
-        if (exists) {
-            return;
-        }
-        AiWalletAccount wallet = walletAccountMapper.selectOne(new LambdaQueryWrapper<AiWalletAccount>()
-            .eq(AiWalletAccount::getUserId, order.getUserId())
-            .last("LIMIT 1"));
-        if (wallet == null) {
-            wallet = new AiWalletAccount();
-            wallet.setTenantId(order.getTenantId());
-            wallet.setUserId(order.getUserId());
-            wallet.setBalance(BigDecimal.ZERO);
-            wallet.setFrozenBalance(BigDecimal.ZERO);
-            walletAccountMapper.insert(wallet);
-        }
-        walletAccountMapper.update(null, new LambdaUpdateWrapper<AiWalletAccount>()
-            .eq(AiWalletAccount::getId, wallet.getId())
-            .setSql("balance = balance + " + refund.getRefundAmount()));
-        wallet = walletAccountMapper.selectById(wallet.getId());
-        AiWalletTransaction transaction = new AiWalletTransaction();
-        transaction.setTenantId(order.getTenantId());
-        transaction.setWalletId(wallet.getId());
-        transaction.setUserId(order.getUserId());
-        transaction.setTransactionType("refund");
-        transaction.setAmount(refund.getRefundAmount());
-        transaction.setBalanceAfter(wallet.getBalance());
-        transaction.setBizType("refund_order");
-        transaction.setBizId(Math.toIntExact(refund.getId()));
-        transaction.setOrderNo(order.getOrderNo());
-        transaction.setRequestNo("refund:" + refund.getRefundNo());
-        transaction.setRemark("会员订单退款");
-        walletTransactionMapper.insert(transaction);
     }
 
     private void completeRefund(

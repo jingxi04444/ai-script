@@ -147,6 +147,13 @@ WECHAT_PAY_PRIVATE_KEY_PATH=/secure/path/apiclient_key.pem
 WECHAT_PAY_MCH_SERIAL_NO=your-merchant-certificate-serial
 WECHAT_PAY_NOTIFY_URL=https://your-api-domain.com/api/payments/notify/wechat/native
 
+# WeChat Pay auto-renewal (scheduled deduct / entrusted payment)
+# Requires applying for the "周期扣费/委托代扣" product in the WeChat Pay merchant portal and creating a deduction template to obtain PLAN_ID.
+WECHAT_PAY_AUTO_DEDUCT_ENABLED=true
+WECHAT_PAY_AUTO_DEDUCT_PLAN_ID=your-deduct-plan-id
+WECHAT_PAY_CONTRACT_NOTIFY_URL=https://your-api-domain.com/api/payments/notify/wechat/contract
+WECHAT_PAY_DEDUCT_NOTIFY_URL=https://your-api-domain.com/api/payments/notify/wechat/deduct
+
 # Alipay QR payment
 PAYMENT_ALIPAY_ENABLED=true
 ALIPAY_APP_ID=your-alipay-app-id
@@ -156,6 +163,14 @@ ALIPAY_NOTIFY_URL=https://your-api-domain.com/api/payments/notify/alipay/scan
 ALIPAY_SELLER_ID=your-alipay-seller-id
 ALIPAY_SERVER_URL=https://openapi.alipay.com/gateway.do
 ALIPAY_SIGN_TYPE=RSA2
+
+# Alipay auto-renewal (merchant withholding / cycle deduct)
+# Requires applying for the "商家扣款" or "周期扣款" product in the Alipay open platform.
+PAYMENT_ALIPAY_AUTO_DEDUCT_ENABLED=true
+ALIPAY_AUTO_DEDUCT_PRODUCT_CODE=GENERAL_WITHHOLDING
+ALIPAY_AUTO_DEDUCT_SIGN_SCENE=your-sign-scene
+ALIPAY_CONTRACT_NOTIFY_URL=https://your-api-domain.com/api/payments/notify/alipay/contract
+ALIPAY_DEDUCT_NOTIFY_URL=https://your-api-domain.com/api/payments/notify/alipay/deduct
 ```
 
 Database migration for existing deployments:

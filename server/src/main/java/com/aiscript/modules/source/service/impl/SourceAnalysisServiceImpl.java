@@ -359,9 +359,8 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
             user.getTenantId(), user.getUserId(),
             deepMode ? "VIRAL_DEEP_ACCESS" : "VIRAL_SIMPLE_ACCESS"
         );
-        String pointCode = deepMode ? "VIRAL_DEEP_POINT_COST" : "VIRAL_SIMPLE_POINT_COST";
-        long pointCost = entitlementService.getLimit(
-            user.getTenantId(), user.getUserId(), pointCode
+        long pointCost = entitlementService.getPointCost(
+            user.getTenantId(), user.getUserId(), deepMode ? "viral_deep" : "viral_simple"
         );
         String operationId = StringUtils.hasText(dto.getRequestNo())
             ? dto.getRequestNo()

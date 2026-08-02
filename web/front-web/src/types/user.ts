@@ -5,7 +5,6 @@ export interface UserInfo {
   phone?: string;
   avatar?: string;
   memberLevel?: number;
-  balance?: number;
 }
 
 export interface LoginParams {

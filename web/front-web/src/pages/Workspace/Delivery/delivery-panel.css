@@ -15,8 +15,7 @@
 }
 
 .check-results,
-.metric-row,
-.wallet-card {
+.metric-row {
   display: grid;
   gap: 8px;
   padding: 12px;
@@ -29,21 +28,18 @@
 }
 
 .check-results article,
-.metric-row,
-.wallet-card {
+.metric-row {
   min-height: 68px;
 }
 
 .check-results strong,
-.metric-row strong,
-.wallet-card strong {
+.metric-row strong {
   color: #f6fbfb;
   font-size: 22px !important;
 }
 
 .check-results span,
-.metric-row span,
-.wallet-card span {
+.metric-row span {
   color: #aeb9bc;
 }
 

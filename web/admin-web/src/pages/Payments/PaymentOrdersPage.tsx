@@ -50,7 +50,6 @@ const methodLabel = (value?: string) => {
   if (!value) return '—';
   if (value === 'wechat') return '微信';
   if (value === 'alipay') return '支付宝';
-  if (value === 'balance') return '余额';
   return value;
 };
 
@@ -177,7 +176,6 @@ const PaymentOrdersPage = () => {
               <option value="">全部</option>
               <option value="wechat">微信</option>
               <option value="alipay">支付宝</option>
-              <option value="balance">余额</option>
             </select>
           </label>
           <label className="field"><span>订单类型</span><input value={draft.orderType} onChange={(event) => setDraft((current) => ({ ...current, orderType: event.target.value }))} placeholder="recharge / member" /></label>

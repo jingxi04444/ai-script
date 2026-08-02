@@ -7,8 +7,6 @@ import { membershipApi } from '../../api/membership';
 import { siteApi } from '../../api/site';
 import { useAuthStore } from '../../stores/authStore';
 import { applyTheme, getStoredThemeMode, type ThemeMode } from '../../utils/theme';
-import MemberPaymentDialog from '../Modal/MemberPaymentDialog';
-import RechargeDialog from '../Modal/RechargeDialog';
 import ProfileDialog from '../Modal/ProfileDialog';
 import './home-rail.css';
 
@@ -74,7 +72,7 @@ const HomeRail = ({
   onHome,
   onProjects,
   onAssets,
-  onRecharge,
+  onMember,
 }: HomeRailProps) => {
   const navigate = useNavigate();
   const logout = useAuthStore((state) => state.logout);
@@ -83,7 +81,6 @@ const HomeRail = ({
   const [homeLogoUrl, setHomeLogoUrl] = useState(() => siteApi.getCachedConfig()?.homeLogoUrl || '');
   const [homeNavItems, setHomeNavItems] = useState<HomeNavItem[]>(defaultHomeNavItems);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [fallbackCommerceDialog, setFallbackCommerceDialog] = useState<'member' | 'recharge' | null>(null);
   const [themeMode, setThemeMode] = useState<ThemeMode>(getStoredThemeMode);
 
   useEffect(() => {
@@ -213,7 +210,7 @@ const HomeRail = ({
     },
     {
       key: 'orders',
-      label: '我的订单',
+      label: '积分消耗记录',
     },
     {
       type: 'divider',
@@ -244,6 +241,10 @@ const HomeRail = ({
   };
 
   const openMembership = () => {
+    if (onMember) {
+      onMember();
+      return;
+    }
     navigate('/membership');
   };
 
@@ -291,10 +292,6 @@ const HomeRail = ({
       </div>
     </aside>
     {profileOpen && <ProfileDialog onClose={() => setProfileOpen(false)} />}
-    {fallbackCommerceDialog === 'member' && (
-      <MemberPaymentDialog onClose={() => setFallbackCommerceDialog(null)} onRecharge={() => { if (onRecharge) onRecharge(); else setFallbackCommerceDialog('recharge'); }} />
-    )}
-    {fallbackCommerceDialog === 'recharge' && <RechargeDialog onClose={() => setFallbackCommerceDialog(null)} />}
     </>
   );
 };

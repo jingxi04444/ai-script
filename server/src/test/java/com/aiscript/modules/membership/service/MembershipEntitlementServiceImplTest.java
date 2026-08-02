@@ -2,9 +2,13 @@ package com.aiscript.modules.membership.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 
 import com.aiscript.modules.membership.entity.AiBenefitUsageTransaction;
+import com.aiscript.modules.membership.entity.AiMembershipBenefitCycle;
+import com.aiscript.modules.membership.entity.AiUserBenefitUsage;
 import com.aiscript.modules.membership.entity.AiUserSubscription;
 import com.aiscript.modules.membership.mapper.AiBenefitUsageTransactionMapper;
 import com.aiscript.modules.membership.mapper.AiMembershipPlanBenefitMapper;
@@ -73,6 +77,15 @@ class MembershipEntitlementServiceImplTest {
     }
 
     @Test
+    void shouldResolveOperationCodeToPointCostBenefit() {
+        MembershipEntitlementRow row = entitlement("VIRAL_DEEP_POINT_COST", "20", "none");
+        when(membershipService.ensureActiveSubscription(1, 2)).thenReturn(subscription);
+        when(planBenefitMapper.selectActiveEntitlements(7L)).thenReturn(List.of(row));
+
+        assertThat(entitlementService.getPointCost(1, 2, "viral_deep")).isEqualTo(20L);
+    }
+
+    @Test
     void repeatedReservationRequestMustReturnOriginalTransaction() {
         AiBenefitUsageTransaction transaction = new AiBenefitUsageTransaction();
         transaction.setUserId(2L);
@@ -88,6 +101,32 @@ class MembershipEntitlementServiceImplTest {
 
         assertThat(result.getStatus()).isEqualTo("confirmed");
         verifyNoInteractions(usageMapper, membershipService, planBenefitMapper);
+    }
+
+    @Test
+    void existingCycleUsageQuotaUpdateMustPreserveConsumedAndReservedAmounts() {
+        MembershipEntitlementRow row = entitlement("SCRIPT_MONTHLY_LIMIT", "200", "membership_month");
+        AiMembershipBenefitCycle cycle = new AiMembershipBenefitCycle();
+        cycle.setId(99L);
+        AiUserBenefitUsage usage = new AiUserBenefitUsage();
+        usage.setId(123L);
+        usage.setQuotaTotal(100L);
+        usage.setUsedAmount(7L);
+        usage.setReservedAmount(3L);
+
+        when(usageTransactionMapper.selectByRequestNoForUpdate("request-upgrade")).thenReturn(null);
+        when(membershipService.ensureActiveSubscription(1, 2)).thenReturn(subscription);
+        when(planBenefitMapper.selectActiveEntitlements(7L)).thenReturn(List.of(row));
+        when(membershipService.ensureCurrentBenefitCycle(subscription)).thenReturn(cycle);
+        when(usageMapper.selectOne(any())).thenReturn(usage);
+        when(usageMapper.reserveQuota(123L, 1L)).thenReturn(1);
+
+        entitlementService.reserveQuota(1, 2, "SCRIPT_MONTHLY_LIMIT", 1, "request-upgrade", "script_generate", null);
+
+        assertThat(usage.getQuotaTotal()).isEqualTo(200L);
+        assertThat(usage.getUsedAmount()).isEqualTo(7L);
+        assertThat(usage.getReservedAmount()).isEqualTo(3L);
+        verify(usageMapper).updateById(usage);
     }
 
     private MembershipEntitlementRow entitlement(String code, String value, String resetType) {

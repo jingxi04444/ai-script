@@ -48,7 +48,7 @@ export interface UserMembership {
   planCode?: string;
   planName?: string;
   status?: string;
-  autoRenew?: boolean;
+  autoRenew?: boolean | number;
   cancelAtPeriodEnd?: boolean;
   startTime?: string;
   currentPeriodStart?: string;

@@ -167,8 +167,8 @@ const LoginPage = () => {
 
       <Modal open={isAuthenticated && needsPhoneBinding} closable={false} footer={null} centered width={430} className="auth-bind-modal" maskClosable={false}>
         <div className="auth-bind-content">
-          <span className="auth-bind-icon"><WechatOutlined /></span>
-          <h3>微信登录成功</h3>
+          <span className="auth-bind-icon"><MobileOutlined /></span>
+          <h3>请绑定手机号</h3>
           <p>绑定手机号后即可进入工作台；如果手机号已经注册，会自动绑定到原账号。</p>
           <label><span>手机号</span><div className="auth-input"><MobileOutlined /><b>+86</b><input inputMode="numeric" maxLength={11} placeholder="请输入手机号" value={bindPhone} onChange={(e) => setBindPhone(e.target.value.replace(/\D/g, ''))} /></div></label>
           <label><span>验证码</span><div className="auth-input auth-code-input"><SafetyCertificateOutlined /><input inputMode="numeric" maxLength={6} placeholder="短信验证码" value={bindCode} onChange={(e) => setBindCode(e.target.value.replace(/\D/g, ''))} /><button type="button" disabled={countdown > 0} onClick={() => void sendCode(bindPhone, 'bind')}>{countdown ? `${countdown}s` : '获取验证码'}</button></div></label>
