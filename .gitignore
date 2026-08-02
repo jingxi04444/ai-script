@@ -5,12 +5,11 @@ server/target/
 .idea/
 *.iml
 *.zip
-
 .env
 .env.local
-
 .venv/
 server/.venv/
 *.egg-info/
 __pycache__/
 *.py[cod]
+.slim/deepwork/
