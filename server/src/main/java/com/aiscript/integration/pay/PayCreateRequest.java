@@ -1,6 +1,7 @@
 package com.aiscript.integration.pay;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import lombok.Data;
 
 @Data
@@ -15,4 +16,5 @@ public class PayCreateRequest {
     private String notifyUrl;
     private String returnUrl;
     private String contractId;
+    private LocalDateTime expireTime;
 }

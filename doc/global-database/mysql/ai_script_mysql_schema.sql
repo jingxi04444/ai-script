@@ -54,6 +54,7 @@ CREATE TABLE sys_user (
   avatar_url VARCHAR(500) DEFAULT NULL COMMENT '头像',
   user_type VARCHAR(32) NOT NULL DEFAULT 'front' COMMENT '用户类型：front/admin',
   member_level INT NOT NULL DEFAULT 0 COMMENT '会员等级',
+  internal_account TINYINT NOT NULL DEFAULT 0 COMMENT '内部员工账号：0否 1是',
   status TINYINT NOT NULL DEFAULT 1 COMMENT '状态：0禁用 1启用',
   last_login_time DATETIME DEFAULT NULL COMMENT '最近登录时间',
   create_by INT DEFAULT NULL COMMENT '创建人',
@@ -66,6 +67,7 @@ CREATE TABLE sys_user (
   KEY idx_sys_user_tenant (tenant_id),
   KEY idx_sys_user_phone (phone),
   KEY idx_sys_user_email (email),
+  KEY idx_sys_user_internal (internal_account, status),
   UNIQUE KEY uk_sys_user_wechat_open_id (wechat_open_id),
   KEY idx_sys_user_wechat_union_id (wechat_union_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户表，包含前台用户和后台管理员';
@@ -325,12 +327,15 @@ CREATE TABLE sys_notification (
   tenant_id INT DEFAULT NULL COMMENT '租户ID',
   user_id INT DEFAULT NULL COMMENT '接收用户ID',
   channel VARCHAR(40) NOT NULL DEFAULT 'system' COMMENT '通知渠道',
+  biz_type VARCHAR(60) DEFAULT NULL COMMENT '业务类型，用于通知去重与跳转',
+  biz_id VARCHAR(180) DEFAULT NULL COMMENT '业务唯一标识',
   title VARCHAR(180) NOT NULL COMMENT '标题',
   content TEXT DEFAULT NULL COMMENT '内容',
   status TINYINT NOT NULL DEFAULT 0 COMMENT '状态：0未读 1已读',
   read_time DATETIME DEFAULT NULL COMMENT '阅读时间',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
   PRIMARY KEY (id),
+  UNIQUE KEY uk_sys_notification_biz (user_id, channel, biz_type, biz_id),
   KEY idx_sys_notification_user_status (user_id, status, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统通知表';
 
@@ -746,9 +751,11 @@ CREATE TABLE ai_storyboard_script (
   id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   tenant_id INT NOT NULL COMMENT '租户ID',
   project_id INT NOT NULL COMMENT '项目ID',
+  brief_id INT DEFAULT NULL COMMENT '生成脚本时使用的Brief ID',
+  brief_snapshot LONGTEXT DEFAULT NULL COMMENT '生成脚本时固化的Brief内容快照',
   script_name VARCHAR(220) NOT NULL COMMENT '脚本名称',
   script_type VARCHAR(40) NOT NULL DEFAULT 'viral' COMMENT '类型：viral/template/original',
-  status VARCHAR(32) NOT NULL DEFAULT 'draft' COMMENT '状态：draft/pending/done',
+  status VARCHAR(32) NOT NULL DEFAULT 'draft' COMMENT '状态：draft/pending_review/changes_requested/revised_pending_review/approved',
   audit_status VARCHAR(32) NOT NULL DEFAULT 'not_submitted' COMMENT '审核状态',
   current_version_id INT DEFAULT NULL COMMENT '当前版本ID',
   share_token VARCHAR(120) DEFAULT NULL COMMENT '分享token',
@@ -761,6 +768,7 @@ CREATE TABLE ai_storyboard_script (
   PRIMARY KEY (id),
   UNIQUE KEY uk_ai_storyboard_script_share (share_token),
   KEY idx_ai_storyboard_script_project (project_id),
+  KEY idx_ai_storyboard_script_brief (brief_id),
   KEY idx_ai_storyboard_script_tenant_status (tenant_id, status),
   KEY idx_ai_storyboard_script_creator (tenant_id, create_by, update_time),
   KEY idx_ai_storyboard_script_project_creator_updated (tenant_id, create_by, project_id, update_time)
@@ -993,6 +1001,7 @@ CREATE TABLE ai_generation_task (
   error_code VARCHAR(80) DEFAULT NULL COMMENT '错误码',
   error_message TEXT DEFAULT NULL COMMENT '错误信息',
   idempotency_key VARCHAR(160) DEFAULT NULL COMMENT '幂等key',
+  quota_request_no VARCHAR(100) DEFAULT NULL COMMENT '并发任务额度预占请求号',
   start_time DATETIME DEFAULT NULL COMMENT '开始时间',
   finish_time DATETIME DEFAULT NULL COMMENT '完成时间',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -1188,6 +1197,40 @@ CREATE TABLE ai_payment_callback (
   UNIQUE KEY uk_ai_payment_callback_notify (provider, notify_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='支付回调日志表';
 
+DROP TABLE IF EXISTS ai_user_pay_contract;
+CREATE TABLE ai_user_pay_contract (
+  id BIGINT NOT NULL AUTO_INCREMENT,
+  tenant_id BIGINT DEFAULT NULL,
+  user_id BIGINT NOT NULL,
+  subscription_id BIGINT DEFAULT NULL,
+  initial_order_no VARCHAR(80) DEFAULT NULL COMMENT '签约后发起首期扣款的本地订单号',
+  channel VARCHAR(32) NOT NULL COMMENT 'wechat_auto_deduct | alipay_auto_deduct',
+  plan_id VARCHAR(128) DEFAULT NULL COMMENT '渠道签约产品或模板ID',
+  contract_code VARCHAR(128) NOT NULL COMMENT '商户侧签约协议号',
+  contract_id VARCHAR(128) DEFAULT NULL COMMENT '渠道侧协议ID',
+  status VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT 'pending | signed | terminated | expired',
+  signed_time DATETIME DEFAULT NULL,
+  terminated_time DATETIME DEFAULT NULL,
+  terminate_mode VARCHAR(32) DEFAULT NULL COMMENT 'user | merchant | system',
+  notify_url VARCHAR(512) DEFAULT NULL,
+  extra_json JSON DEFAULT NULL COMMENT '渠道额外字段',
+  create_by BIGINT DEFAULT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_by BIGINT DEFAULT NULL,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted TINYINT NOT NULL DEFAULT 0,
+  active_slot TINYINT GENERATED ALWAYS AS (
+    CASE WHEN status IN ('pending', 'signed') AND deleted = 0 THEN 1 ELSE NULL END
+  ) STORED COMMENT '待签约或生效协议唯一槽',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_contract_code_channel (contract_code, channel),
+  UNIQUE KEY uk_user_channel_active (user_id, channel, active_slot),
+  UNIQUE KEY uk_contract_initial_order (initial_order_no),
+  KEY idx_subscription_id (subscription_id),
+  KEY idx_user_id (user_id),
+  KEY idx_contract_id (contract_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户支付自动扣款签约协议';
+
 DROP TABLE IF EXISTS ai_quota_account;
 CREATE TABLE ai_quota_account (
   id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
@@ -1293,6 +1336,7 @@ CREATE TABLE IF NOT EXISTS ai_user_subscription (
   current_period_end DATETIME NOT NULL COMMENT '当前付费周期结束',
   benefit_anchor_time DATETIME NOT NULL COMMENT '月度权益重置锚点',
   next_renew_time DATETIME DEFAULT NULL COMMENT '下次续费时间',
+  grace_end_time DATETIME DEFAULT NULL COMMENT '自动续费失败后的宽限期结束时间',
   cancel_at_period_end TINYINT NOT NULL DEFAULT 0 COMMENT '是否到期取消',
   cancel_time DATETIME DEFAULT NULL COMMENT '取消续费时间',
   pending_plan_id BIGINT DEFAULT NULL COMMENT '待生效降级套餐',
@@ -1390,6 +1434,47 @@ CREATE TABLE IF NOT EXISTS ai_storage_object (
   UNIQUE KEY uk_storage_object_request (request_no),
   KEY idx_storage_object_user_status (user_id, status, update_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Membership storage accounting object';
+CREATE TABLE IF NOT EXISTS ai_point_package (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  package_code VARCHAR(50) NOT NULL COMMENT '积分包编码',
+  package_name VARCHAR(100) NOT NULL COMMENT '积分包名称',
+  price DECIMAL(14,2) NOT NULL COMMENT '销售价格',
+  points BIGINT NOT NULL COMMENT '到账积分',
+  description VARCHAR(500) DEFAULT NULL COMMENT '展示说明',
+  display_order INT NOT NULL DEFAULT 0 COMMENT '展示顺序',
+  status TINYINT NOT NULL DEFAULT 1 COMMENT '状态：1启用，0停用',
+  create_by BIGINT DEFAULT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_by BIGINT DEFAULT NULL,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted TINYINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_point_package_code (package_code),
+  KEY idx_point_package_status_order (status, display_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='可售积分包';
+
+CREATE TABLE IF NOT EXISTS ai_template_custom_request (
+  id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  user_id INT NOT NULL COMMENT '申请用户ID',
+  plan_id BIGINT NOT NULL COMMENT '申请时会员套餐ID',
+  title VARCHAR(120) NOT NULL COMMENT '定制模板标题',
+  requirements TEXT NOT NULL COMMENT '定制需求',
+  contact VARCHAR(200) DEFAULT NULL COMMENT '联系方式',
+  status VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/processing/completed/rejected',
+  admin_remark VARCHAR(1000) DEFAULT NULL COMMENT '后台处理备注',
+  handled_by INT DEFAULT NULL COMMENT '处理人',
+  handled_time DATETIME DEFAULT NULL COMMENT '处理时间',
+  create_by INT DEFAULT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_by INT DEFAULT NULL,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted TINYINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (id),
+  KEY idx_template_custom_user (tenant_id, user_id, create_time),
+  KEY idx_template_custom_status (status, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='至尊会员独家定制模板工单';
+
 CREATE TABLE IF NOT EXISTS ai_point_account (
   id BIGINT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   tenant_id BIGINT DEFAULT NULL COMMENT '租户ID',

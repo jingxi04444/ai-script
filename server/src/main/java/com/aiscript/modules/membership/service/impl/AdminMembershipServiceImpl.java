@@ -10,14 +10,18 @@ import com.aiscript.modules.membership.dto.AdminMembershipSkuUpdateDTO;
 import com.aiscript.modules.membership.dto.AdminPlanBenefitCreateDTO;
 import com.aiscript.modules.membership.dto.AdminPlanBenefitUpdateDTO;
 import com.aiscript.modules.membership.dto.AdminPointAdjustDTO;
+import com.aiscript.modules.membership.dto.AdminPointPackageCreateDTO;
+import com.aiscript.modules.membership.dto.AdminPointPackageUpdateDTO;
 import com.aiscript.modules.membership.entity.AiMembershipBenefitDefinition;
 import com.aiscript.modules.membership.entity.AiMembershipPlan;
 import com.aiscript.modules.membership.entity.AiMembershipPlanBenefit;
 import com.aiscript.modules.membership.entity.AiMembershipPlanSku;
+import com.aiscript.modules.membership.entity.AiPointPackage;
 import com.aiscript.modules.membership.mapper.AiMembershipBenefitDefinitionMapper;
 import com.aiscript.modules.membership.mapper.AiMembershipPlanBenefitMapper;
 import com.aiscript.modules.membership.mapper.AiMembershipPlanMapper;
 import com.aiscript.modules.membership.mapper.AiMembershipPlanSkuMapper;
+import com.aiscript.modules.membership.mapper.AiPointPackageMapper;
 import com.aiscript.modules.membership.mapper.AiUserSubscriptionMapper;
 import com.aiscript.modules.membership.service.AdminMembershipService;
 import com.aiscript.modules.membership.service.MembershipEntitlementService;
@@ -26,6 +30,7 @@ import com.aiscript.modules.membership.service.MembershipService;
 import com.aiscript.modules.membership.vo.AdminSubscriptionVO;
 import com.aiscript.modules.membership.vo.MembershipPlanVO;
 import com.aiscript.modules.membership.vo.PointTransactionVO;
+import com.aiscript.modules.membership.vo.PointPackageVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.util.List;
 import java.util.UUID;
@@ -44,6 +49,7 @@ public class AdminMembershipServiceImpl implements AdminMembershipService {
     private final AiMembershipPlanSkuMapper skuMapper;
     private final AiMembershipBenefitDefinitionMapper benefitDefinitionMapper;
     private final AiMembershipPlanBenefitMapper planBenefitMapper;
+    private final AiPointPackageMapper pointPackageMapper;
     private final AiUserSubscriptionMapper subscriptionMapper;
 
     public AdminMembershipServiceImpl(
@@ -54,6 +60,7 @@ public class AdminMembershipServiceImpl implements AdminMembershipService {
         AiMembershipPlanSkuMapper skuMapper,
         AiMembershipBenefitDefinitionMapper benefitDefinitionMapper,
         AiMembershipPlanBenefitMapper planBenefitMapper,
+        AiPointPackageMapper pointPackageMapper,
         AiUserSubscriptionMapper subscriptionMapper
     ) {
         this.membershipService = membershipService;
@@ -63,6 +70,7 @@ public class AdminMembershipServiceImpl implements AdminMembershipService {
         this.skuMapper = skuMapper;
         this.benefitDefinitionMapper = benefitDefinitionMapper;
         this.planBenefitMapper = planBenefitMapper;
+        this.pointPackageMapper = pointPackageMapper;
         this.subscriptionMapper = subscriptionMapper;
     }
 
@@ -129,7 +137,7 @@ public class AdminMembershipServiceImpl implements AdminMembershipService {
         sku.setPlanId(planId);
         sku.setSkuCode(code);
         sku.setSkuName(dto.getName().trim());
-        sku.setBillingMode(dto.getBillingMode().trim());
+        sku.setBillingMode("one_time");
         sku.setPeriodUnit(dto.getPeriodUnit().trim());
         sku.setPeriodCount(dto.getPeriodCount());
         sku.setPrice(dto.getPrice());
@@ -150,7 +158,7 @@ public class AdminMembershipServiceImpl implements AdminMembershipService {
             throw new BusinessException("会员 SKU 不存在");
         }
         sku.setSkuName(dto.getName().trim());
-        sku.setBillingMode(dto.getBillingMode());
+        sku.setBillingMode("one_time");
         sku.setPeriodUnit(dto.getPeriodUnit());
         sku.setPeriodCount(dto.getPeriodCount());
         sku.setPrice(dto.getPrice());
@@ -259,6 +267,72 @@ public class AdminMembershipServiceImpl implements AdminMembershipService {
             DEFAULT_TENANT_ID, userId, Math.abs(dto.getChangePoints()), requestNo,
             "admin_membership", operatorId == null ? null : operatorId.longValue(), remark
         );
+    }
+
+    @Override
+    public List<PointPackageVO> pointPackages() {
+        return pointPackageMapper.selectList(new LambdaQueryWrapper<AiPointPackage>()
+            .orderByAsc(AiPointPackage::getDisplayOrder)
+            .orderByAsc(AiPointPackage::getId)
+        ).stream().map(this::toPointPackageVO).toList();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public PointPackageVO createPointPackage(AdminPointPackageCreateDTO dto) {
+        String code = dto.getCode().trim();
+        if (pointPackageMapper.selectOne(new LambdaQueryWrapper<AiPointPackage>()
+            .eq(AiPointPackage::getPackageCode, code)
+            .last("LIMIT 1")) != null) {
+            throw new BusinessException("积分包编码已存在");
+        }
+        AiPointPackage pointPackage = new AiPointPackage();
+        pointPackage.setPackageCode(code);
+        applyPointPackage(pointPackage, dto.getName(), dto.getPrice(), dto.getPoints(), dto.getDescription(), dto.getDisplayOrder(), dto.getStatus());
+        pointPackageMapper.insert(pointPackage);
+        return toPointPackageVO(pointPackage);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public PointPackageVO updatePointPackage(Long id, AdminPointPackageUpdateDTO dto) {
+        AiPointPackage pointPackage = pointPackageMapper.selectById(id);
+        if (pointPackage == null) {
+            throw new BusinessException("积分包不存在");
+        }
+        applyPointPackage(pointPackage, dto.getName(), dto.getPrice(), dto.getPoints(), dto.getDescription(), dto.getDisplayOrder(), dto.getStatus());
+        pointPackageMapper.updateById(pointPackage);
+        return toPointPackageVO(pointPackage);
+    }
+
+    private void applyPointPackage(
+        AiPointPackage pointPackage,
+        String name,
+        java.math.BigDecimal price,
+        Long points,
+        String description,
+        Integer displayOrder,
+        Integer status
+    ) {
+        pointPackage.setPackageName(name.trim());
+        pointPackage.setPrice(price);
+        pointPackage.setPoints(points);
+        pointPackage.setDescription(description);
+        pointPackage.setDisplayOrder(displayOrder == null ? 0 : displayOrder);
+        pointPackage.setStatus(status);
+    }
+
+    private PointPackageVO toPointPackageVO(AiPointPackage pointPackage) {
+        PointPackageVO vo = new PointPackageVO();
+        vo.setId(String.valueOf(pointPackage.getId()));
+        vo.setCode(pointPackage.getPackageCode());
+        vo.setName(pointPackage.getPackageName());
+        vo.setPrice(pointPackage.getPrice());
+        vo.setPoints(pointPackage.getPoints());
+        vo.setDescription(pointPackage.getDescription());
+        vo.setDisplayOrder(pointPackage.getDisplayOrder());
+        vo.setStatus(pointPackage.getStatus());
+        return vo;
     }
 
     private MembershipPlanVO planById(Long id) {

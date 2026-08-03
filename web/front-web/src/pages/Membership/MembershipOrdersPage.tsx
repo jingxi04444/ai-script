@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { message, Modal, Input } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
 import HomeRail from '../../components/Layout/HomeRail';
 import { membershipApi } from '../../api/membership';
 import { paymentApi } from '../../api/payment';
 import type { PaymentOrder, RefundOrder } from '../../types/payment';
 import { formatDateTime } from '../../utils/format';
+import MembershipTopbar from './MembershipTopbar';
 import './membership-page.css';
 import './membership-orders-page.css';
 
@@ -39,6 +38,7 @@ const refundStatusLabel = (value?: string) => {
 };
 
 const isRefundableOrder = (order: PaymentOrder) => {
+  if (typeof order.refundable === 'boolean') return order.refundable;
   const status = (order.status || '').toLowerCase();
   return order.orderType === 'member' && ['paid', 'success', 'completed'].includes(status);
 };
@@ -46,7 +46,6 @@ const isRefundableOrder = (order: PaymentOrder) => {
 const formatRefundReason = (reason?: string) => reason || '—';
 
 const MembershipOrdersPage = () => {
-  const navigate = useNavigate();
   const [membershipName, setMembershipName] = useState('');
   const [orders, setOrders] = useState<PaymentOrder[]>([]);
   const [refundOrders, setRefundOrders] = useState<RefundOrder[]>([]);
@@ -63,7 +62,7 @@ const MembershipOrdersPage = () => {
         paymentApi.orders({ page: 1, pageSize: 12, orderType: 'member' }).catch(() => null),
         paymentApi.refunds({ page: 1, pageSize: 12 }).catch(() => null),
       ]);
-      setMembershipName(membership?.planName || '免费体验版');
+      setMembershipName(membership?.planName || '未开通会员');
       setOrders((orderResult?.list || []).filter((item) => item.orderType === 'member' || /会员/.test(item.subject || '')));
       setRefundOrders(refundResult?.list || []);
     } catch {
@@ -101,16 +100,7 @@ const MembershipOrdersPage = () => {
       <HomeRail activeLabel="会员中心" membershipName={membershipName} />
 
       <main className="membership-page membership-orders-page">
-        <header className="membership-topbar membership-orders-topbar">
-          <nav className="membership-tabs" aria-label="会员订单导航">
-            <button type="button" onClick={() => navigate('/membership')}>返回会员中心</button>
-            <button className="active" type="button">订单记录</button>
-            <button type="button" onClick={() => navigate('/membership/auto-renew')}>自动续费管理</button>
-          </nav>
-          <button className="membership-refresh" type="button" onClick={() => void load()}>
-            <ReloadOutlined /> 刷新
-          </button>
-        </header>
+        <MembershipTopbar active="orders" onRefresh={() => void load()} refreshing={loading} />
 
         <section className="membership-orders-hero">
           <div>
@@ -132,7 +122,8 @@ const MembershipOrdersPage = () => {
               {orders.length ? (
                 <div className="membership-order-cards">
                   {orders.map((paymentOrder) => {
-                    const refundable = isRefundableOrder(paymentOrder);
+                    const existingRefund = refundOrders.find((item) => item.paymentOrderId === paymentOrder.id);
+                    const refundable = !existingRefund && isRefundableOrder(paymentOrder);
                     const refunded = (paymentOrder.status || '').toLowerCase() === 'refunded';
                     return (
                       <article className="membership-order-card" key={paymentOrder.id}>
@@ -150,6 +141,13 @@ const MembershipOrdersPage = () => {
                           <span>{paymentMethodLabel(paymentOrder.payMethod)}</span>
                           <span>{formatDateTime(paymentOrder.payTime || paymentOrder.createdAt)}</span>
                         </div>
+                        {paymentOrder.refundDays ? (
+                          <p className="membership-refund-window">
+                            {paymentOrder.refundable
+                              ? `${paymentOrder.refundDays}天无忧退款 · 截止 ${formatDateTime(paymentOrder.refundDeadline)}`
+                              : paymentOrder.refundUnavailableReason || '当前订单不可退款'}
+                          </p>
+                        ) : null}
                         <div className="membership-order-card-actions">
                           <button
                             type="button"
@@ -157,7 +155,11 @@ const MembershipOrdersPage = () => {
                             disabled={!refundable}
                             onClick={() => openRefundDialog(paymentOrder)}
                           >
-                            {refunded ? '已退款' : refundable ? '申请退款' : '不可退款'}
+                            {refunded
+                              ? '已退款'
+                              : existingRefund
+                                ? `退款${refundStatusLabel(existingRefund.status)}`
+                                : refundable ? '申请退款' : '不可退款'}
                           </button>
                         </div>
                       </article>

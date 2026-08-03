@@ -9,9 +9,12 @@ import com.aiscript.modules.membership.dto.AdminMembershipSkuUpdateDTO;
 import com.aiscript.modules.membership.dto.AdminPlanBenefitCreateDTO;
 import com.aiscript.modules.membership.dto.AdminPlanBenefitUpdateDTO;
 import com.aiscript.modules.membership.dto.AdminPointAdjustDTO;
+import com.aiscript.modules.membership.dto.AdminPointPackageCreateDTO;
+import com.aiscript.modules.membership.dto.AdminPointPackageUpdateDTO;
 import com.aiscript.modules.membership.vo.AdminSubscriptionVO;
 import com.aiscript.modules.membership.vo.MembershipPlanVO;
 import com.aiscript.modules.membership.vo.PointTransactionVO;
+import com.aiscript.modules.membership.vo.PointPackageVO;
 import java.util.List;
 
 public interface AdminMembershipService {
@@ -32,4 +35,10 @@ public interface AdminMembershipService {
     PageResult<AdminSubscriptionVO> subscriptions(PageQuery query, String status);
 
     PointTransactionVO adjustPoints(AdminPointAdjustDTO dto, Integer operatorId);
+
+    List<PointPackageVO> pointPackages();
+
+    PointPackageVO createPointPackage(AdminPointPackageCreateDTO dto);
+
+    PointPackageVO updatePointPackage(Long id, AdminPointPackageUpdateDTO dto);
 }

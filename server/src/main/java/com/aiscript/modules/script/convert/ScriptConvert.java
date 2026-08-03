@@ -14,12 +14,19 @@ public final class ScriptConvert {
         vo.setId(String.valueOf(script.getId()));
         vo.setName(script.getScriptName());
         vo.setProjectId(String.valueOf(script.getProjectId()));
+        vo.setBriefId(script.getBriefId() == null ? null : String.valueOf(script.getBriefId()));
         vo.setType(script.getScriptType());
-        vo.setStatus(script.getStatus());
+        vo.setStatus(normalizeStatus(script.getStatus()));
         vo.setContent(script.getContentText());
         vo.setCreatedAt(script.getCreateTime() == null ? null : script.getCreateTime().toString());
         vo.setUpdatedAt(script.getUpdateTime() == null ? null : script.getUpdateTime().toString());
         return vo;
+    }
+
+    private static String normalizeStatus(String status) {
+        if ("pending".equals(status)) return "pending_review";
+        if ("done".equals(status)) return "approved";
+        return status;
     }
 
     public static ScriptTemplateVO toTemplateVO(AiScriptTemplate template) {

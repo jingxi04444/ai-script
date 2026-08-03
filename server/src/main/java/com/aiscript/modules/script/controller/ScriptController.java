@@ -6,6 +6,7 @@ import com.aiscript.common.pagination.PageQuery;
 import com.aiscript.modules.script.dto.GenerateScriptDTO;
 import com.aiscript.modules.script.dto.PolishScriptDTO;
 import com.aiscript.modules.script.dto.ScriptSaveDTO;
+import com.aiscript.modules.script.dto.TemplateSaveDTO;
 import com.aiscript.modules.script.service.ScriptService;
 import com.aiscript.modules.script.vo.PolishScriptVO;
 import com.aiscript.modules.script.vo.ScriptListVO;
@@ -84,5 +85,10 @@ public class ScriptController {
     @GetMapping("/templates")
     public R<List<ScriptTemplateVO>> templates() {
         return R.ok(scriptService.enabledTemplates());
+    }
+
+    @PostMapping("/templates")
+    public R<ScriptTemplateVO> createCustomTemplate(@RequestBody TemplateSaveDTO payload) {
+        return R.ok(scriptService.createTemplate(payload));
     }
 }

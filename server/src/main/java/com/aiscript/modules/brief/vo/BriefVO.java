@@ -27,4 +27,5 @@ public class BriefVO {
     private String shareUrl;
     private String sharePermission;
     private String accessPermission;
+    private Boolean ownedByCurrentUser;
 }

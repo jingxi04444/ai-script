@@ -27,7 +27,28 @@ public class AlipayAutoDeductPayClient implements PayClient {
     @Override public String provider() { return "alipay_auto_deduct"; }
     @Override public PayCreateResponse createNativeOrder(PayCreateRequest request) { throw new UnsupportedOperationException("支付宝自动续费不支持扫码下单"); }
     @Override public PayNotifyMessage verifyAndParseNotify(PayNotifyMessage message) { return verifyAndParseDeductNotify(message); }
-    @Override public PayQueryResponse queryOrder(String outTradeNo) { throw new UnsupportedOperationException("支付宝自动续费暂未实现查单"); }
+    @Override
+    public PayQueryResponse queryOrder(String outTradeNo) {
+        ensureEnabled();
+        try {
+            initQuietly();
+            AlipayOpenApiGenericResponse result = Factory.Util.Generic().execute(
+                "alipay.trade.query", Map.of(), Map.of("out_trade_no", outTradeNo)
+            );
+            if (!"10000".equals(result.code)) throw new BusinessException("支付宝查单失败: " + result.subMsg);
+            JsonNode data = objectMapper.readTree(result.httpBody).path("alipay_trade_query_response");
+            PayQueryResponse response = new PayQueryResponse();
+            response.setProvider(provider());
+            response.setOrderNo(data.path("out_trade_no").asText(outTradeNo));
+            response.setProviderTradeNo(data.path("trade_no").asText(null));
+            response.setTradeStatus(data.path("trade_status").asText(null));
+            response.setPaid("TRADE_SUCCESS".equals(response.getTradeStatus()) || "TRADE_FINISHED".equals(response.getTradeStatus()));
+            if (data.hasNonNull("total_amount")) response.setPaidAmount(new java.math.BigDecimal(data.path("total_amount").asText()));
+            return response;
+        } catch (Exception exception) {
+            throw new BusinessException("支付宝自动续费查单失败: " + exception.getMessage());
+        }
+    }
     @Override public void closeOrder(String outTradeNo) { throw new UnsupportedOperationException("支付宝自动续费不支持关单"); }
     @Override public PayRefundResponse refund(PayRefundRequest request) { throw new UnsupportedOperationException("支付宝自动续费退款请走原支付渠道退款能力"); }
 
@@ -44,20 +65,20 @@ public class AlipayAutoDeductPayClient implements PayClient {
             biz.put("period_rule_params", Map.of(
                 "period_type", "MONTH",
                 "period", 1,
-                "execute_time", StringUtils.hasText(request.getEstimatedDeductDate()) ? request.getEstimatedDeductDate() : LocalDate.now().plusMonths(1).toString(),
+                "execute_time", StringUtils.hasText(request.getEstimatedDeductDate()) ? request.getEstimatedDeductDate() : LocalDate.now().toString(),
                 "single_amount", request.getEstimatedDeductAmount() == null ? "0.00" : request.getEstimatedDeductAmount().toPlainString()
             ));
             biz.put("access_params", Map.of("channel", StringUtils.hasText(request.getChannel()) ? request.getChannel() : "QRCODE"));
-            AlipayOpenApiGenericSDKResponse sdkResponse = Factory.Util.Generic()
-                .asyncNotify(contractNotifyUrl(request.getContractNotifyUrl()))
-                .sdkExecute("alipay.user.agreement.page.sign", Map.of(), biz);
-            String form = sdkResponse.body;
+            var client = Factory.Util.Generic().asyncNotify(contractNotifyUrl(request.getContractNotifyUrl()));
+            if (StringUtils.hasText(properties.getFrontReturnUrl())) client = client.route(properties.getFrontReturnUrl());
+            AlipayOpenApiGenericSDKResponse sdkResponse = client.sdkExecute("alipay.user.agreement.page.sign", Map.of(), biz);
+            String orderString = sdkResponse.body;
+            String redirectUrl = properties.getAlipay().getServerUrl() + "?" + orderString;
             PayContractSignResponse response = new PayContractSignResponse();
             response.setProvider(provider());
             response.setOutContractCode(request.getOutContractCode());
-            response.setFormHtml(form);
-            response.setRedirectUrl(form);
-            response.setRawPayload(form);
+            response.setRedirectUrl(redirectUrl);
+            response.setRawPayload(orderString);
             return response;
         } catch (Exception exception) {
             throw new BusinessException("支付宝自动续费预签约失败: " + exception.getMessage());
@@ -120,6 +141,7 @@ public class AlipayAutoDeductPayClient implements PayClient {
     @Override
     public PayNotifyMessage verifyAndParseContractNotify(PayNotifyMessage message) {
         verify(message);
+        verifyAppIdentity(message);
         String notifyType = message.getParams().get("notify_type");
         message.setProvider(provider());
         message.setNotifyId(message.getParams().get("notify_id"));
@@ -140,6 +162,7 @@ public class AlipayAutoDeductPayClient implements PayClient {
     @Override
     public PayNotifyMessage verifyAndParseDeductNotify(PayNotifyMessage message) {
         verify(message);
+        verifyMerchantIdentity(message);
         message.setProvider(provider());
         message.setNotifyId(message.getParams().get("notify_id"));
         message.setAppId(message.getParams().get("app_id"));
@@ -163,7 +186,23 @@ public class AlipayAutoDeductPayClient implements PayClient {
         }
     }
 
-    private void ensureEnabled() { if (!properties.isEnabled() || !properties.getAlipay().isEnabled() || !properties.getAlipay().getAutoDeduct().isEnabled() || !StringUtils.hasText(properties.getAlipay().getAppId()) || !StringUtils.hasText(properties.getAlipay().getMerchantPrivateKey()) || !StringUtils.hasText(properties.getAlipay().getAlipayPublicKey()) || !StringUtils.hasText(properties.getAlipay().getSellerId())) throw new BusinessException("支付宝自动续费未启用或配置不完整"); }
+    private void verifyMerchantIdentity(PayNotifyMessage message) {
+        verifyAppIdentity(message);
+        String sellerId = message.getParams().get("seller_id");
+        if (!properties.getAlipay().getSellerId().equals(sellerId)) {
+            message.setVerified(false); message.setErrorMsg("支付宝 seller_id 不匹配");
+            throw new BusinessException("支付宝 seller_id 不匹配");
+        }
+    }
+
+    private void verifyAppIdentity(PayNotifyMessage message) {
+        if (!properties.getAlipay().getAppId().equals(message.getParams().get("app_id"))) {
+            message.setVerified(false); message.setErrorMsg("支付宝 app_id 不匹配");
+            throw new BusinessException("支付宝 app_id 不匹配");
+        }
+    }
+
+    private void ensureEnabled() { if (!properties.isEnabled() || !properties.getAlipay().isEnabled() || !properties.getAlipay().getAutoDeduct().isEnabled() || !StringUtils.hasText(properties.getAlipay().getAppId()) || !StringUtils.hasText(properties.getAlipay().getMerchantPrivateKey()) || !StringUtils.hasText(properties.getAlipay().getAlipayPublicKey()) || !StringUtils.hasText(properties.getAlipay().getSellerId()) || !StringUtils.hasText(properties.getAlipay().getAutoDeduct().getSignScene()) || !StringUtils.hasText(properties.getAlipay().getAutoDeduct().getContractNotifyUrl()) || !StringUtils.hasText(properties.getAlipay().getAutoDeduct().getDeductNotifyUrl())) throw new BusinessException("支付宝自动续费未启用或配置不完整"); }
     private void initQuietly() { try { Config c = new Config(); c.protocol = "https"; c.gatewayHost = properties.getAlipay().getServerUrl().replace("https://", "").replace("http://", "").replace("/gateway.do", ""); c.appId = properties.getAlipay().getAppId(); c.signType = properties.getAlipay().getSignType(); c.merchantPrivateKey = properties.getAlipay().getMerchantPrivateKey(); c.alipayPublicKey = properties.getAlipay().getAlipayPublicKey(); c.notifyUrl = properties.getAlipay().getNotifyUrl(); Factory.setOptions(c); } catch (Exception ex) { throw new BusinessException("支付宝配置初始化失败"); } }
     private String productCode() { return StringUtils.hasText(properties.getAlipay().getAutoDeduct().getProductCode()) ? properties.getAlipay().getAutoDeduct().getProductCode() : "GENERAL_WITHHOLDING"; }
     private String signScene() { return StringUtils.hasText(properties.getAlipay().getAutoDeduct().getSignScene()) ? properties.getAlipay().getAutoDeduct().getSignScene() : "INDUSTRY|DEFAULT_SCENE"; }

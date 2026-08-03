@@ -10,11 +10,13 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   needsPhoneBinding: boolean;
+  needsEmailBinding: boolean;
 
   login: (username: string, password: string) => Promise<void>;
   smsLogin: (phone: string, code: string) => Promise<void>;
   register: (params: RegisterParams) => Promise<void>;
   bindPhone: (phone: string, code: string) => Promise<void>;
+  bindEmail: (email: string, password: string) => Promise<void>;
   acceptAuth: (result: AuthResult) => void;
   logout: () => Promise<void>;
   fetchUserInfo: () => Promise<void>;
@@ -23,13 +25,17 @@ interface AuthState {
 }
 
 const AUTH_STORAGE_KEY = 'token';
-const BINDING_STORAGE_KEY = 'needsPhoneBinding';
+const PHONE_BINDING_STORAGE_KEY = 'needsPhoneBinding';
+const EMAIL_BINDING_STORAGE_KEY = 'needsEmailBinding';
 
-const readStoredBinding = () => localStorage.getItem(BINDING_STORAGE_KEY) === 'true';
-const resolvePhoneBinding = (user: UserInfo | null) => {
-  const stored = localStorage.getItem(BINDING_STORAGE_KEY);
-  if (stored !== null) return stored === 'true';
-  return user ? !user.phone : false;
+const bindingState = (result: AuthResult) => ({
+  needsPhoneBinding: result.needsPhoneBinding ?? !result.user.phone,
+  needsEmailBinding: result.needsEmailBinding ?? !result.user.email,
+});
+
+const persistBindingState = (needsPhoneBinding: boolean, needsEmailBinding: boolean) => {
+  localStorage.setItem(PHONE_BINDING_STORAGE_KEY, String(needsPhoneBinding));
+  localStorage.setItem(EMAIL_BINDING_STORAGE_KEY, String(needsEmailBinding));
 };
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -37,16 +43,18 @@ export const useAuthStore = create<AuthState>((set) => ({
   token: localStorage.getItem(AUTH_STORAGE_KEY),
   isAuthenticated: !!localStorage.getItem(AUTH_STORAGE_KEY),
   isLoading: false,
-  needsPhoneBinding: readStoredBinding(),
+  needsPhoneBinding: localStorage.getItem(PHONE_BINDING_STORAGE_KEY) === 'true',
+  needsEmailBinding: localStorage.getItem(EMAIL_BINDING_STORAGE_KEY) === 'true',
 
   login: async (username, password) => {
     set({ isLoading: true });
     try {
       resetAppState();
-      const { token, user, needsPhoneBinding } = await authApi.login({ username, password });
-      localStorage.setItem(AUTH_STORAGE_KEY, token);
-      localStorage.setItem(BINDING_STORAGE_KEY, String(!!needsPhoneBinding));
-      set({ token, user, needsPhoneBinding: !!needsPhoneBinding, isAuthenticated: true, isLoading: false });
+      const result = await authApi.login({ username, password });
+      const completion = bindingState(result);
+      localStorage.setItem(AUTH_STORAGE_KEY, result.token);
+      persistBindingState(completion.needsPhoneBinding, completion.needsEmailBinding);
+      set({ token: result.token, user: result.user, ...completion, isAuthenticated: true, isLoading: false });
     } catch (error) {
       set({ isLoading: false });
       throw error;
@@ -58,9 +66,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       resetAppState();
       const result = await authApi.smsLogin(phone, code);
+      const completion = bindingState(result);
       localStorage.setItem(AUTH_STORAGE_KEY, result.token);
-      localStorage.setItem(BINDING_STORAGE_KEY, String(!!result.needsPhoneBinding));
-      set({ token: result.token, user: result.user, needsPhoneBinding: !!result.needsPhoneBinding, isAuthenticated: true, isLoading: false });
+      persistBindingState(completion.needsPhoneBinding, completion.needsEmailBinding);
+      set({ token: result.token, user: result.user, ...completion, isAuthenticated: true, isLoading: false });
     } catch (error) {
       set({ isLoading: false });
       throw error;
@@ -71,10 +80,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true });
     try {
       resetAppState();
-      const { token, user, needsPhoneBinding } = await authApi.register(params);
-      localStorage.setItem(AUTH_STORAGE_KEY, token);
-      localStorage.setItem(BINDING_STORAGE_KEY, String(!!needsPhoneBinding));
-      set({ token, user, needsPhoneBinding: !!needsPhoneBinding, isAuthenticated: true, isLoading: false });
+      const result = await authApi.register(params);
+      const completion = bindingState(result);
+      localStorage.setItem(AUTH_STORAGE_KEY, result.token);
+      persistBindingState(completion.needsPhoneBinding, completion.needsEmailBinding);
+      set({ token: result.token, user: result.user, ...completion, isAuthenticated: true, isLoading: false });
     } catch (error) {
       set({ isLoading: false });
       throw error;
@@ -85,9 +95,24 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true });
     try {
       const result = await authApi.bindPhone(phone, code);
+      const completion = bindingState(result);
       localStorage.setItem(AUTH_STORAGE_KEY, result.token);
-      localStorage.setItem(BINDING_STORAGE_KEY, 'false');
-      set({ token: result.token, user: result.user, needsPhoneBinding: false, isAuthenticated: true, isLoading: false });
+      persistBindingState(completion.needsPhoneBinding, completion.needsEmailBinding);
+      set({ token: result.token, user: result.user, ...completion, isAuthenticated: true, isLoading: false });
+    } catch (error) {
+      set({ isLoading: false });
+      throw error;
+    }
+  },
+
+  bindEmail: async (email, password) => {
+    set({ isLoading: true });
+    try {
+      const result = await authApi.bindEmail(email, password);
+      const completion = bindingState(result);
+      localStorage.setItem(AUTH_STORAGE_KEY, result.token);
+      persistBindingState(completion.needsPhoneBinding, completion.needsEmailBinding);
+      set({ token: result.token, user: result.user, ...completion, isAuthenticated: true, isLoading: false });
     } catch (error) {
       set({ isLoading: false });
       throw error;
@@ -95,9 +120,10 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   acceptAuth: (result) => {
+    const completion = bindingState(result);
     localStorage.setItem(AUTH_STORAGE_KEY, result.token);
-    localStorage.setItem(BINDING_STORAGE_KEY, String(!!result.needsPhoneBinding));
-    set({ token: result.token, user: result.user, needsPhoneBinding: !!result.needsPhoneBinding, isAuthenticated: true, isLoading: false });
+    persistBindingState(completion.needsPhoneBinding, completion.needsEmailBinding);
+    set({ token: result.token, user: result.user, ...completion, isAuthenticated: true, isLoading: false });
   },
 
   logout: async () => {
@@ -105,9 +131,10 @@ export const useAuthStore = create<AuthState>((set) => ({
       await authApi.logout();
     } finally {
       localStorage.removeItem(AUTH_STORAGE_KEY);
-      localStorage.removeItem(BINDING_STORAGE_KEY);
+      localStorage.removeItem(PHONE_BINDING_STORAGE_KEY);
+      localStorage.removeItem(EMAIL_BINDING_STORAGE_KEY);
       resetAppState();
-      set({ user: null, token: null, needsPhoneBinding: false, isAuthenticated: false, isLoading: false });
+      set({ user: null, token: null, needsPhoneBinding: false, needsEmailBinding: false, isAuthenticated: false, isLoading: false });
     }
   },
 
@@ -115,20 +142,22 @@ export const useAuthStore = create<AuthState>((set) => ({
     const token = localStorage.getItem(AUTH_STORAGE_KEY);
     if (!token) {
       resetAppState();
-      set({ user: null, token: null, needsPhoneBinding: false, isAuthenticated: false, isLoading: false });
+      set({ user: null, token: null, needsPhoneBinding: false, needsEmailBinding: false, isAuthenticated: false, isLoading: false });
       return;
     }
     set({ isLoading: true });
     try {
       const user = await authApi.getUserInfo();
-      const needsPhoneBinding = resolvePhoneBinding(user);
-      localStorage.setItem(BINDING_STORAGE_KEY, String(needsPhoneBinding));
-      set({ user, token, needsPhoneBinding, isAuthenticated: true, isLoading: false });
+      const needsPhoneBinding = !user.phone;
+      const needsEmailBinding = !user.email;
+      persistBindingState(needsPhoneBinding, needsEmailBinding);
+      set({ user, token, needsPhoneBinding, needsEmailBinding, isAuthenticated: true, isLoading: false });
     } catch (error) {
       localStorage.removeItem(AUTH_STORAGE_KEY);
-      localStorage.removeItem(BINDING_STORAGE_KEY);
+      localStorage.removeItem(PHONE_BINDING_STORAGE_KEY);
+      localStorage.removeItem(EMAIL_BINDING_STORAGE_KEY);
       resetAppState();
-      set({ user: null, token: null, needsPhoneBinding: false, isAuthenticated: false, isLoading: false });
+      set({ user: null, token: null, needsPhoneBinding: false, needsEmailBinding: false, isAuthenticated: false, isLoading: false });
       throw error;
     }
   },
@@ -140,17 +169,19 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   clearAuth: () => {
     localStorage.removeItem(AUTH_STORAGE_KEY);
-    localStorage.removeItem(BINDING_STORAGE_KEY);
+    localStorage.removeItem(PHONE_BINDING_STORAGE_KEY);
+    localStorage.removeItem(EMAIL_BINDING_STORAGE_KEY);
     resetAppState();
-    set({ user: null, token: null, needsPhoneBinding: false, isAuthenticated: false, isLoading: false });
+    set({ user: null, token: null, needsPhoneBinding: false, needsEmailBinding: false, isAuthenticated: false, isLoading: false });
   },
 }));
 
 if (typeof window !== 'undefined') {
   window.addEventListener('auth:expired', () => {
     localStorage.removeItem(AUTH_STORAGE_KEY);
-    localStorage.removeItem(BINDING_STORAGE_KEY);
+    localStorage.removeItem(PHONE_BINDING_STORAGE_KEY);
+    localStorage.removeItem(EMAIL_BINDING_STORAGE_KEY);
     resetAppState();
-    useAuthStore.setState({ user: null, token: null, needsPhoneBinding: false, isAuthenticated: false, isLoading: false });
+    useAuthStore.setState({ user: null, token: null, needsPhoneBinding: false, needsEmailBinding: false, isAuthenticated: false, isLoading: false });
   });
 }

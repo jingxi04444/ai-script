@@ -47,7 +47,7 @@ export const briefApi = {
       projects: Array.from(groups.entries()).map(([projectId, projectBriefs]) => ({
         projectId,
         projectName: `项目 ${projectId}`,
-        briefs: projectBriefs,
+        briefs: projectBriefs.map((brief) => ({ ...brief, ownedByCurrentUser: true })),
       })),
     };
   },

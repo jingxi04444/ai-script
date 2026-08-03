@@ -24,6 +24,7 @@
         <springdoc.version>2.6.0</springdoc.version>
         <easyexcel.version>4.0.3</easyexcel.version>
         <aliyun-ocr.version>3.1.2</aliyun-ocr.version>
+        <aliyun-dypnsapi.version>2.0.0</aliyun-dypnsapi.version>
         <minio.version>8.5.12</minio.version>
         <lombok.version>1.18.38</lombok.version>
         <wechatpay-java.version>0.2.17</wechatpay-java.version>
@@ -102,6 +103,11 @@
             <groupId>com.aliyun</groupId>
             <artifactId>ocr_api20210707</artifactId>
             <version>${aliyun-ocr.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.aliyun</groupId>
+            <artifactId>alibabacloud-dypnsapi20170525</artifactId>
+            <version>${aliyun-dypnsapi.version}</version>
         </dependency>
         <dependency>
             <groupId>io.minio</groupId>

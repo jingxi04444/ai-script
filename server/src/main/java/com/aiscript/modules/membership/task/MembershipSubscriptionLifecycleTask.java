@@ -14,6 +14,7 @@ public class MembershipSubscriptionLifecycleTask {
 
     @Scheduled(fixedDelayString = "${aiscript.membership.lifecycle-fixed-delay-ms:300000}")
     public void processDueLifecycle() {
+        membershipService.sendExpiryReminders();
         membershipService.processDueSubscriptionLifecycle();
     }
 }

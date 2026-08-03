@@ -12,5 +12,7 @@ public interface NotificationService {
 
     void send(NotificationSendDTO dto);
 
+    boolean sendOnce(Integer tenantId, Integer userId, String channel, String bizType, String bizId, String title, String content);
+
     void markRead(Integer id);
 }

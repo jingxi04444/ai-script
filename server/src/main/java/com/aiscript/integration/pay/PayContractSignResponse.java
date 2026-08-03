@@ -10,5 +10,6 @@ public class PayContractSignResponse {
     private String redirectUrl;
     private String formHtml;
     private String miniProgramUsername;
+    private String miniProgramPath;
     private String rawPayload;
 }

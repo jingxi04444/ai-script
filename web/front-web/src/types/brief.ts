@@ -27,6 +27,7 @@ export interface Brief {
   shareUrl?: string;
   sharePermission?: BriefSharePermission;
   accessPermission?: BriefSharePermission;
+  ownedByCurrentUser?: boolean;
   forceNewVersion?: boolean;
 }
 
@@ -38,6 +39,7 @@ export interface BriefAssetItem {
   productName?: string;
   productModel?: string;
   updatedAt: string;
+  ownedByCurrentUser?: boolean;
 }
 
 export interface BriefAssetProject {

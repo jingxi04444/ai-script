@@ -4,13 +4,37 @@ import type { PageResult } from './index';
 export interface User {
   id: string;
   username: string;
+  account?: string;
   email?: string;
   phone?: string;
   memberLevel?: number | string;
+  internalAccount?: boolean;
+  planId?: string;
+  planName?: string;
+  skuId?: string;
+  skuName?: string;
+  subscriptionStatus?: string;
+  subscriptionEnd?: string;
   status?: 'active' | 'disabled' | 'enabled';
   createdAt?: string;
   updateTime?: string;
   nickname?: string;
+}
+
+export interface InternalUserCreatePayload {
+  username: string;
+  email: string;
+  phone?: string;
+  password: string;
+  planId: string;
+  skuId: string;
+  validDays: number;
+}
+
+export interface InternalMembershipAdjustPayload {
+  planId: string;
+  skuId: string;
+  validDays: number;
 }
 
 export interface UserListParams {
@@ -31,6 +55,14 @@ export const userApi = {
 
   update: (id: string, data: Partial<User>): Promise<User> => {
     return api.put(`/users/${id}`, data);
+  },
+
+  createInternal: (data: InternalUserCreatePayload): Promise<User> => {
+    return api.post('/users/internal', data);
+  },
+
+  adjustInternalMembership: (id: string, data: InternalMembershipAdjustPayload): Promise<User> => {
+    return api.put(`/users/${id}/internal-membership`, data);
   },
 
   disable: (id: string): Promise<void> => {

@@ -7,46 +7,64 @@
     <select id="selectScriptPage"
             resultType="com.aiscript.modules.script.vo.ScriptListVO">
         SELECT
-            id,
-            script_name AS name,
-            project_id AS project_id,
-            script_type AS type,
-            status,
-            create_time AS created_at,
-            update_time AS updated_at
-        FROM ai_storyboard_script
-        WHERE deleted = 0
-          AND tenant_id = #{tenantId}
-          AND create_by = #{creatorId}
-          AND project_id = #{projectId}
+            script.id,
+            script.script_name AS name,
+            script.project_id AS project_id,
+            script.brief_id AS brief_id,
+            COALESCE(
+                NULLIF(brief.product_name, ''),
+                NULLIF(brief.brief_name, ''),
+                CASE WHEN script.brief_id IS NOT NULL THEN CONCAT('Brief #', script.brief_id) END,
+                '未关联 Brief'
+            ) AS brief_name,
+            script.script_type AS type,
+            CASE
+                WHEN script.status = 'pending' THEN 'pending_review'
+                WHEN script.status = 'done' THEN 'approved'
+                ELSE script.status
+            END AS status,
+            script.create_time AS created_at,
+            script.update_time AS updated_at
+        FROM ai_storyboard_script script
+        LEFT JOIN ai_brief brief
+          ON brief.id = script.brief_id
+         AND brief.tenant_id = script.tenant_id
+        WHERE script.deleted = 0
+          AND script.tenant_id = #{tenantId}
+          AND script.create_by = #{creatorId}
+          AND script.project_id = #{projectId}
         <if test="keyword != null and keyword != ''">
-            AND script_name LIKE CONCAT('%', #{keyword}, '%')
+            AND script.script_name LIKE CONCAT('%', #{keyword}, '%')
         </if>
         <if test="scriptTypes != null and !scriptTypes.isEmpty()">
-            AND script_type IN
+            AND script.script_type IN
             <foreach collection="scriptTypes" item="scriptType" open="(" separator="," close=")">
                 #{scriptType}
             </foreach>
         </if>
         <if test="status != null and status != ''">
-            AND status = #{status}
+            <choose>
+                <when test="status == 'pending_review'">
+                    AND script.status IN ('pending_review', 'pending')
+                </when>
+                <when test="status == 'approved'">
+                    AND script.status IN ('approved', 'done')
+                </when>
+                <otherwise>
+                    AND script.status = #{status}
+                </otherwise>
+            </choose>
         </if>
         <choose>
             <when test="sortBy == 'product'">
                 ORDER BY
-                    TRIM(
-                        CASE
-                            WHEN LOCATE('爆款复刻', script_name) &gt; 0 THEN LEFT(script_name, LOCATE('爆款复刻', script_name) - 1)
-                            WHEN LOCATE('脚本模板库', script_name) &gt; 0 THEN LEFT(script_name, LOCATE('脚本模板库', script_name) - 1)
-                            WHEN LOCATE('AI原创', script_name) &gt; 0 THEN LEFT(script_name, LOCATE('AI原创', script_name) - 1)
-                            ELSE script_name
-                        END
-                    ) ASC,
-                    update_time DESC,
-                    id DESC
+                    CASE WHEN script.brief_id IS NULL THEN 1 ELSE 0 END,
+                    script.brief_id ASC,
+                    script.update_time DESC,
+                    script.id DESC
             </when>
             <otherwise>
-                ORDER BY update_time DESC, id DESC
+                ORDER BY script.update_time DESC, script.id DESC
             </otherwise>
         </choose>
     </select>

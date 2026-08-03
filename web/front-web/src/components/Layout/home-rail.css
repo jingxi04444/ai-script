@@ -210,3 +210,24 @@ aside.home-rail.home-rail-stable .rail-member .rail-bottom-icon {
   font-size: 12px !important;
   font-weight: 800 !important;
 }
+
+aside.home-rail.home-rail-stable .rail-bottom-bell {
+  position: relative !important;
+}
+
+aside.home-rail.home-rail-stable .rail-bottom-bell em {
+  position: absolute;
+  top: -3px;
+  right: -8px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border: 2px solid var(--bg, #111314);
+  border-radius: 10px;
+  background: #ff5d5d;
+  color: #fff;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 14px;
+}

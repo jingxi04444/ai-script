@@ -12,6 +12,7 @@ import com.aiscript.modules.brief.dto.BriefSaveDTO;
 import com.aiscript.modules.brief.dto.BriefSharePackCreateDTO;
 import com.aiscript.modules.brief.dto.BriefSharePackLinkDTO;
 import com.aiscript.modules.brief.entity.AiBrief;
+import com.aiscript.modules.brief.entity.AiBriefAiResult;
 import com.aiscript.modules.brief.entity.AiBriefCollaborator;
 import com.aiscript.modules.brief.entity.AiBriefEditRequest;
 import com.aiscript.modules.brief.entity.AiBriefShareLink;
@@ -22,6 +23,7 @@ import com.aiscript.modules.brief.entity.AiProjectBriefRef;
 import com.aiscript.modules.brief.mapper.AiBriefCollaboratorMapper;
 import com.aiscript.modules.brief.mapper.AiBriefEditRequestMapper;
 import com.aiscript.modules.brief.mapper.AiBriefMapper;
+import com.aiscript.modules.brief.mapper.AiBriefAiResultMapper;
 import com.aiscript.modules.brief.mapper.AiBriefShareLinkMapper;
 import com.aiscript.modules.brief.mapper.AiBriefSharePackMapper;
 import com.aiscript.modules.brief.mapper.AiBriefSharePackItemMapper;
@@ -64,6 +66,7 @@ import org.springframework.web.multipart.MultipartFile;
 public class BriefServiceImpl implements BriefService {
     private static final Integer DEFAULT_TENANT_ID = 1;
     private final AiBriefMapper briefMapper;
+    private final AiBriefAiResultMapper briefAiResultMapper;
     private final AiBriefVersionMapper briefVersionMapper;
     private final AiProjectBriefRefMapper projectBriefRefMapper;
     private final AiProjectMapper projectMapper;
@@ -76,6 +79,7 @@ public class BriefServiceImpl implements BriefService {
 
     public BriefServiceImpl(
         AiBriefMapper briefMapper,
+        AiBriefAiResultMapper briefAiResultMapper,
         AiBriefVersionMapper briefVersionMapper,
         AiProjectBriefRefMapper projectBriefRefMapper,
         AiProjectMapper projectMapper,
@@ -87,6 +91,7 @@ public class BriefServiceImpl implements BriefService {
         , MembershipEntitlementService entitlementService
     ) {
         this.briefMapper = briefMapper;
+        this.briefAiResultMapper = briefAiResultMapper;
         this.briefVersionMapper = briefVersionMapper;
         this.projectBriefRefMapper = projectBriefRefMapper;
         this.projectMapper = projectMapper;
@@ -181,6 +186,7 @@ public class BriefServiceImpl implements BriefService {
             item.setProductName(row.getProductName());
             item.setProductModel(row.getProductModel());
             item.setUpdatedAt(row.getUpdatedAt() == null ? null : row.getUpdatedAt().toString());
+            item.setOwnedByCurrentUser(row.getOwnedByCurrentUser());
             group.getBriefs().add(item);
         }
 
@@ -202,6 +208,7 @@ public class BriefServiceImpl implements BriefService {
         }
         BriefVO vo = BriefConvert.toVO(detail.getBrief(), detail.getVersions());
         vo.setAccessPermission(normalizeSharePermission(detail.getAccessPermission()));
+        vo.setOwnedByCurrentUser(requireCurrentUserId().equals(detail.getBrief().getCreateBy()));
         return vo;
     }
 
@@ -264,6 +271,19 @@ public class BriefServiceImpl implements BriefService {
         ensureOwner(brief);
         projectBriefRefMapper.delete(new LambdaQueryWrapper<AiProjectBriefRef>()
             .eq(AiProjectBriefRef::getBriefId, id));
+        briefVersionMapper.delete(new LambdaQueryWrapper<AiBriefVersion>()
+            .eq(AiBriefVersion::getBriefId, id));
+        briefAiResultMapper.delete(new LambdaQueryWrapper<AiBriefAiResult>()
+            .eq(AiBriefAiResult::getBriefId, id));
+        collaboratorMapper.delete(new LambdaQueryWrapper<AiBriefCollaborator>()
+            .eq(AiBriefCollaborator::getBriefId, id));
+        editRequestMapper.delete(new LambdaQueryWrapper<AiBriefEditRequest>()
+            .eq(AiBriefEditRequest::getBriefId, id));
+        shareLinkMapper.delete(new LambdaQueryWrapper<AiBriefShareLink>()
+            .eq(AiBriefShareLink::getBriefId, id));
+        sharePackItemMapper.delete(new LambdaQueryWrapper<AiBriefSharePackItem>()
+            .eq(AiBriefSharePackItem::getBriefId, id));
+        briefMapper.deleteSellingPoints(id);
         briefMapper.deleteById(id);
     }
 
@@ -959,6 +979,7 @@ public class BriefServiceImpl implements BriefService {
                     ? "manage"
                     : collaboratorPermissions.getOrDefault(brief.getId(), "read");
             vo.setAccessPermission(accessPermission);
+            vo.setOwnedByCurrentUser(userId != null && userId.equals(brief.getCreateBy()));
             return vo;
         }).toList();
     }
@@ -970,6 +991,8 @@ public class BriefServiceImpl implements BriefService {
                 .orderByDesc(AiBriefVersion::getCreateTime));
         BriefVO vo = BriefConvert.toVO(brief, versions);
         vo.setAccessPermission(resolveAccessPermission(brief));
+        Integer userId = currentUserIdOrNull();
+        vo.setOwnedByCurrentUser(userId != null && userId.equals(brief.getCreateBy()));
         return vo;
     }
 

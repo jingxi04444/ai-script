@@ -1,0 +1,65 @@
+.user-account-page .toolbar-btn.primary {
+  border-color: rgba(89, 230, 111, 0.7);
+  background: #59e66f;
+  color: #07130a;
+}
+
+.user-account-table .table-head,
+.user-account-table .table-row {
+  grid-template-columns: minmax(190px, 1.3fr) 110px minmax(150px, 1fr) minmax(165px, 1fr) 90px minmax(230px, auto);
+}
+
+.user-account-identity,
+.user-account-plan {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.user-account-identity small,
+.user-account-plan small {
+  overflow: hidden;
+  color: var(--admin-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.internal-account-badge,
+.customer-account-badge {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+
+.internal-account-badge {
+  border: 1px solid rgba(89, 230, 111, 0.38);
+  background: rgba(89, 230, 111, 0.1);
+  color: #59e66f;
+}
+
+.customer-account-badge {
+  background: rgba(148, 163, 184, 0.1);
+  color: var(--admin-muted);
+}
+
+.user-account-page .membership-action {
+  gap: 5px;
+  border-color: rgba(89, 230, 111, 0.35);
+  color: #59e66f;
+  white-space: nowrap;
+}
+
+@media (max-width: 1180px) {
+  .user-account-table {
+    overflow-x: auto;
+  }
+
+  .user-account-table .table-head,
+  .user-account-table .table-row {
+    min-width: 1080px;
+  }
+}

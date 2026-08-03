@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { message, Upload } from 'antd';
+import { message, Modal, Upload } from 'antd';
 import { DeleteOutlined, FileTextOutlined, FormOutlined, PlusOutlined, ReloadOutlined, RightOutlined, ShareAltOutlined, UploadOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { assetApi, fileApi } from '../../../api/asset';
@@ -149,6 +149,23 @@ const AssetsPanel = ({ projectId, ensureProjectId }: AssetsPanelProps) => {
     navigate(`/workspace?${params.toString()}`);
   };
 
+  const removeBrief = (brief: Brief) => {
+    Modal.confirm({
+      title: '确认删除这份 Brief？',
+      content: `“${brief.productName || brief.name || '未命名 Brief'}”会从所有项目中移除，历史脚本仍保留生成时的 Brief 快照。`,
+      okText: '确认删除',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      centered: true,
+      onOk: async () => {
+        await briefApi.delete(brief.id);
+        setBriefs((current) => current.filter((item) => item.id !== brief.id));
+        setSelectedBriefIds((current) => current.filter((id) => id !== brief.id));
+        message.success('Brief 已删除');
+      },
+    });
+  };
+
   const openScript = (script: Script) => {
     const params = new URLSearchParams({
       projectId: script.projectId,
@@ -179,7 +196,8 @@ const AssetsPanel = ({ projectId, ensureProjectId }: AssetsPanelProps) => {
           <p className="asset-block-description">包含我创建和别人共享给我的 Brief，内容更新会同步显示。</p>
           {isBriefShareMode ? <div className="asset-brief-share-bar"><button type="button" onClick={() => setSelectedBriefIds(selectedBriefIds.length === briefs.length ? [] : briefs.map((brief) => brief.id))}>全选</button><button type="button" onClick={shareSelectedBriefs} disabled={!selectedBriefIds.length}>共享 {selectedBriefIds.length} 份 Brief</button></div> : null}          <div className="asset-library-list">
             {briefs.map((brief) => (
-              <button className={`asset-library-link ${isBriefShareMode && selectedBriefIds.includes(brief.id) ? 'is-selected' : ''}`} type="button" key={brief.id} onClick={() => isBriefShareMode ? toggleBriefSelection(brief.id) : openBrief(brief.id)}>
+              <div className={`asset-library-link-row ${isBriefShareMode && selectedBriefIds.includes(brief.id) ? 'is-selected' : ''}`} key={brief.id}>
+              <button className="asset-library-link" type="button" onClick={() => isBriefShareMode ? toggleBriefSelection(brief.id) : openBrief(brief.id)}>
                 <span className="asset-library-icon"><FormOutlined /></span>
                 <span className="asset-library-content">
                   <strong>{brief.productName || brief.name || '未命名 Brief'}</strong>
@@ -187,6 +205,8 @@ const AssetsPanel = ({ projectId, ensureProjectId }: AssetsPanelProps) => {
                 </span>
                 <RightOutlined />
               </button>
+              {!isBriefShareMode && brief.ownedByCurrentUser === true ? <button className="asset-library-delete" type="button" aria-label={`删除 ${brief.productName || brief.name || 'Brief'}`} onClick={() => removeBrief(brief)}><DeleteOutlined /></button> : null}
+              </div>
             ))}
             {!briefs.length && <p className="empty-hint">暂无 Brief</p>}
           </div>

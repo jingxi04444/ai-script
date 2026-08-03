@@ -22,6 +22,7 @@ public class AiGenerationTask extends TenantBaseEntity {
     private String errorCode;
     private String errorMessage;
     private String idempotencyKey;
+    private String quotaRequestNo;
     private LocalDateTime startTime;
     private LocalDateTime finishTime;
 }

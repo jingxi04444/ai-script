@@ -13,7 +13,8 @@
             asset_rows.name,
             asset_rows.product_name,
             asset_rows.product_model,
-            asset_rows.updated_at
+            asset_rows.updated_at,
+            asset_rows.owned_by_current_user
         FROM (
             SELECT
                 p.id AS project_id,
@@ -23,7 +24,8 @@
                 COALESCE(NULLIF(b.product_name, ''), b.brief_name) AS name,
                 COALESCE(NULLIF(b.product_name, ''), b.brief_name) AS product_name,
                 b.product_model,
-                b.update_time AS updated_at
+                b.update_time AS updated_at,
+                (b.create_by = #{userId}) AS owned_by_current_user
             FROM ai_project p
             INNER JOIN ai_brief b
                 ON b.project_id = p.id
@@ -43,7 +45,8 @@
                 COALESCE(NULLIF(b.product_name, ''), b.brief_name) AS name,
                 COALESCE(NULLIF(b.product_name, ''), b.brief_name) AS product_name,
                 b.product_model,
-                b.update_time AS updated_at
+                b.update_time AS updated_at,
+                (b.create_by = #{userId}) AS owned_by_current_user
             FROM ai_project p
             INNER JOIN ai_project_brief_ref ref
                 ON ref.project_id = p.id
@@ -236,7 +239,7 @@
     </select>
 
     <select id="countAccessibleBriefs" resultType="long">
-        SELECT COUNT(DISTINCT accessible.brief_id)
+        SELECT COUNT(DISTINCT accessible_briefs.brief_id)
         FROM (
             SELECT b.id AS brief_id
             FROM ai_brief b
@@ -261,7 +264,7 @@
                AND b.deleted = 0
             WHERE ref.tenant_id = #{tenantId}
               AND ref.deleted = 0
-        ) accessible
+        ) accessible_briefs
     </select>
 
     <select id="countNewAccessibleBriefs" resultType="long">

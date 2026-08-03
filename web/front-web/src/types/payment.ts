@@ -5,6 +5,7 @@ export interface PaymentParams {
   subject?: string;
   payUrl?: string;
   qrCode?: string;
+  formHtml?: string;
   rawPayload?: string;
 }
 
@@ -45,6 +46,10 @@ export interface PaymentOrder {
   lastQueryTime?: string;
   fulfillTime?: string;
   userId?: string;
+  refundDays?: number;
+  refundDeadline?: string;
+  refundable?: boolean;
+  refundUnavailableReason?: string;
   payParams?: PaymentParams;
 }
 

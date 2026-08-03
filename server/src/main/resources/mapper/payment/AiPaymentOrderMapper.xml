@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+    PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+    "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.aiscript.modules.payment.mapper.AiPaymentOrderMapper">
+    <select id="selectByOrderNoForUpdate"
+            resultType="com.aiscript.modules.payment.entity.AiPaymentOrder">
+        SELECT *
+        FROM ai_payment_order
+        WHERE order_no = #{orderNo}
+          AND deleted = 0
+        LIMIT 1
+        FOR UPDATE
+    </select>
+</mapper>

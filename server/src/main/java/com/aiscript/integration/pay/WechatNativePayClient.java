@@ -2,6 +2,7 @@ package com.aiscript.integration.pay;
 
 import com.aiscript.common.exception.BusinessException;
 import com.aiscript.config.PaymentProperties;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.wechat.pay.java.core.RSAAutoCertificateConfig;
 import com.wechat.pay.java.core.notification.NotificationParser;
 import com.wechat.pay.java.core.notification.RequestParam;
@@ -19,19 +20,28 @@ import com.wechat.pay.java.service.refund.model.Refund;
 import com.wechat.pay.java.service.refund.model.Status;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Component
 public class WechatNativePayClient implements PayClient {
     private final PaymentProperties properties;
-    public WechatNativePayClient(PaymentProperties properties) { this.properties = properties; }
+    private final ObjectMapper objectMapper;
+    public WechatNativePayClient(PaymentProperties properties, ObjectMapper objectMapper) {
+        this.properties = properties;
+        this.objectMapper = objectMapper;
+    }
     public String provider() { return "wechat"; }
     public PayCreateResponse createNativeOrder(PayCreateRequest request) {
         ensureEnabled();
         PrepayRequest req = new PrepayRequest();
         req.setAppid(properties.getWechat().getAppId()); req.setMchid(properties.getWechat().getMchId());
         req.setOutTradeNo(request.getOrderNo()); req.setDescription(request.getSubject()); req.setNotifyUrl(notifyUrl(request));
+        if (request.getExpireTime() != null) {
+            req.setTimeExpire(request.getExpireTime().atOffset(ZoneOffset.ofHours(8)).format(DateTimeFormatter.ISO_OFFSET_DATE_TIME));
+        }
         Amount amount = new Amount(); amount.setCurrency("CNY"); amount.setTotal(toFen(request.getAmount())); req.setAmount(amount);
         PrepayResponse resp = service().prepay(req);
         PayCreateResponse r = new PayCreateResponse(); r.setProvider(provider()); r.setOrderNo(request.getOrderNo()); r.setAmount(request.getAmount());
@@ -43,7 +53,7 @@ public class WechatNativePayClient implements PayClient {
             RequestParam p = new RequestParam.Builder().serialNumber(header(message, "Wechatpay-Serial")).nonce(header(message, "Wechatpay-Nonce"))
                 .signature(header(message, "Wechatpay-Signature")).timestamp(header(message, "Wechatpay-Timestamp")).body(message.getRawBody()).build();
             Transaction tx = new NotificationParser(config()).parse(p, Transaction.class);
-            fill(message, tx); message.setVerified(true);
+            fill(message, tx); fillNotifyId(message); message.setVerified(true);
             if (!properties.getWechat().getAppId().equals(message.getAppId()) || !properties.getWechat().getMchId().equals(message.getMchId())) {
                 message.setVerified(false); message.setErrorMsg("微信支付商户身份不匹配"); throw new BusinessException("微信支付商户身份不匹配");
             }
@@ -87,5 +97,12 @@ public class WechatNativePayClient implements PayClient {
     private Integer toFen(BigDecimal amount) { return amount.multiply(BigDecimal.valueOf(100)).setScale(0, RoundingMode.HALF_UP).intValueExact(); }
     private BigDecimal yuan(Integer fen) { return fen == null ? null : BigDecimal.valueOf(fen).divide(BigDecimal.valueOf(100), 2, RoundingMode.UNNECESSARY); }
     private String header(PayNotifyMessage m, String name) { return m.getHeaders().getOrDefault(name, m.getHeaders().get(name.toLowerCase())); }
-    private void fill(PayNotifyMessage m, Transaction tx) { m.setProvider(provider()); m.setAppId(tx.getAppid()); m.setMchId(tx.getMchid()); m.setOrderNo(tx.getOutTradeNo()); m.setProviderTradeNo(tx.getTransactionId()); m.setTradeStatus(tx.getTradeState() == null ? null : tx.getTradeState().name()); m.setPaid(tx.getTradeState() == Transaction.TradeStateEnum.SUCCESS); if (tx.getAmount() != null) m.setTotalAmount(yuan(tx.getAmount().getPayerTotal() == null ? tx.getAmount().getTotal() : tx.getAmount().getPayerTotal())); }
+    private void fill(PayNotifyMessage m, Transaction tx) { m.setProvider(provider()); m.setAppId(tx.getAppid()); m.setMchId(tx.getMchid()); m.setOrderNo(tx.getOutTradeNo()); m.setProviderTradeNo(tx.getTransactionId()); m.setTradeStatus(tx.getTradeState() == null ? null : tx.getTradeState().name()); m.setPaid(tx.getTradeState() == Transaction.TradeStateEnum.SUCCESS); if (tx.getAmount() != null) m.setTotalAmount(yuan(tx.getAmount().getTotal())); }
+    private void fillNotifyId(PayNotifyMessage message) {
+        try {
+            message.setNotifyId(objectMapper.readTree(message.getRawBody()).path("id").asText(null));
+        } catch (Exception ignored) {
+            // 验签仍以微信 SDK 结果为准；通知ID仅用于本地幂等。
+        }
+    }
 }

@@ -34,3 +34,9 @@
     grid-template-columns: 1fr;
   }
 }
+.membership-refund-window {
+  margin: 8px 0 0;
+  color: var(--membership-muted, #9ba6b8);
+  font-size: 12px;
+  line-height: 1.5;
+}

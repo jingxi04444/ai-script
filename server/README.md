@@ -138,8 +138,8 @@ Required environment variables for production:
 PAYMENT_ENABLED=true
 PAYMENT_DEV_MODE=false
 
-# WeChat Pay Native
-PAYMENT_WECHAT_ENABLED=true
+# WeChat Pay Native（当前关闭；需要重新开放时再设为 true）
+PAYMENT_WECHAT_ENABLED=false
 WECHAT_PAY_APP_ID=your-wechat-app-id
 WECHAT_PAY_MCH_ID=your-merchant-id
 WECHAT_PAY_API_V3_KEY=your-api-v3-key
@@ -149,7 +149,7 @@ WECHAT_PAY_NOTIFY_URL=https://your-api-domain.com/api/payments/notify/wechat/nat
 
 # WeChat Pay auto-renewal (scheduled deduct / entrusted payment)
 # Requires applying for the "周期扣费/委托代扣" product in the WeChat Pay merchant portal and creating a deduction template to obtain PLAN_ID.
-WECHAT_PAY_AUTO_DEDUCT_ENABLED=true
+WECHAT_PAY_AUTO_DEDUCT_ENABLED=false
 WECHAT_PAY_AUTO_DEDUCT_PLAN_ID=your-deduct-plan-id
 WECHAT_PAY_CONTRACT_NOTIFY_URL=https://your-api-domain.com/api/payments/notify/wechat/contract
 WECHAT_PAY_DEDUCT_NOTIFY_URL=https://your-api-domain.com/api/payments/notify/wechat/deduct

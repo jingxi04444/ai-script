@@ -13,4 +13,5 @@ public class BriefAssetRowVO {
     private String productName;
     private String productModel;
     private LocalDateTime updatedAt;
+    private Boolean ownedByCurrentUser;
 }

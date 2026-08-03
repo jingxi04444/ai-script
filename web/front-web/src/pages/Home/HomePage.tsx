@@ -48,6 +48,8 @@ interface HomeWork {
   category: string;
   imageUrl?: string;
   videoUrl?: string;
+  coverUrl?: string;
+  frameTime?: number;
   linkUrl?: string;
 }
 
@@ -71,6 +73,7 @@ const HomePage = () => {
   const [activeBanner, setActiveBanner] = useState(0);
   const [quickActions, setQuickActions] = useState<QuickAction[]>(defaultQuickActions);
   const [hotWorks, setHotWorks] = useState<HomeWork[]>(defaultHotWorks);
+  const [worksLoaded, setWorksLoaded] = useState(false);
   const [worksTitle, setWorksTitle] = useState('作品');
   const [activeCategory, setActiveCategory] = useState('全部');
   const [previewWork, setPreviewWork] = useState<HomeWork | null>(null);
@@ -118,6 +121,8 @@ const HomePage = () => {
             tone: work.tone || defaultHotWorks[index % defaultHotWorks.length].tone,
             imageUrl: work.imageUrl,
             videoUrl: work.videoUrl,
+            coverUrl: work.coverUrl,
+            frameTime: work.frameTime,
             linkUrl: work.linkUrl,
           })));
         }
@@ -125,8 +130,16 @@ const HomePage = () => {
         setQuickActions(defaultQuickActions);
         setHotWorks(defaultHotWorks);
       }
-    }).catch(() => undefined);
+    }).catch(() => undefined).finally(() => setWorksLoaded(true));
   }, []);
+
+  useEffect(() => {
+    if (!worksLoaded) return;
+    const sharedWorkKey = new URLSearchParams(window.location.search).get('work');
+    if (!sharedWorkKey) return;
+    const sharedWork = hotWorks.find((work) => work.key === sharedWorkKey && work.videoUrl);
+    if (sharedWork) setPreviewWork(sharedWork);
+  }, [hotWorks, worksLoaded]);
 
   useEffect(() => {
     if (banners.length <= 1) return undefined;
@@ -178,20 +191,36 @@ const HomePage = () => {
 
   const handleSharePreviewWork = async () => {
     if (!previewWork) return;
-    // Share the case page (or its configured landing page), never the raw video file.
-    const shareUrl = previewWork.linkUrl || window.location.href;
+    // Generate an internal work deep link, never expose the raw video file URL.
+    const shareUrlObject = new URL('/home', window.location.origin);
+    shareUrlObject.searchParams.set('work', previewWork.key);
+    const shareUrl = shareUrlObject.toString();
     const shareData = { title: previewWork.label, text: previewWork.label, url: shareUrl };
+    const isTouchDevice = navigator.maxTouchPoints > 0 || /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     try {
-      if (navigator.share) {
+      if (navigator.share && isTouchDevice) {
         await navigator.share(shareData);
+        message.success('\u4f5c\u54c1\u5df2\u5206\u4eab');
         return;
       }
-      await navigator.clipboard.writeText(shareUrl);
-      message.success('\u5206\u4eab\u94fe\u63a5\u5df2\u590d\u5236');
-    } catch (error) {
-      if ((error as DOMException)?.name !== 'AbortError') {
-        message.error('\u6682\u65f6\u65e0\u6cd5\u5206\u4eab\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5');
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareUrl);
+      } else {
+        const input = document.createElement('textarea');
+        input.value = shareUrl;
+        input.setAttribute('readonly', '');
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        const copied = document.execCommand('copy');
+        document.body.removeChild(input);
+        if (!copied) throw new Error('copy failed');
       }
+      message.success('\u4f5c\u54c1\u5206\u4eab\u94fe\u63a5\u5df2\u590d\u5236');
+    } catch (error) {
+      if ((error as DOMException)?.name === 'AbortError') return message.info('\u5df2\u53d6\u6d88\u5206\u4eab');
+      message.error('\u5206\u4eab\u5931\u8d25\uff0c\u8bf7\u68c0\u67e5\u6d4f\u89c8\u5668\u526a\u8d34\u677f\u6743\u9650');
     }
   };
   const workCategories = ['全部', ...Array.from(new Set(hotWorks.map((work) => work.category).filter(Boolean)))];
@@ -262,11 +291,14 @@ const HomePage = () => {
           <div className="hot-row">
             {visibleWorks.map((work) => (
               <button className={`hot-card ${work.tone}`} key={work.key} onClick={() => handleWorkClick(work)}>
-                <div className={`hot-thumb ${work.imageUrl || work.videoUrl ? 'has-image' : ''}`}>
-                  {work.videoUrl
-                    ? <video src={work.videoUrl} muted loop autoPlay playsInline />
-                    : work.imageUrl
-                      ? <img src={work.imageUrl} alt="" />
+                <div className={`hot-thumb ${work.coverUrl || work.imageUrl || work.videoUrl ? 'has-image' : ''}`}>
+                  {work.coverUrl || work.imageUrl
+                    ? <img src={work.coverUrl || work.imageUrl} alt={`${work.label}封面`} />
+                    : work.videoUrl
+                      ? <video src={work.videoUrl} muted playsInline preload="metadata" aria-label={`${work.label}视频封面`} onLoadedMetadata={(event) => {
+                        const duration = Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0;
+                        event.currentTarget.currentTime = Math.min(work.frameTime ?? Math.min(1, duration / 4), duration || 0);
+                      }} />
                       : null}
                 </div>
                 <strong>{work.label}</strong>
@@ -298,6 +330,7 @@ const HomePage = () => {
             </header>
             <video
               src={previewWork.videoUrl}
+              poster={previewWork.coverUrl || previewWork.imageUrl}
               controls
               controlsList="nodownload noremoteplayback"
               disablePictureInPicture

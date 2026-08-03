@@ -90,6 +90,9 @@ public class MembershipPointServiceImpl implements MembershipPointService {
         String remark
     ) {
         validateChange(userId, points, requestNo);
+        // 同一用户的所有积分变动必须先锁账户、再访问流水表，统一并发事务的加锁顺序。
+        // 原先先插入各自的流水、再争抢账户锁，会让两个并发请求形成循环等待并触发 MySQL 死锁。
+        AiPointAccount account = lockedAccount(tenantId, userId);
         AiPointTransaction transaction = beginTransaction(
             tenantId, userId, points, transactionType, requestNo,
             bizType, bizId, sourceOrderNo, remark
@@ -97,7 +100,6 @@ public class MembershipPointServiceImpl implements MembershipPointService {
         if (isCompleted(transaction)) {
             return toTransactionVO(transaction);
         }
-        AiPointAccount account = lockedAccount(tenantId, userId);
         if (accountMapper.addPoints(account.getId(), points) == 0) {
             throw new BusinessException("积分入账失败");
         }
@@ -120,6 +122,8 @@ public class MembershipPointServiceImpl implements MembershipPointService {
         String remark
     ) {
         validateChange(userId, points, requestNo);
+        // 与 grantPoints 保持完全一致的锁顺序，避免同一积分账户并发消费发生死锁。
+        AiPointAccount account = lockedAccount(tenantId, userId);
         AiPointTransaction transaction = beginTransaction(
             tenantId, userId, -points, "consume", requestNo,
             bizType, bizId, null, remark
@@ -127,7 +131,6 @@ public class MembershipPointServiceImpl implements MembershipPointService {
         if (isCompleted(transaction)) {
             return toTransactionVO(transaction);
         }
-        AiPointAccount account = lockedAccount(tenantId, userId);
         if (accountMapper.consumePoints(account.getId(), points) == 0) {
             throw new BusinessException(ResultCode.CONFLICT, "积分余额不足");
         }

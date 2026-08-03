@@ -7,15 +7,18 @@ import {
   type MembershipBenefit,
   type MembershipPlan,
   type MembershipPlanCreatePayload,
+  type MembershipPurchaseMode,
   type MembershipSkuCreatePayload,
+  type PointPackage,
   type RefundOrder,
+  type TemplateCustomRequest,
 } from '../../api/membership';
 import { EmptyState, Modal, PageHeader, Pagination, SectionCard, StatusBadge } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
 import './billing-page.css';
 
-type BillingSection = 'plans' | 'subscriptions' | 'points' | 'refunds';
-type PurchaseMode = 'once_month' | 'auto_month' | 'auto_quarter' | 'auto_year';
+type BillingSection = 'plans' | 'subscriptions' | 'points' | 'refunds' | 'custom_requests';
+type PurchaseMode = 'once_month' | 'once_quarter' | 'once_year';
 type PlanSku = MembershipPlan['skus'][number];
 
 interface PlanSkuCard {
@@ -55,6 +58,28 @@ interface BenefitCreateFormState {
   enabled: boolean;
 }
 
+interface PointPackageFormState {
+  id?: string;
+  code: string;
+  name: string;
+  price: string;
+  points: string;
+  description: string;
+  displayOrder: string;
+  status: '1' | '0';
+}
+
+const createPointPackageFormState = (pointPackage?: PointPackage): PointPackageFormState => ({
+  id: pointPackage?.id,
+  code: pointPackage?.code || '',
+  name: pointPackage?.name || '',
+  price: String(pointPackage?.price ?? ''),
+  points: String(pointPackage?.points ?? ''),
+  description: pointPackage?.description || '',
+  displayOrder: String(pointPackage?.displayOrder ?? 0),
+  status: pointPackage?.status === 0 ? '0' : '1',
+});
+
 const createPlanFormState = (): PlanCreateFormState => ({
   code: '',
   name: '',
@@ -70,7 +95,7 @@ const createPlanFormState = (): PlanCreateFormState => ({
 const createSkuFormState = (plan?: MembershipPlan, sku?: PlanSku): SkuCreateFormState => ({
   code: '',
   name: '',
-  billingMode: sku?.billingMode || 'one_time',
+  billingMode: 'one_time',
   periodUnit: sku?.periodUnit || 'month',
   periodCount: String(sku?.periodCount || 1),
   price: '0',
@@ -90,9 +115,8 @@ const parseOptionalNumber = (value: string) => (value.trim() ? Number(value) : u
 
 const purchaseModeOptions: Array<{ value: PurchaseMode; label: string; hint: string; badge?: string }> = [
   { value: 'once_month', label: '单月购买', hint: '购买一个月' },
-  { value: 'auto_month', label: '连续包月', hint: '每月自动续费' },
-  { value: 'auto_quarter', label: '连续包季', hint: '每季自动续费' },
-  { value: 'auto_year', label: '连续包年', hint: '每年自动续费', badge: '限时优惠' },
+  { value: 'once_quarter', label: '季卡', hint: '购买一个季度' },
+  { value: 'once_year', label: '年卡', hint: '购买一年', badge: '限时优惠' },
 ];
 
 const sectionByPath: Record<string, BillingSection> = {
@@ -100,13 +124,15 @@ const sectionByPath: Record<string, BillingSection> = {
   '/membership/subscriptions': 'subscriptions',
   '/membership/points': 'points',
   '/membership/refunds': 'refunds',
+  '/membership/custom-requests': 'custom_requests',
 };
 
 const sectionMeta: Record<BillingSection, { title: string; description: string }> = {
   plans: { title: '套餐权益', description: '以 SKU 为维度查看全部会员卡，通过弹窗完成前台预览与编辑。' },
   subscriptions: { title: '用户订阅', description: '查看用户当前会员、续费状态和待生效套餐。' },
-  points: { title: '积分调整', description: '人工增加或扣减用户积分，并自动记录积分流水。' },
+  points: { title: '积分管理', description: '维护用户端可售积分包，并支持人工调整用户积分。' },
   refunds: { title: '退款审核', description: '审核会员退款申请，跟踪退款状态和权益回收结果。' },
+  custom_requests: { title: '定制模板工单', description: '处理至尊会员提交的独家模板定制需求。' },
 };
 
 const copyPlan = (plan: MembershipPlan): MembershipPlan => ({
@@ -145,16 +171,17 @@ const benefitValue = (benefit: MembershipBenefit) => {
 };
 
 const matchesPurchaseMode = (sku: MembershipPlan['skus'][number], mode: PurchaseMode) => {
-  if (mode === 'once_month') return sku.periodUnit === 'month' && sku.billingMode !== 'auto_renew';
-  if (mode === 'auto_month') return sku.periodUnit === 'month' && sku.billingMode === 'auto_renew';
-  if (mode === 'auto_quarter') return sku.periodUnit === 'quarter' && sku.billingMode === 'auto_renew';
-  return sku.periodUnit === 'year' && sku.billingMode === 'auto_renew';
+  if (sku.billingMode !== 'one_time') return false;
+  if (mode === 'once_month') return sku.periodUnit === 'month';
+  if (mode === 'once_quarter') return sku.periodUnit === 'quarter';
+  return sku.periodUnit === 'year';
 };
 
 const formatPreviewPeriod = (plan: MembershipPlan, mode: PurchaseMode, editor = false, skuId?: string) => {
   const sku = skuId ? plan.skus.find((item) => item.id === skuId) : resolveSkuForMode(plan, mode, editor);
   if (!sku) return plan.periodDays > 0 ? `${plan.periodDays}天` : '长期';
   const count = sku.periodCount || 1;
+  if (sku.periodUnit === 'day') return `${count}天`;
   if (sku.periodUnit === 'year') return count === 1 ? '年卡' : `${count}年`;
   if (sku.periodUnit === 'quarter') return count === 1 ? '季卡' : `${count}季度`;
   return count === 1 ? '月卡' : `${count}个月`;
@@ -162,6 +189,7 @@ const formatPreviewPeriod = (plan: MembershipPlan, mode: PurchaseMode, editor = 
 
 const formatSkuPeriod = (sku: PlanSku) => {
   const count = sku.periodCount || 1;
+  if (sku.periodUnit === 'day') return `${count}天`;
   if (sku.periodUnit === 'year') return count === 1 ? '年卡' : `${count}年`;
   if (sku.periodUnit === 'quarter') return count === 1 ? '季卡' : `${count}季度`;
   return count === 1 ? '月卡' : `${count}个月`;
@@ -213,8 +241,11 @@ const BillingPage = () => {
   const section = sectionByPath[pathname] || 'plans';
   const meta = sectionMeta[section];
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
+  const [purchaseModeConfigs, setPurchaseModeConfigs] = useState<MembershipPurchaseMode[]>([]);
   const [subscriptions, setSubscriptions] = useState<AdminSubscription[]>([]);
   const [refunds, setRefunds] = useState<RefundOrder[]>([]);
+  const [pointPackages, setPointPackages] = useState<PointPackage[]>([]);
+  const [customRequests, setCustomRequests] = useState<TemplateCustomRequest[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
@@ -223,10 +254,12 @@ const BillingPage = () => {
   const [editingPlan, setEditingPlan] = useState<MembershipPlan | null>(null);
   const [previewPlan, setPreviewPlan] = useState<MembershipPlan | null>(null);
   const [editingSkuId, setEditingSkuId] = useState<string | null>(null);
+  const [editingSkuPriceInput, setEditingSkuPriceInput] = useState('');
   const [previewSkuId, setPreviewSkuId] = useState<string | null>(null);
-  const [previewMode, setPreviewMode] = useState<PurchaseMode>('auto_year');
-  const [editingMode, setEditingMode] = useState<PurchaseMode>('auto_year');
+  const [previewMode, setPreviewMode] = useState<PurchaseMode>('once_year');
+  const [editingMode, setEditingMode] = useState<PurchaseMode>('once_year');
   const [pointForm, setPointForm] = useState({ userId: '', changePoints: '', remark: '' });
+  const [pointPackageForm, setPointPackageForm] = useState<PointPackageFormState>(createPointPackageFormState());
   const [planCreateOpen, setPlanCreateOpen] = useState(false);
   const [planCreateForm, setPlanCreateForm] = useState<PlanCreateFormState>(createPlanFormState());
   const [skuCreateOpen, setSkuCreateOpen] = useState(false);
@@ -249,6 +282,7 @@ const BillingPage = () => {
   const openEditor = (card: PlanSkuCard) => {
     setEditingMode(card.mode);
     setEditingSkuId(card.sku.id);
+    setEditingSkuPriceInput(String(card.sku.price));
     setEditingPlan(copyPlan(card.plan));
     setSkuCreateOpen(false);
     setBenefitCreateOpen(false);
@@ -273,8 +307,34 @@ const BillingPage = () => {
 
   const loadPlans = async () => {
     setLoading(true);
-    try { setPlans(await membershipApi.getPlans()); }
+    try {
+      const [planList, modeList] = await Promise.all([membershipApi.getPlans(), membershipApi.purchaseModes()]);
+      setPlans(planList);
+      setPurchaseModeConfigs(modeList);
+    }
     catch { notify('会员套餐加载失败'); }
+    finally { setLoading(false); }
+  };
+
+  const patchPurchaseMode = (value: PurchaseMode, patch: Partial<MembershipPurchaseMode>) => {
+    setPurchaseModeConfigs((current) => current.map((item) => item.value === value ? { ...item, ...patch } : item));
+  };
+
+  const savePurchaseModes = async () => {
+    if (!purchaseModeConfigs.some((item) => item.enabled)) {
+      notify('至少需要保留一种购买方式');
+      return;
+    }
+    if (purchaseModeConfigs.some((item) => !item.label.trim())) {
+      notify('购买方式名称不能为空');
+      return;
+    }
+    setLoading(true);
+    try {
+      const saved = await membershipApi.updatePurchaseModes(purchaseModeConfigs);
+      setPurchaseModeConfigs(saved);
+      notify('会员中心购买方式已更新');
+    } catch { notify('购买方式保存失败'); }
     finally { setLoading(false); }
   };
 
@@ -300,13 +360,33 @@ const BillingPage = () => {
     finally { setLoading(false); }
   };
 
+  const loadPointPackages = async () => {
+    setLoading(true);
+    try { setPointPackages(await membershipApi.pointPackages()); }
+    catch { notify('积分包配置加载失败'); }
+    finally { setLoading(false); }
+  };
+
+  const loadCustomRequests = async (targetPage = page) => {
+    setLoading(true);
+    try {
+      const result = await membershipApi.templateCustomRequests({ page: targetPage, pageSize: 10, keyword: keyword || undefined, status: status || undefined });
+      setCustomRequests(result.list || []);
+      setTotal(result.total || 0);
+      setPage(targetPage);
+    } catch { notify('定制模板工单加载失败'); }
+    finally { setLoading(false); }
+  };
+
   useEffect(() => {
     setPage(1);
     setKeyword('');
     setStatus('');
     if (section === 'plans') void loadPlans();
     if (section === 'subscriptions') void loadSubscriptions(1);
+    if (section === 'points') void loadPointPackages();
     if (section === 'refunds') void loadRefunds(1);
+    if (section === 'custom_requests') void loadCustomRequests(1);
   }, [section]);
 
   const patchEditingPlan = (patch: Partial<MembershipPlan>) => {
@@ -325,6 +405,16 @@ const BillingPage = () => {
       ...current,
       benefits: current.benefits.map((benefit) => benefit.code === code ? { ...benefit, ...patch } : benefit),
     } : current);
+  };
+
+  const updateCustomRequest = async (item: TemplateCustomRequest, nextStatus: string) => {
+    const remark = window.prompt('请输入处理备注（可选）', item.adminRemark || '') ?? undefined;
+    if (remark === undefined) return;
+    try {
+      await membershipApi.updateTemplateCustomRequest(item.id, { status: nextStatus, adminRemark: remark || undefined });
+      notify('定制模板工单已更新');
+      await loadCustomRequests(page);
+    } catch { notify('定制模板工单更新失败'); }
   };
 
   const createPlan = async () => {
@@ -363,6 +453,14 @@ const BillingPage = () => {
       notify('请填写 SKU 编码和名称');
       return;
     }
+    if (!skuCreateForm.price.trim() || !Number.isFinite(Number(skuCreateForm.price))) {
+      notify('销售价格不能为空');
+      return;
+    }
+    if (!/^\d+(?:\.\d{1,2})?$/.test(skuCreateForm.price.trim())) {
+      notify('销售价格最多保留两位小数');
+      return;
+    }
     setLoading(true);
     try {
       const payload: MembershipSkuCreatePayload = {
@@ -385,6 +483,7 @@ const BillingPage = () => {
       setEditingPlan(copyPlan(updatedPlan));
       if (nextSku) {
         setEditingSkuId(nextSku.id);
+        setEditingSkuPriceInput(String(nextSku.price));
         setEditingMode(inferPurchaseMode(nextSku));
       }
       await loadPlans();
@@ -420,13 +519,27 @@ const BillingPage = () => {
     }
   };
 
-  const activeEditingSku = editingPlan ? resolveSkuByIdOrMode(editingPlan, editingSkuId, editingMode, true) : undefined;
+  const activeEditingSku = editingPlan && editingSkuId
+    ? editingPlan.skus.find((sku) => sku.id === editingSkuId)
+    : undefined;
   const activePreviewSku = previewPlan ? resolveSkuByIdOrMode(previewPlan, previewSkuId, previewMode, false) : undefined;
 
   const savePlan = async () => {
     if (!editingPlan) return;
+    if (!activeEditingSku) {
+      notify('当前编辑的 SKU 不存在，请关闭弹窗后重新选择');
+      return;
+    }
     if (!editingPlan.name.trim()) {
       notify('请填写套餐名称');
+      return;
+    }
+    if (!editingSkuPriceInput.trim() || !Number.isFinite(Number(editingSkuPriceInput)) || Number(editingSkuPriceInput) < 0) {
+      notify('销售价格不能为空，且必须是有效金额');
+      return;
+    }
+    if (!/^\d+(?:\.\d{1,2})?$/.test(editingSkuPriceInput.trim())) {
+      notify('销售价格最多保留两位小数');
       return;
     }
     setLoading(true);
@@ -440,17 +553,17 @@ const BillingPage = () => {
         status: editingPlan.status ?? 1,
       });
       await Promise.all([
-        ...editingPlan.skus.map((sku) => membershipApi.updateSku(sku.id, {
-          name: sku.name,
-          billingMode: sku.billingMode,
-          periodUnit: sku.periodUnit,
-          periodCount: Number(sku.periodCount || 0),
-          price: Number(sku.price || 0),
-          originalPrice: sku.originalPrice,
-          refundDays: Number(sku.refundDays || 0),
-          displayOrder: sku.displayOrder,
-          status: sku.status ?? 1,
-        })),
+        membershipApi.updateSku(activeEditingSku.id, {
+          name: activeEditingSku.name,
+          billingMode: activeEditingSku.billingMode,
+          periodUnit: activeEditingSku.periodUnit,
+          periodCount: Number(activeEditingSku.periodCount || 0),
+          price: Number(editingSkuPriceInput),
+          originalPrice: activeEditingSku.originalPrice,
+          refundDays: Number(activeEditingSku.refundDays || 0),
+          displayOrder: activeEditingSku.displayOrder,
+          status: activeEditingSku.status ?? 1,
+        }),
         ...editingPlan.benefits.map((benefit) => membershipApi.updateBenefit(editingPlan.id, benefit.code, {
           value: benefit.value,
           enabled: benefit.enabled,
@@ -459,6 +572,7 @@ const BillingPage = () => {
       notify(`${editingPlan.name} 已保存`);
       setEditingPlan(null);
       setEditingSkuId(null);
+      setEditingSkuPriceInput('');
       await loadPlans();
     } catch { notify('套餐保存失败，请检查字段格式'); }
     finally { setLoading(false); }
@@ -479,6 +593,35 @@ const BillingPage = () => {
     finally { setLoading(false); }
   };
 
+  const savePointPackage = async () => {
+    const price = Number(pointPackageForm.price);
+    const points = Number(pointPackageForm.points);
+    if (!pointPackageForm.name.trim() || (!pointPackageForm.id && !pointPackageForm.code.trim()) || price <= 0 || !Number.isInteger(points) || points <= 0) {
+      notify('请完整填写积分包编码、名称、有效价格和积分数量');
+      return;
+    }
+    const payload = {
+      name: pointPackageForm.name.trim(),
+      price,
+      points,
+      description: pointPackageForm.description.trim() || undefined,
+      displayOrder: Number(pointPackageForm.displayOrder || 0),
+      status: Number(pointPackageForm.status),
+    };
+    setLoading(true);
+    try {
+      if (pointPackageForm.id) {
+        await membershipApi.updatePointPackage(pointPackageForm.id, payload);
+      } else {
+        await membershipApi.createPointPackage({ ...payload, code: pointPackageForm.code.trim() });
+      }
+      notify(pointPackageForm.id ? '积分包已更新' : '积分包已创建');
+      setPointPackageForm(createPointPackageFormState());
+      await loadPointPackages();
+    } catch { notify('积分包保存失败，请检查编码和字段格式'); }
+    finally { setLoading(false); }
+  };
+
   const reviewRefund = async (refundNo: string, approved: boolean) => {
     if (!window.confirm(approved ? '确认通过退款并立即回收会员权益？' : '确认拒绝该退款？')) return;
     try {
@@ -491,6 +634,7 @@ const BillingPage = () => {
   const refresh = () => {
     if (section === 'plans') void loadPlans();
     if (section === 'subscriptions') void loadSubscriptions();
+    if (section === 'points') void loadPointPackages();
     if (section === 'refunds') void loadRefunds();
   };
 
@@ -499,10 +643,29 @@ const BillingPage = () => {
       <PageHeader
         title={meta.title}
         description={meta.description}
-        actions={section !== 'points' ? <button className="toolbar-btn" type="button" onClick={refresh} disabled={loading}><RefreshCcw size={16} />刷新</button> : undefined}
+        actions={<button className="toolbar-btn" type="button" onClick={refresh} disabled={loading}><RefreshCcw size={16} />刷新</button>}
       />
 
-      {section === 'plans' && <SectionCard
+      {section === 'plans' && <>
+      <SectionCard
+        title="会员中心购买方式"
+        description="控制会员中心顶部 Tab 的名称、说明、角标、显示状态和排列顺序。隐藏后前台不会再展示该 Tab。"
+        action={<button className="toolbar-btn primary" type="button" onClick={() => void savePurchaseModes()} disabled={loading}><Save size={16} />保存 Tab 配置</button>}
+      >
+        <div className="membership-mode-config-grid">
+          {purchaseModeConfigs.map((item) => <article key={item.value} className={item.enabled ? 'is-enabled' : 'is-disabled'}>
+            <div className="membership-mode-config-head"><div><strong>{item.label || '未命名购买方式'}</strong><span>{item.value}</span></div><StatusBadge tone={item.enabled ? 'green' : 'gray'}>{item.enabled ? '前台显示' : '前台隐藏'}</StatusBadge></div>
+            <div className="membership-mode-config-fields">
+              <label className="field"><span>Tab 名称</span><input value={item.label} onChange={(event) => patchPurchaseMode(item.value, { label: event.target.value })} /></label>
+              <label className="field"><span>第二行说明</span><input value={item.hint || ''} onChange={(event) => patchPurchaseMode(item.value, { hint: event.target.value })} /></label>
+              <label className="field"><span>右上角角标</span><input value={item.badge || ''} onChange={(event) => patchPurchaseMode(item.value, { badge: event.target.value })} placeholder="留空则不显示" /></label>
+              <label className="field"><span>显示顺序</span><input type="number" value={item.displayOrder} onChange={(event) => patchPurchaseMode(item.value, { displayOrder: Number(event.target.value) })} /></label>
+              <label className="field"><span>前台状态</span><select value={item.enabled ? '1' : '0'} onChange={(event) => patchPurchaseMode(item.value, { enabled: event.target.value === '1' })}><option value="1">显示</option><option value="0">隐藏</option></select></label>
+            </div>
+          </article>)}
+        </div>
+      </SectionCard>
+      <SectionCard
         title="会员 SKU 列表"
         description="以 SKU 为维度查看全部会员卡，点击预览或编辑即可进入对应 SKU。"
         action={<div className="toolbar-group billing-plan-actions"><StatusBadge tone="green">{skuCards.length} 个 SKU</StatusBadge><button className="toolbar-btn primary" type="button" onClick={openPlanCreate} disabled={loading}>新增套餐</button></div>}
@@ -524,7 +687,7 @@ const BillingPage = () => {
             <td>
               <div className="membership-admin-sku-price">
                 <strong>{formatPrice(Number(sku.price || 0))}</strong>
-                <small>{formatSkuPeriod(sku)} · {sku.billingMode === 'auto_renew' ? '自动续费' : '单次购买'}</small>
+                <small>{formatSkuPeriod(sku)} · 单次购买</small>
                 {sku.originalPrice != null ? <span>原价 {formatPrice(sku.originalPrice)}</span> : null}
               </div>
             </td>
@@ -542,7 +705,7 @@ const BillingPage = () => {
             </td>
           </tr>;
         })}</tbody></table></div> : <EmptyState title="暂无 SKU" description="请先执行会员初始化数据脚本。" />}
-      </SectionCard>}
+      </SectionCard></>}
 
       <Modal
         open={planCreateOpen}
@@ -567,21 +730,54 @@ const BillingPage = () => {
 
       {section === 'subscriptions' && <SectionCard title="用户订阅列表" description="升级立即生效，待降级套餐会单独展示。">
         <div className="membership-admin-filter"><input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="用户名、账号或用户 ID" /><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="">全部状态</option><option value="active">有效</option><option value="canceling">到期取消</option><option value="expired">已过期</option></select><button className="toolbar-btn primary" onClick={() => void loadSubscriptions(1)}>查询</button></div>
-        <div className="table-wrap"><table><thead><tr><th>用户</th><th>套餐 / SKU</th><th>状态</th><th>自动续费</th><th>当前周期</th><th>待生效套餐</th></tr></thead><tbody>{subscriptions.map((item) => <tr key={item.id}><td><strong>{item.username || item.account || item.userId}</strong><small>ID {item.userId}</small></td><td>{item.planName}<small>{item.skuName}</small></td><td><StatusBadge tone={item.status === 'active' ? 'green' : 'gray'}>{item.status}</StatusBadge></td><td>{item.autoRenew && !item.cancelAtPeriodEnd ? '是' : '否'}</td><td>{item.currentPeriodStart}<small>至 {item.currentPeriodEnd}</small></td><td>{item.pendingPlanName || '—'}</td></tr>)}</tbody></table></div>
+        <div className="table-wrap"><table><thead><tr><th>用户</th><th>套餐 / SKU</th><th>状态</th><th>购买方式</th><th>当前周期</th><th>待生效套餐</th></tr></thead><tbody>{subscriptions.map((item) => <tr key={item.id}><td><strong>{item.username || item.account || item.userId}</strong><small>ID {item.userId}</small></td><td>{item.planName}<small>{item.skuName}</small></td><td><StatusBadge tone={item.status === 'active' ? 'green' : 'gray'}>{item.status}</StatusBadge></td><td>单次购买</td><td>{item.currentPeriodStart}<small>至 {item.currentPeriodEnd}</small></td><td>{item.pendingPlanName || '—'}</td></tr>)}</tbody></table></div>
         {!subscriptions.length && !loading ? <EmptyState title="暂无订阅记录" description="调整筛选条件后重新查询。" /> : null}
         <Pagination page={page} pageSize={10} total={total} onChange={(next) => void loadSubscriptions(next)} />
       </SectionCard>}
 
-      {section === 'points' && <div className="membership-point-layout">
-        <SectionCard title="人工调整积分" description="正数增加、负数扣减；每次操作都会写入不可重复的积分流水。">
-          <div className="membership-point-form">
-            <label className="field"><span>用户 ID</span><input value={pointForm.userId} onChange={(event) => setPointForm({ ...pointForm, userId: event.target.value })} placeholder="请输入用户 ID" /></label>
-            <label className="field"><span>调整数量</span><input type="number" value={pointForm.changePoints} onChange={(event) => setPointForm({ ...pointForm, changePoints: event.target.value })} placeholder="例如 500 或 -100" /></label>
-            <label className="field"><span>调整原因</span><textarea rows={4} value={pointForm.remark} onChange={(event) => setPointForm({ ...pointForm, remark: event.target.value })} placeholder="请填写本次人工调整原因" /></label>
+      {section === 'points' && <div className="membership-point-page-stack">
+        <SectionCard
+          title="积分包配置"
+          description="这里配置的价格和到账积分会直接展示在用户端“购买积分”页面。"
+          action={<button className="toolbar-btn primary" type="button" onClick={() => setPointPackageForm(createPointPackageFormState())}>新增积分包</button>}
+        >
+          <div className="membership-point-package-admin-grid">
+            <div className="membership-point-package-list">
+              {pointPackages.map((pointPackage) => <button key={pointPackage.id} className={pointPackageForm.id === pointPackage.id ? 'is-active' : ''} type="button" onClick={() => setPointPackageForm(createPointPackageFormState(pointPackage))}>
+                <div><strong>{pointPackage.name}</strong><small>{pointPackage.code}</small></div>
+                <span>{pointPackage.points.toLocaleString()} 积分</span>
+                <b>{formatPrice(pointPackage.price)}</b>
+                <StatusBadge tone={pointPackage.status === 1 ? 'green' : 'gray'}>{pointPackage.status === 1 ? '启用' : '停用'}</StatusBadge>
+              </button>)}
+              {!pointPackages.length && !loading ? <EmptyState title="暂无积分包" description="点击右上角新增第一个积分包。" /> : null}
+            </div>
+            <div className="membership-point-package-form">
+              <div className="membership-point-package-form-head"><div><strong>{pointPackageForm.id ? '编辑积分包' : '新增积分包'}</strong><span>保存后用户端自动读取最新配置</span></div>{pointPackageForm.id ? <button type="button" onClick={() => setPointPackageForm(createPointPackageFormState())}>取消编辑</button> : null}</div>
+              <div className="field-grid">
+                <label className="field"><span>积分包编码</span><input value={pointPackageForm.code} disabled={Boolean(pointPackageForm.id)} onChange={(event) => setPointPackageForm({ ...pointPackageForm, code: event.target.value })} placeholder="例如 points_500" /></label>
+                <label className="field"><span>积分包名称</span><input value={pointPackageForm.name} onChange={(event) => setPointPackageForm({ ...pointPackageForm, name: event.target.value })} placeholder="例如 基础积分包" /></label>
+                <label className="field"><span>销售价格</span><input type="number" min="0.01" step="0.01" value={pointPackageForm.price} onChange={(event) => setPointPackageForm({ ...pointPackageForm, price: event.target.value })} /></label>
+                <label className="field"><span>轻量版基础积分</span><input type="number" min="1" step="1" value={pointPackageForm.points} onChange={(event) => setPointPackageForm({ ...pointPackageForm, points: event.target.value })} /><small>专业版按 550/500、至尊版按 600/500 自动加成</small></label>
+                <label className="field"><span>展示顺序</span><input type="number" value={pointPackageForm.displayOrder} onChange={(event) => setPointPackageForm({ ...pointPackageForm, displayOrder: event.target.value })} /></label>
+                <label className="field"><span>状态</span><select value={pointPackageForm.status} onChange={(event) => setPointPackageForm({ ...pointPackageForm, status: event.target.value as '1' | '0' })}><option value="1">启用</option><option value="0">停用</option></select></label>
+                <label className="field membership-editor-wide"><span>展示说明</span><textarea rows={3} value={pointPackageForm.description} onChange={(event) => setPointPackageForm({ ...pointPackageForm, description: event.target.value })} placeholder="用户端卡片上的简短说明" /></label>
+              </div>
+              <button className="toolbar-btn primary membership-point-submit" disabled={loading} onClick={() => void savePointPackage()}><Save size={16} />保存积分包</button>
+            </div>
           </div>
-          <button className="toolbar-btn primary membership-point-submit" disabled={loading} onClick={() => void adjustPoints()}><Coins size={16} />确认调整</button>
         </SectionCard>
-        <aside className="membership-point-note"><Coins size={22} /><h3>操作提示</h3><p>增加积分填写正数，扣减积分填写负数。提交前请核对用户 ID，积分流水生成后不可重复提交。</p></aside>
+
+        <div className="membership-point-layout">
+          <SectionCard title="人工调整积分" description="正数增加、负数扣减；每次操作都会写入不可重复的积分流水。">
+            <div className="membership-point-form">
+              <label className="field"><span>用户 ID</span><input value={pointForm.userId} onChange={(event) => setPointForm({ ...pointForm, userId: event.target.value })} placeholder="请输入用户 ID" /></label>
+              <label className="field"><span>调整数量</span><input type="number" value={pointForm.changePoints} onChange={(event) => setPointForm({ ...pointForm, changePoints: event.target.value })} placeholder="例如 500 或 -100" /></label>
+              <label className="field"><span>调整原因</span><textarea rows={4} value={pointForm.remark} onChange={(event) => setPointForm({ ...pointForm, remark: event.target.value })} placeholder="请填写本次人工调整原因" /></label>
+            </div>
+            <button className="toolbar-btn primary membership-point-submit" disabled={loading} onClick={() => void adjustPoints()}><Coins size={16} />确认调整</button>
+          </SectionCard>
+          <aside className="membership-point-note"><Coins size={22} /><h3>操作提示</h3><p>增加积分填写正数，扣减积分填写负数。提交前请核对用户 ID，积分流水生成后不可重复提交。</p></aside>
+        </div>
       </div>}
 
       {section === 'refunds' && <SectionCard title="会员退款列表" description="审核通过后原路退款并立即回收会员权益。">
@@ -591,31 +787,28 @@ const BillingPage = () => {
         <Pagination page={page} pageSize={10} total={total} onChange={(next) => void loadRefunds(next)} />
       </SectionCard>}
 
+      {section === 'custom_requests' && <SectionCard title="至尊会员独家模板定制" description="工单入口受 EXCLUSIVE_TEMPLATE_REQUEST 权益保护，只有已开通该权益的会员可以提交。">
+        <div className="membership-admin-filter"><input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="标题、需求或联系方式" /><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="">全部状态</option><option value="pending">待处理</option><option value="processing">处理中</option><option value="completed">已完成</option><option value="rejected">已拒绝</option></select><button className="toolbar-btn primary" onClick={() => void loadCustomRequests(1)}>查询</button></div>
+        <div className="table-wrap"><table><thead><tr><th>用户</th><th>模板需求</th><th>联系方式</th><th>状态</th><th>处理备注</th><th>操作</th></tr></thead><tbody>{customRequests.map((item) => <tr key={item.id}><td>ID {item.userId}</td><td><strong>{item.title}</strong><small>{item.requirements}</small></td><td>{item.contact || '—'}</td><td><StatusBadge tone={item.status === 'completed' ? 'green' : item.status === 'pending' ? 'orange' : 'gray'}>{item.status}</StatusBadge></td><td>{item.adminRemark || '—'}</td><td><div className="table-actions">{item.status === 'pending' ? <button onClick={() => void updateCustomRequest(item, 'processing')}>开始处理</button> : null}{item.status === 'processing' ? <button onClick={() => void updateCustomRequest(item, 'completed')}>完成</button> : null}{!['completed', 'rejected'].includes(item.status) ? <button onClick={() => void updateCustomRequest(item, 'rejected')}>拒绝</button> : '—'}</div></td></tr>)}</tbody></table></div>
+        {!customRequests.length && !loading ? <EmptyState title="暂无定制模板工单" description="至尊会员提交后会显示在这里。" /> : null}
+        <Pagination page={page} pageSize={10} total={total} onChange={(next) => void loadCustomRequests(next)} />
+      </SectionCard>}
+
       <Modal
         open={Boolean(editingPlan)}
         title={editingPlan && activeEditingSku ? `编辑 SKU · ${editingPlan.name} / ${activeEditingSku.name}` : '编辑 SKU'}
-        description="左侧按前台卡片实时预览，右侧修改当前 SKU、套餐共用字段和权益。"
+        description="只展示并修改当前点击的 SKU；套餐名称和权益属于该套餐的共用配置。"
         size="full"
         closeOnBackdrop={false}
-        onClose={() => { setEditingPlan(null); setEditingSkuId(null); }}
-        footer={<><button className="modal-btn" type="button" onClick={() => { setEditingPlan(null); setEditingSkuId(null); }}>取消</button><button className="modal-btn primary" type="button" onClick={() => void savePlan()} disabled={loading}><Save size={16} />{loading ? '保存中' : '保存 SKU'}</button></>}
+        onClose={() => { setEditingPlan(null); setEditingSkuId(null); setEditingSkuPriceInput(''); }}
+        footer={<><button className="modal-btn" type="button" onClick={() => { setEditingPlan(null); setEditingSkuId(null); setEditingSkuPriceInput(''); }}>取消</button><button className="modal-btn primary" type="button" onClick={() => void savePlan()} disabled={loading}><Save size={16} />{loading ? '保存中' : '保存 SKU'}</button></>}
       >
         {editingPlan ? <div className="membership-card-editor-layout">
           <aside className="membership-card-editor-preview">
             <div className="membership-card-editor-heading"><div><strong>前台预览</strong><span>修改右侧内容，这张 SKU 卡会同步变化</span></div><StatusBadge tone={editingPlan.status !== 0 ? 'green' : 'gray'}>{editingPlan.status !== 0 ? '展示中' : '已隐藏'}</StatusBadge></div>
             <div className="membership-preview-context is-inline">
               <div><strong>{activeEditingSku?.name || '当前 SKU'}</strong><span>{activeEditingSku?.code || '—'} · {activeEditingSku ? formatSkuPeriod(activeEditingSku) : '—'}</span></div>
-              {activeEditingSku ? <span><b>{activeEditingSku.status !== 0 ? '启用中' : '已停用'}</b> · {activeEditingSku.billingMode === 'auto_renew' ? '自动续费' : '单次购买'}</span> : null}
-            </div>
-            <div className="membership-preview-cycle is-compact" role="group" aria-label="编辑套餐周期">
-              {purchaseModeOptions.map((option) => {
-                const available = editingPlan.skus.some((sku) => matchesPurchaseMode(sku, option.value));
-                return <button key={option.value} className={editingMode === option.value ? 'active' : ''} type="button" disabled={!available} onClick={() => {
-                  setEditingMode(option.value);
-                  const nextSku = resolveSkuForMode(editingPlan, option.value, true);
-                  if (nextSku) setEditingSkuId(nextSku.id);
-                }}>{option.label}<small>{option.hint}</small></button>;
-              })}
+              {activeEditingSku ? <span><b>{activeEditingSku.status !== 0 ? '启用中' : '已停用'}</b> · 单次购买</span> : null}
             </div>
             <MembershipCardView plan={editingPlan} sku={activeEditingSku} mode={editingMode} editor />
           </aside>
@@ -630,16 +823,16 @@ const BillingPage = () => {
             <label className="field membership-editor-wide"><span>套餐说明</span><textarea rows={3} value={editingPlan.description || ''} onChange={(event) => patchEditingPlan({ description: event.target.value })} /></label>
           </div></section>
 
-          <section className="membership-editor-section"><div className="membership-editor-title"><span>02</span><div><h4>SKU 价格</h4><p>切换左侧周期即可实时核对对应 SKU 的价格。</p></div><div className="toolbar-group membership-editor-actions"><button className="toolbar-btn primary" type="button" onClick={openSkuCreate} disabled={loading}>新增 SKU</button></div></div><div className="membership-admin-sku-grid">{editingPlan.skus.map((sku) => <article className={activeEditingSku?.id === sku.id ? 'is-current' : ''} key={sku.id}>
-            <div className="membership-sku-head"><div><strong>{sku.name}</strong><span>{sku.code}</span></div><StatusBadge tone="blue">{sku.billingMode}</StatusBadge></div>
+          <section className="membership-editor-section"><div className="membership-editor-title"><span>02</span><div><h4>当前 SKU</h4><p>这里只编辑列表中刚才点击的 SKU，不会加载或保存同套餐的其他 SKU。</p></div><div className="toolbar-group membership-editor-actions"><button className="toolbar-btn primary" type="button" onClick={openSkuCreate} disabled={loading}>新增 SKU</button></div></div><div className="membership-admin-sku-grid">{activeEditingSku ? [activeEditingSku].map((sku) => <article className="is-current" key={sku.id}>
+            <div className="membership-sku-head"><div><strong>{sku.name}</strong><span>{sku.code}</span></div><StatusBadge tone="blue">单次购买</StatusBadge></div>
             <div className="membership-sku-fields">
               <label className="field"><span>SKU 名称</span><input value={sku.name} onChange={(event) => patchSku(sku.id, { name: event.target.value })} /></label>
-              <label className="field"><span>销售价格</span><input type="number" min="0" value={sku.price} onChange={(event) => patchSku(sku.id, { price: Number(event.target.value) })} /></label>
-              <label className="field"><span>原价</span><input type="number" min="0" value={sku.originalPrice || ''} onChange={(event) => patchSku(sku.id, { originalPrice: event.target.value ? Number(event.target.value) : undefined })} /></label>
+              <label className="field"><span>销售价格</span><input type="text" inputMode="decimal" required value={editingSkuPriceInput} onChange={(event) => { const nextValue = event.target.value; if (nextValue !== '' && /^\d+(?:\.\d{0,2})?$/.test(nextValue)) { setEditingSkuPriceInput(nextValue); patchSku(sku.id, { price: Number(nextValue) }); } }} /></label>
+              <label className="field"><span>原价</span><input type="number" min="0" step="0.01" value={sku.originalPrice ?? ''} onChange={(event) => patchSku(sku.id, { originalPrice: event.target.value ? Number(event.target.value) : undefined })} /></label>
               <label className="field"><span>退款天数</span><input type="number" min="0" value={sku.refundDays} onChange={(event) => patchSku(sku.id, { refundDays: Number(event.target.value) })} /></label>
               <label className="field"><span>SKU 状态</span><select value={sku.status ?? 1} onChange={(event) => patchSku(sku.id, { status: Number(event.target.value) })}><option value={1}>启用</option><option value={0}>停用</option></select></label>
             </div>
-          </article>)}{skuCreateOpen ? <article className="membership-create-card"><div className="membership-sku-head"><div><strong>新增 SKU</strong><span>为当前套餐添加新的售卖规格</span></div><StatusBadge tone="green">新建</StatusBadge></div><div className="membership-sku-fields"><label className="field"><span>SKU 编码</span><input value={skuCreateForm.code} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, code: event.target.value })} placeholder="例如 pro_monthly_auto" /></label><label className="field"><span>SKU 名称</span><input value={skuCreateForm.name} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, name: event.target.value })} placeholder="例如 连续包月" /></label><label className="field"><span>计费方式</span><select value={skuCreateForm.billingMode} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, billingMode: event.target.value as SkuCreateFormState['billingMode'] })}><option value="one_time">单次购买</option><option value="auto_renew">自动续费</option></select></label><label className="field"><span>周期单位</span><select value={skuCreateForm.periodUnit} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, periodUnit: event.target.value as SkuCreateFormState['periodUnit'] })}><option value="month">月</option><option value="quarter">季</option><option value="year">年</option></select></label><label className="field"><span>周期数量</span><input type="number" min="1" value={skuCreateForm.periodCount} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, periodCount: event.target.value })} /></label><label className="field"><span>销售价格</span><input type="number" min="0" value={skuCreateForm.price} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, price: event.target.value })} /></label><label className="field"><span>原价</span><input type="number" min="0" value={skuCreateForm.originalPrice} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, originalPrice: event.target.value })} /></label><label className="field"><span>退款天数</span><input type="number" min="0" value={skuCreateForm.refundDays} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, refundDays: event.target.value })} /></label><label className="field"><span>展示顺序</span><input type="number" value={skuCreateForm.displayOrder} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, displayOrder: event.target.value })} /></label><label className="field"><span>SKU 状态</span><select value={skuCreateForm.status} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, status: event.target.value as '1' | '0' })}><option value="1">启用</option><option value="0">停用</option></select></label></div><div className="membership-create-actions"><button className="toolbar-btn" type="button" onClick={() => setSkuCreateOpen(false)}>取消</button><button className="toolbar-btn primary" type="button" onClick={() => void createSku()} disabled={loading}>创建 SKU</button></div></article> : null}</div></section>
+          </article>) : null}{skuCreateOpen ? <article className="membership-create-card"><div className="membership-sku-head"><div><strong>新增 SKU</strong><span>为当前套餐添加新的售卖规格</span></div><StatusBadge tone="green">新建</StatusBadge></div><div className="membership-sku-fields"><label className="field"><span>SKU 编码</span><input value={skuCreateForm.code} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, code: event.target.value })} placeholder="例如 pro_quarter" /></label><label className="field"><span>SKU 名称</span><input value={skuCreateForm.name} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, name: event.target.value })} placeholder="例如 专业版季卡" /></label><label className="field"><span>购买方式</span><input value="单次购买" disabled /></label><label className="field"><span>周期单位</span><select value={skuCreateForm.periodUnit} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, periodUnit: event.target.value as SkuCreateFormState['periodUnit'] })}><option value="month">月</option><option value="quarter">季</option><option value="year">年</option></select></label><label className="field"><span>周期数量</span><input type="number" min="1" value={skuCreateForm.periodCount} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, periodCount: event.target.value })} /></label><label className="field"><span>销售价格</span><input type="number" min="0" step="0.01" required value={skuCreateForm.price} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, price: event.target.value })} /></label><label className="field"><span>原价</span><input type="number" min="0" step="0.01" value={skuCreateForm.originalPrice} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, originalPrice: event.target.value })} /></label><label className="field"><span>退款天数</span><input type="number" min="0" value={skuCreateForm.refundDays} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, refundDays: event.target.value })} /></label><label className="field"><span>展示顺序</span><input type="number" value={skuCreateForm.displayOrder} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, displayOrder: event.target.value })} /></label><label className="field"><span>SKU 状态</span><select value={skuCreateForm.status} onChange={(event) => setSkuCreateForm({ ...skuCreateForm, status: event.target.value as '1' | '0' })}><option value="1">启用</option><option value="0">停用</option></select></label></div><div className="membership-create-actions"><button className="toolbar-btn" type="button" onClick={() => setSkuCreateOpen(false)}>取消</button><button className="toolbar-btn primary" type="button" onClick={() => void createSku()} disabled={loading}>创建 SKU</button></div></article> : null}</div></section>
 
           <section className="membership-editor-section"><div className="membership-editor-title"><span>03</span><div><h4>卡片权益</h4><p>卡片只展示已启用且有有效值的权益。</p></div><div className="toolbar-group membership-editor-actions"><button className="toolbar-btn primary" type="button" onClick={openBenefitCreate} disabled={loading}>新增权益</button></div></div><div className="membership-admin-benefit-list">{editingPlan.benefits.map((benefit) => <div className={`membership-benefit-row ${benefit.enabled ? 'is-enabled' : ''}`} key={benefit.code}>
             <button className="membership-benefit-toggle" type="button" aria-label={`${benefit.enabled ? '关闭' : '启用'}${benefit.name}`} onClick={() => patchBenefit(benefit.code, { enabled: !benefit.enabled })}><span>{benefit.enabled ? <Check size={13} /> : null}</span></button>

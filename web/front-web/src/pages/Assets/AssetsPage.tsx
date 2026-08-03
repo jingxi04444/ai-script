@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { message } from 'antd';
-import { CaretRightFilled, CheckOutlined, FileTextOutlined, FolderFilled, FormOutlined, LeftOutlined, MenuFoldOutlined, PictureOutlined, RightOutlined, ShareAltOutlined } from '@ant-design/icons';
+import { message, Modal } from 'antd';
+import { CaretRightFilled, CheckOutlined, DeleteOutlined, FileTextOutlined, FolderFilled, FormOutlined, LeftOutlined, MenuFoldOutlined, PictureOutlined, RightOutlined, ShareAltOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { assetApi } from '../../api/asset';
 import { briefApi } from '../../api/brief';
@@ -54,6 +54,7 @@ const AssetsPage = () => {
   const [briefsLoading, setBriefsLoading] = useState(true);
   const [briefLoadFailed, setBriefLoadFailed] = useState(false);
   const [isAssetBriefShareMode, setIsAssetBriefShareMode] = useState(false);
+  const [isAssetBriefDeleteMode, setIsAssetBriefDeleteMode] = useState(false);
   const [selectedAssetBriefIds, setSelectedAssetBriefIds] = useState<string[]>([]);
 
   const [scripts, setScripts] = useState<Script[]>([]);
@@ -174,6 +175,38 @@ const AssetsPage = () => {
       message.success('Brief 分享包链接已复制');
     } catch { message.error('创建分享包失败：只能分享自己可管理的 Brief'); }
   };
+
+  const removeBriefsFromLibrary = (briefIds: string[]) => {
+    const removedIds = new Set(briefIds);
+    setBriefLibrary((current) => {
+      if (!current) return current;
+      const projects = current.projects
+        .map((project) => ({ ...project, briefs: project.briefs.filter((brief) => !removedIds.has(brief.id)) }))
+        .filter((project) => project.briefs.length > 0);
+      const total = new Set(projects.flatMap((project) => project.briefs.map((brief) => brief.id))).size;
+      return { ...current, projects, total };
+    });
+  };
+
+  const deleteAssetBriefs = (briefs: BriefAssetItem[]) => {
+    const ownedBriefs = briefs.filter((brief) => brief.ownedByCurrentUser === true);
+    if (!ownedBriefs.length) return message.warning('请选择自己创建的 Brief');
+    Modal.confirm({
+      title: ownedBriefs.length === 1 ? '确认删除这份 Brief？' : `确认删除选中的 ${ownedBriefs.length} 份 Brief？`,
+      content: '删除后会从所有项目和分享记录中移除；历史脚本仍保留生成时的 Brief 快照。',
+      okText: ownedBriefs.length === 1 ? '确认删除' : '批量删除',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      centered: true,
+      onOk: async () => {
+        await Promise.all(ownedBriefs.map((brief) => briefApi.delete(brief.id)));
+        removeBriefsFromLibrary(ownedBriefs.map((brief) => brief.id));
+        setSelectedAssetBriefIds([]);
+        setIsAssetBriefDeleteMode(false);
+        message.success(`已删除 ${ownedBriefs.length} 份 Brief`);
+      },
+    });
+  };
   const openBrief = (brief: BriefAssetItem) => {
     const params = new URLSearchParams({
       projectId: brief.projectId,
@@ -219,18 +252,21 @@ const AssetsPage = () => {
       if (briefLoadFailed) return <p className="assets-record-empty">当前项目 Brief 加载失败，请刷新后重试</p>;
       return (
         <section className="assets-record-grid" aria-label={`${selectedBriefProject?.name || '当前项目'}的 Brief`}>
-          {visibleProjectBriefs.map((brief) => (
-            <button className={`assets-record-card ${isAssetBriefShareMode && selectedAssetBriefIds.includes(brief.id) ? 'is-selected' : ''}`} type="button" key={brief.id} onClick={() => isAssetBriefShareMode ? setSelectedAssetBriefIds((current) => current.includes(brief.id) ? current.filter((id) => id !== brief.id) : [...current, brief.id]) : openBrief(brief)}>
+          {visibleProjectBriefs.map((brief) => {
+            const selectionMode = isAssetBriefShareMode || isAssetBriefDeleteMode;
+            const selected = selectedAssetBriefIds.includes(brief.id);
+            return (
+            <article className={`assets-record-card ${selectionMode && selected ? 'is-selected' : ''}`} key={brief.id} role="button" tabIndex={0} onClick={() => selectionMode ? setSelectedAssetBriefIds((current) => current.includes(brief.id) ? current.filter((id) => id !== brief.id) : [...current, brief.id]) : openBrief(brief)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectionMode ? setSelectedAssetBriefIds((current) => current.includes(brief.id) ? current.filter((id) => id !== brief.id) : [...current, brief.id]) : openBrief(brief); } }}>
               <span className="assets-record-icon"><FormOutlined /></span>
               <span className="assets-record-copy">
                 <strong>{brief.productName || brief.name || '未命名 Brief'}</strong>
                 <small>{brief.productModel || 'Brief'}</small>
                 <em>更新于 {formatDateTime(brief.updatedAt)}</em>
               </span>
-              {isAssetBriefShareMode ? <span className={`assets-brief-check ${selectedAssetBriefIds.includes(brief.id) ? 'is-checked' : ''}`}>{selectedAssetBriefIds.includes(brief.id) ? <CheckOutlined /> : null}</span> : null}
-              <RightOutlined />
-            </button>
-          ))}
+              {selectionMode ? <span className={`assets-brief-check ${selected ? 'is-checked' : ''}`}>{selected ? <CheckOutlined /> : null}</span> : brief.ownedByCurrentUser === true ? <button type="button" className="assets-brief-delete" aria-label={`删除 ${brief.productName || brief.name || 'Brief'}`} onClick={(event) => { event.stopPropagation(); deleteAssetBriefs([brief]); }}><DeleteOutlined /></button> : <RightOutlined />}
+            </article>
+            );
+          })}
           {!visibleProjectBriefs.length && <p className="assets-record-empty">当前项目暂无 Brief</p>}
         </section>
       );
@@ -374,7 +410,15 @@ const AssetsPage = () => {
             )}
             <div className="assets-brief-title-row">
               <h1>{selectedBriefProject?.name || selectedFolder?.name || LIBRARY_LABELS[activeView]}</h1>
-              {selectedBriefProject ? <div className="assets-brief-share-tools"><button type="button" onClick={() => { setIsAssetBriefShareMode((current) => !current); setSelectedAssetBriefIds([]); }}><ShareAltOutlined />{isAssetBriefShareMode ? '取消选择' : '创建分享包'}</button>{isAssetBriefShareMode ? <><button type="button" onClick={() => setSelectedAssetBriefIds(selectedAssetBriefIds.length === visibleProjectBriefs.length ? [] : visibleProjectBriefs.map((brief) => brief.id))}>全选</button><button type="button" onClick={createAssetBriefSharePack} disabled={!selectedAssetBriefIds.length}>共享 {selectedAssetBriefIds.length} 份 Brief</button></> : null}</div> : null}
+              {selectedBriefProject ? <div className="assets-brief-share-tools">
+                <button type="button" onClick={() => { setIsAssetBriefShareMode((current) => !current); setIsAssetBriefDeleteMode(false); setSelectedAssetBriefIds([]); }}><ShareAltOutlined />{isAssetBriefShareMode ? '取消选择' : '批量分享'}</button>
+                <button type="button" className="danger" onClick={() => { setIsAssetBriefDeleteMode((current) => !current); setIsAssetBriefShareMode(false); setSelectedAssetBriefIds([]); }}><DeleteOutlined />{isAssetBriefDeleteMode ? '取消选择' : '批量删除'}</button>
+                {(isAssetBriefShareMode || isAssetBriefDeleteMode) ? <>
+                  <button type="button" onClick={() => { const selectable = isAssetBriefDeleteMode ? visibleProjectBriefs.filter((brief) => brief.ownedByCurrentUser === true) : visibleProjectBriefs; setSelectedAssetBriefIds(selectedAssetBriefIds.length === selectable.length ? [] : selectable.map((brief) => brief.id)); }}>全选</button>
+                  {isAssetBriefShareMode ? <button type="button" onClick={createAssetBriefSharePack} disabled={!selectedAssetBriefIds.length}>共享 {selectedAssetBriefIds.length} 份 Brief</button> : null}
+                  {isAssetBriefDeleteMode ? <button type="button" className="danger" onClick={() => deleteAssetBriefs(visibleProjectBriefs.filter((brief) => selectedAssetBriefIds.includes(brief.id)))} disabled={!selectedAssetBriefIds.length}>删除 {selectedAssetBriefIds.length} 份 Brief</button> : null}
+                </> : null}
+              </div> : null}
             </div>
             {renderFolderContents()}
           </div>

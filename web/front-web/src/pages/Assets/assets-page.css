@@ -398,6 +398,21 @@
 }
 .assets-brief-share-tools { display: flex; gap: 8px; margin: 16px 0; }
 .assets-brief-share-tools button { padding: 8px 12px; border: 1px solid #3b4544; border-radius: 8px; background: #1a2020; color: #e8eeee; }
+.assets-brief-share-tools button.danger,
+.assets-brief-delete { border-color: rgba(255, 94, 94, .45); color: #ff8585; }
+.assets-brief-share-tools button.danger:hover,
+.assets-brief-delete:hover { border-color: #ff6b6b; background: rgba(153, 45, 45, .18); color: #ff9a9a; }
+.assets-brief-delete {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 94, 94, .35);
+  border-radius: 8px;
+  background: rgba(96, 31, 31, .14);
+  cursor: pointer;
+}
 .assets-record-card.is-selected { border-color: #70df70 !important; background: rgba(74, 157, 79, .16) !important; }
 .assets-brief-check { display: grid; place-items: center; width: 20px; height: 20px; border: 1px solid #72df70; border-radius: 50%; color: #b6f7ad; }
 .assets-brief-check.is-checked { background: #245028; }

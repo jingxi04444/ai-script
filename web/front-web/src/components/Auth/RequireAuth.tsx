@@ -8,7 +8,7 @@ interface RequireAuthProps {
 
 const RequireAuth = ({ children }: RequireAuthProps) => {
   const location = useLocation();
-  const { token, user, isAuthenticated, fetchUserInfo } = useAuthStore();
+  const { token, user, isAuthenticated, needsPhoneBinding, needsEmailBinding, fetchUserInfo } = useAuthStore();
   const [checking, setChecking] = useState(Boolean(token && !user));
 
   useEffect(() => {
@@ -41,6 +41,11 @@ const RequireAuth = ({ children }: RequireAuthProps) => {
         正在校验登录状态...
       </div>
     );
+  }
+
+  if (needsPhoneBinding || needsEmailBinding) {
+    const redirect = location.pathname + location.search;
+    return <Navigate to={`/login?redirect=${encodeURIComponent(redirect)}`} replace state={{ from: location }} />;
   }
 
   return children;

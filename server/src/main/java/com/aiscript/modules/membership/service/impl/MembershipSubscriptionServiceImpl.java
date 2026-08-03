@@ -125,8 +125,8 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
         subscription.setPlanId(target.plan().getId().longValue());
         subscription.setSkuId(target.sku().getId());
         subscription.setStatus("active");
-        subscription.setAutoRenew(isAutoRenew(target.sku()) ? 1 : 0);
-        subscription.setNextRenewTime(isAutoRenew(target.sku()) ? subscription.getCurrentPeriodEnd() : null);
+        subscription.setAutoRenew(0);
+        subscription.setNextRenewTime(null);
         subscription.setCancelAtPeriodEnd(0);
         subscription.setCancelTime(null);
         subscription.setPendingPlanId(null);
@@ -383,6 +383,11 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
 
     private boolean isAutoRenew(AiMembershipPlanSku sku) {
         return "auto_renew".equalsIgnoreCase(sku.getBillingMode());
+    }
+
+    private boolean isAutoDeductProvider(String provider) {
+        return "alipay_auto_deduct".equalsIgnoreCase(provider)
+            || "wechat_auto_deduct".equalsIgnoreCase(provider);
     }
 
     private BigDecimal money(BigDecimal value) {

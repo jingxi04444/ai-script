@@ -6,6 +6,8 @@ public class NotificationVO {
     public String id;
     public String userId;
     public String channel;
+    public String bizType;
+    public String bizId;
     public String title;
     public String content;
     public Integer status;

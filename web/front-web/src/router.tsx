@@ -13,7 +13,9 @@ const BriefSharePackPage = lazy(() => import('./pages/BriefSharePack/BriefShareP
 const PaymentOrdersPage = lazy(() => import('./pages/PaymentOrders/PaymentOrdersPage'));
 const MembershipPage = lazy(() => import('./pages/Membership/MembershipPage'));
 const MembershipOrdersPage = lazy(() => import('./pages/Membership/MembershipOrdersPage'));
-const MembershipAutoRenewPage = lazy(() => import('./pages/Membership/MembershipAutoRenewPage'));
+const MembershipPointsPage = lazy(() => import('./pages/Membership/MembershipPointsPage'));
+const NotificationsPage = lazy(() => import('./pages/Notifications/NotificationsPage'));
+const PaymentResultPage = lazy(() => import('./pages/PaymentResult/PaymentResultPage'));
 
 const LazyLoad = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#888' }}>Loading...</div>}>
@@ -71,12 +73,24 @@ export const router: RouteObject[] = [
     element: <RequireAuth><LazyLoad><MembershipOrdersPage /></LazyLoad></RequireAuth>,
   },
   {
+    path: '/membership/points',
+    element: <RequireAuth><LazyLoad><MembershipPointsPage /></LazyLoad></RequireAuth>,
+  },
+  {
     path: '/membership/auto-renew',
-    element: <RequireAuth><LazyLoad><MembershipAutoRenewPage /></LazyLoad></RequireAuth>,
+    element: <Navigate to="/membership" replace />,
   },
   {
     path: '/payment/orders',
     element: <RequireAuth><LazyLoad><PaymentOrdersPage /></LazyLoad></RequireAuth>,
+  },
+  {
+    path: '/payment/result',
+    element: <RequireAuth><LazyLoad><PaymentResultPage /></LazyLoad></RequireAuth>,
+  },
+  {
+    path: '/notifications',
+    element: <RequireAuth><LazyLoad><NotificationsPage /></LazyLoad></RequireAuth>,
   },
   {
     path: '*',

@@ -3,6 +3,7 @@ import {
   CheckOutlined,
   CloseOutlined,
   DownloadOutlined,
+  DeleteOutlined,
   EditOutlined,
   FileWordOutlined,
   FolderOpenOutlined,
@@ -16,7 +17,7 @@ import {
   ShareAltOutlined,
   TeamOutlined,
 } from '@ant-design/icons';
-import { message } from 'antd';
+import { message, Modal } from 'antd';
 import { briefApi } from '../../api/brief';
 import BriefContentLayout from '../Brief/BriefContentLayout';
 import RichTextField from '../../pages/Workspace/SellingPoints/RichTextField';
@@ -181,6 +182,7 @@ const BriefDialog = ({
   const [selectedSharePermission, setSelectedSharePermission] = useState<BriefSharePermission>('read');
   const [sharing, setSharing] = useState(false);
   const [isBatchShareMode, setIsBatchShareMode] = useState(false);
+  const [isBatchDeleteMode, setIsBatchDeleteMode] = useState(false);
   const [selectedBatchBriefIds, setSelectedBatchBriefIds] = useState<string[]>([]);
   const [batchSharePermission, setBatchSharePermission] = useState<BriefSharePermission>('read');
 
@@ -192,6 +194,7 @@ const BriefDialog = ({
     setSelectedVersionId('');
     setSelectedBatchBriefIds([]);
     setIsBatchShareMode(false);
+    setIsBatchDeleteMode(false);
 
     if (!initialBriefId && !projectId) {
       setIsBriefListLoading(false);
@@ -360,6 +363,34 @@ const BriefDialog = ({
       setSharing(false);
     }
   };
+
+  const handleBatchDelete = (targetBriefs = briefs.filter((brief) => selectedBatchBriefIds.includes(brief.id))) => {
+    const ownedBriefs = targetBriefs.filter((brief) => brief.ownedByCurrentUser === true);
+    if (!ownedBriefs.length) {
+      message.warning('请选择自己创建的 Brief');
+      return;
+    }
+    Modal.confirm({
+      title: ownedBriefs.length === 1 ? '确认删除这份 Brief？' : `确认删除选中的 ${ownedBriefs.length} 份 Brief？`,
+      content: '删除后会从所有项目和分享记录中移除；历史脚本仍保留生成时的 Brief 快照。',
+      okText: ownedBriefs.length === 1 ? '确认删除' : '批量删除',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      centered: true,
+      onOk: async () => {
+        const deletedIds = new Set(ownedBriefs.map((brief) => brief.id));
+        await Promise.all(ownedBriefs.map((brief) => briefApi.delete(brief.id)));
+        setBriefs((current) => current.filter((brief) => !deletedIds.has(brief.id)));
+        setSelectedBatchBriefIds([]);
+        setIsBatchDeleteMode(false);
+        if (currentBrief && deletedIds.has(currentBrief.id)) {
+          setSelectedBriefId('');
+          setView('folders');
+        }
+        message.success(`已删除 ${ownedBriefs.length} 份 Brief`);
+      },
+    });
+  };
   const openSharePanel = () => {
     setSideTab('collaboration');
   };
@@ -469,6 +500,25 @@ const BriefDialog = ({
     message.success('Brief Word 文档已下载');
   };
 
+  const handleDeleteBrief = () => {
+    if (!currentBrief || currentBrief.ownedByCurrentUser !== true) return;
+    Modal.confirm({
+      title: '确认删除这份 Brief？',
+      content: '该 Brief 会从所有项目和分享记录中移除；已经生成的脚本仍保留首次生成时的 Brief 快照。',
+      okText: '确认删除',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      centered: true,
+      onOk: async () => {
+        await briefApi.delete(currentBrief.id);
+        setBriefs((current) => current.filter((brief) => brief.id !== currentBrief.id));
+        setSelectedBriefId('');
+        setView('folders');
+        message.success('Brief 已删除');
+      },
+    });
+  };
+
   const handleApproveRequest = async (requestId: string) => {
     try {
       await briefApi.approveEditRequest(requestId);
@@ -505,10 +555,22 @@ const BriefDialog = ({
                   className={`brief-folder-batch ${isBatchShareMode ? 'active' : ''}`}
                   onClick={() => {
                     setIsBatchShareMode((current) => !current);
+                    setIsBatchDeleteMode(false);
                     setSelectedBatchBriefIds([]);
                   }}
                 >
                   <ShareAltOutlined />{'\u6279\u91cf\u5206\u4eab'}
+                </button>
+                <button
+                  type="button"
+                  className={`brief-folder-batch brief-folder-batch-delete ${isBatchDeleteMode ? 'active' : ''}`}
+                  onClick={() => {
+                    setIsBatchDeleteMode((current) => !current);
+                    setIsBatchShareMode(false);
+                    setSelectedBatchBriefIds([]);
+                  }}
+                >
+                  <DeleteOutlined />批量删除
                 </button>
                 <button type="button" className="brief-folder-create" onClick={handleAddBrief}>
                   <PlusOutlined />
@@ -523,19 +585,24 @@ const BriefDialog = ({
                 <FileWordOutlined />
                 <input value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="搜索 Brief 文档名称或产品型号" />
               </label>
-              {isBatchShareMode ? (
+              {(isBatchShareMode || isBatchDeleteMode) ? (
                 <div className="brief-batch-share-actions">
                   <button type="button" onClick={() => setSelectedBatchBriefIds(
-                    selectedBatchBriefIds.length === visibleBriefs.length ? [] : visibleBriefs.map((brief) => brief.id),
+                    selectedBatchBriefIds.length === (isBatchDeleteMode ? visibleBriefs.filter((brief) => brief.ownedByCurrentUser === true) : visibleBriefs).length
+                      ? []
+                      : (isBatchDeleteMode ? visibleBriefs.filter((brief) => brief.ownedByCurrentUser === true) : visibleBriefs).map((brief) => brief.id),
                   )}>
-                    {selectedBatchBriefIds.length === visibleBriefs.length ? '\u53d6\u6d88\u5168\u9009' : '\u5168\u9009'}
+                    {selectedBatchBriefIds.length === (isBatchDeleteMode ? visibleBriefs.filter((brief) => brief.ownedByCurrentUser === true) : visibleBriefs).length ? '\u53d6\u6d88\u5168\u9009' : '\u5168\u9009'}
                   </button>
-                  <select value={batchSharePermission} onChange={(event) => setBatchSharePermission(event.target.value as BriefSharePermission)}>
+                  {isBatchShareMode ? <select value={batchSharePermission} onChange={(event) => setBatchSharePermission(event.target.value as BriefSharePermission)}>
                     {sharePermissionOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                  </select>
-                  <button type="button" className="primary" onClick={handleBatchShare} disabled={sharing || !selectedBatchBriefIds.length}>
+                  </select> : null}
+                  {isBatchShareMode ? <button type="button" className="primary" onClick={handleBatchShare} disabled={sharing || !selectedBatchBriefIds.length}>
                     <ShareAltOutlined />{'\u5171\u4eab'} {selectedBatchBriefIds.length || ''} {'\u4efd Brief'}
-                  </button>
+                  </button> : null}
+                  {isBatchDeleteMode ? <button type="button" className="danger" onClick={() => handleBatchDelete()} disabled={!selectedBatchBriefIds.length}>
+                    <DeleteOutlined />删除 {selectedBatchBriefIds.length || ''} 份 Brief
+                  </button> : null}
                 </div>
               ) : null}
               <span>{isBriefListLoading ? '正在加载当前项目 Brief…' : `共 ${visibleBriefs.length} 份文档`}</span>
@@ -548,18 +615,23 @@ const BriefDialog = ({
                   <strong>正在加载当前项目 Brief</strong>
                   <span>请稍候，不会显示其他项目的文档。</span>
                 </div>
-              ) : visibleBriefs.map((brief) => (
-                <button type="button" className={`brief-folder-card ${isBatchShareMode && selectedBatchBriefIds.includes(brief.id) ? 'is-selected' : ''}`} key={brief.id} onClick={() => isBatchShareMode ? toggleBatchBrief(brief.id) : openBrief(brief)} aria-pressed={isBatchShareMode ? selectedBatchBriefIds.includes(brief.id) : undefined}>
+              ) : visibleBriefs.map((brief) => {
+                const selectionMode = isBatchShareMode || isBatchDeleteMode;
+                const selected = selectedBatchBriefIds.includes(brief.id);
+                return (
+                <article className={`brief-folder-card ${selectionMode && selected ? 'is-selected' : ''}`} key={brief.id} role="button" tabIndex={0} onClick={() => selectionMode ? toggleBatchBrief(brief.id) : openBrief(brief)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectionMode ? toggleBatchBrief(brief.id) : openBrief(brief); } }} aria-pressed={selectionMode ? selected : undefined}>
                   <span className="brief-folder-shape"><FolderOpenOutlined /></span>
                   <span className="brief-folder-copy">
                     <strong>{brief.productName || brief.name || '未命名 Brief'}</strong>
                     <small>{brief.productModel || 'Word Brief 文档'}</small>
                     <em>{brief.versions?.[0]?.label || 'v1.0'} · {formatDateTime(brief.versions?.[0]?.createdAt || brief.updatedAt)}</em>
                   </span>
-                  {isBatchShareMode ? <span className={`brief-folder-check ${selectedBatchBriefIds.includes(brief.id) ? 'is-checked' : ''}`}>{selectedBatchBriefIds.includes(brief.id) ? <CheckOutlined /> : null}</span> : null}
+                  {selectionMode ? <span className={`brief-folder-check ${selected ? 'is-checked' : ''}`}>{selected ? <CheckOutlined /> : null}</span> : null}
                   {brief.shareEnabled === 1 ? <span className="brief-folder-shared"><TeamOutlined />已分享</span> : null}
-                </button>
-              ))}
+                  {!selectionMode && brief.ownedByCurrentUser === true ? <button type="button" className="brief-folder-delete" aria-label={`删除 ${brief.productName || brief.name || 'Brief'}`} onClick={(event) => { event.stopPropagation(); handleBatchDelete([brief]); }}><DeleteOutlined /></button> : null}
+                </article>
+                );
+              })}
               {!isBriefListLoading && !visibleBriefs.length ? (
                 <div className="brief-folder-empty">
                   <FileWordOutlined />
@@ -591,6 +663,7 @@ const BriefDialog = ({
                   <button type="button" className={sideTab === 'collaboration' ? 'active' : ''} onClick={openSharePanel}><ShareAltOutlined />分享</button>
                 ) : null}
                 <button type="button" onClick={handleDownload}><DownloadOutlined />下载</button>
+                {currentBrief?.ownedByCurrentUser === true ? <button type="button" className="brief-delete-action" onClick={handleDeleteBrief}><DeleteOutlined />删除</button> : null}
                 {canEditCurrentBrief ? (
                   <button type="button" className={isEditing ? 'active' : ''} onClick={isEditing ? saveEditing : startEditing} disabled={saving}>
                     {isEditing ? <SaveOutlined /> : <EditOutlined />}{saving ? '保存中' : isEditing ? '保存' : '编辑'}

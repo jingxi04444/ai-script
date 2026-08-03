@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   AlipayCircleOutlined,
   CheckOutlined,
@@ -8,36 +7,36 @@ import {
   QrcodeOutlined,
   QuestionCircleOutlined,
   ReloadOutlined,
-  WechatOutlined,
 } from '@ant-design/icons';
 import { QRCode, Select, Spin, Tooltip, message, Modal } from 'antd';
 import HomeRail from '../../components/Layout/HomeRail';
 import { membershipApi } from '../../api/membership';
 import { paymentApi } from '../../api/payment';
-import type { DailyPointReward, MembershipBenefit, MembershipPlan, MembershipPlanSku, PointAccount, PointTransaction, UserMembership } from '../../types/membership';
+import type { DailyPointReward, MembershipBenefit, MembershipPlan, MembershipPlanSku, MembershipPurchaseMode, PointAccount, PointTransaction, TemplateCustomRequest, UserMembership } from '../../types/membership';
 import type { PaymentOrder } from '../../types/payment';
+import MembershipTopbar from './MembershipTopbar';
+import { formatDate } from '../../utils/format';
 import './membership-page.css';
 
-type PurchaseMode = 'once_month' | 'auto_month' | 'auto_quarter' | 'auto_year';
+type PurchaseMode = MembershipPurchaseMode['value'];
 
-const purchaseModeOptions: Array<{ value: PurchaseMode; label: string; hint: string; badge?: string }> = [
-  { value: 'once_month', label: '单月购买', hint: '购买一个月' },
-  { value: 'auto_month', label: '连续包月', hint: '每月自动续费' },
-  { value: 'auto_quarter', label: '连续包季', hint: '每季自动续费' },
-  { value: 'auto_year', label: '连续包年', hint: '每年自动续费', badge: '限时优惠' },
+const purchaseModeFallbacks: MembershipPurchaseMode[] = [
+  { value: 'once_month', label: '单月购买', hint: '购买一个月', enabled: true, displayOrder: 10 },
+  { value: 'once_quarter', label: '季卡', hint: '购买一个季度', enabled: true, displayOrder: 20 },
+  { value: 'once_year', label: '年卡', hint: '购买一年', badge: '限时优惠', enabled: true, displayOrder: 30 },
 ];
 
 const matchesPurchaseMode = (sku: MembershipPlanSku, mode: PurchaseMode) => {
-  if (mode === 'once_month') return sku.periodUnit === 'month' && sku.billingMode !== 'auto_renew';
-  if (mode === 'auto_month') return sku.periodUnit === 'month' && sku.billingMode === 'auto_renew';
-  if (mode === 'auto_quarter') return sku.periodUnit === 'quarter' && sku.billingMode === 'auto_renew';
-  return sku.periodUnit === 'year' && sku.billingMode === 'auto_renew';
+  if (sku.billingMode !== 'one_time') return false;
+  if (mode === 'once_month') return sku.periodUnit === 'month';
+  if (mode === 'once_quarter') return sku.periodUnit === 'quarter';
+  return sku.periodUnit === 'year';
 };
 
 const purchaseModeOf = (sku: MembershipPlanSku): PurchaseMode => {
-  if (sku.periodUnit === 'year') return 'auto_year';
-  if (sku.periodUnit === 'quarter') return 'auto_quarter';
-  return sku.billingMode === 'auto_renew' ? 'auto_month' : 'once_month';
+  if (sku.periodUnit === 'year') return 'once_year';
+  if (sku.periodUnit === 'quarter') return 'once_quarter';
+  return 'once_month';
 };
 
 const benefitLabel = (value: string, unit?: string) => {
@@ -53,18 +52,16 @@ const benefitLabel = (value: string, unit?: string) => {
   return `${value}${unit || ''}`;
 };
 
-const isWeChatBrowser = () => typeof navigator !== 'undefined' && /MicroMessenger/i.test(navigator.userAgent);
-
-const getStoredOpenid = () => {
-  if (typeof window === 'undefined') return undefined;
-  return window.localStorage.getItem('openid') || window.sessionStorage.getItem('openid') || undefined;
+const isAvailableBenefit = (benefit: MembershipBenefit) => {
+  const value = String(benefit.value ?? '').trim().toLowerCase();
+  const zeroAmount = ['integer', 'decimal'].includes(benefit.valueType) && Number(value) === 0;
+  return benefit.enabled && value !== '' && value !== 'false' && !zeroAmount;
 };
-
-const resolveContractChannel = () => (isWeChatBrowser() ? 'jsapi' : 'h5') as 'jsapi' | 'h5';
 
 const resolveSku = (plan: MembershipPlan | undefined, mode: PurchaseMode) => {
   if (!plan?.skus?.length) return undefined;
-  return plan.skus.find((sku) => matchesPurchaseMode(sku, mode)) || plan.skus[0];
+  const candidates = plan.skus.filter((sku) => matchesPurchaseMode(sku, mode));
+  return candidates.find((sku) => sku.billingMode === 'one_time') || candidates[0] || (plan.free ? plan.skus[0] : undefined);
 };
 
 const buildSkuSelectionMap = (planList: MembershipPlan[], mode: PurchaseMode) => Object.fromEntries(
@@ -84,6 +81,7 @@ const toDateKey = (value?: string) => {
 const formatPeriod = (sku?: MembershipPlanSku) => {
   if (!sku) return '订阅周期';
   const count = sku.periodCount || 1;
+  if (sku.periodUnit === 'day') return `${count}天`;
   if (sku.periodUnit === 'year') return count === 1 ? '年卡' : `${count}年`;
   if (sku.periodUnit === 'quarter') return count === 1 ? '季卡' : `${count}季度`;
   return count === 1 ? '月卡' : `${count}个月`;
@@ -92,13 +90,13 @@ const formatPeriod = (sku?: MembershipPlanSku) => {
 type ComparisonCell = { enabled: boolean; label: string };
 
 const MembershipHomePage = () => {
-  const navigate = useNavigate();
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
+  const [purchaseModeConfig, setPurchaseModeConfig] = useState<MembershipPurchaseMode[]>(purchaseModeFallbacks);
   const [current, setCurrent] = useState<UserMembership | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState('');
   const [selectedSkuIds, setSelectedSkuIds] = useState<Record<string, string>>({});
   const [purchaseMode, setPurchaseMode] = useState<PurchaseMode>('once_month');
-  const [payMethod, setPayMethod] = useState<'wechat' | 'alipay'>('wechat');
+  const payMethod = 'alipay' as const;
   const [loading, setLoading] = useState(true);
   const [pointsAccount, setPointsAccount] = useState<PointAccount | null>(null);
   const [rewardClaiming, setRewardClaiming] = useState(false);
@@ -106,17 +104,23 @@ const MembershipHomePage = () => {
   const [submittingSku, setSubmittingSku] = useState<string | null>(null);
   const [order, setOrder] = useState<PaymentOrder | null>(null);
   const [comparisonOpen, setComparisonOpen] = useState(false);
+  const [customRequestOpen, setCustomRequestOpen] = useState(false);
+  const [customRequests, setCustomRequests] = useState<TemplateCustomRequest[]>([]);
+  const [customRequestForm, setCustomRequestForm] = useState({ title: '', requirements: '', contact: '' });
+  const [customRequestSubmitting, setCustomRequestSubmitting] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
-      const [planList, membership, pointAccount, pointResult] = await Promise.all([
+      const [planList, membership, pointAccount, pointResult, modeList] = await Promise.all([
         membershipApi.plans(),
         membershipApi.current(),
         membershipApi.points().catch(() => null),
         membershipApi.pointTransactions({ page: 1, pageSize: 10 }).catch(() => null),
+        membershipApi.purchaseModes().catch(() => purchaseModeFallbacks),
       ]);
       setPlans(planList);
+      setPurchaseModeConfig(modeList);
       setCurrent(membership);
       setPointsAccount(pointAccount);
       const currentPlan = planList.find((plan) => plan.id === membership?.planId);
@@ -148,6 +152,22 @@ const MembershipHomePage = () => {
   }, [plans, purchaseMode]);
 
   const maxPlanLevel = useMemo(() => Math.max(...plans.map((plan) => plan.level || 0), 0), [plans]);
+
+  const purchaseModeOptions = useMemo(() => {
+    const enabledModes = new Set<PurchaseMode>();
+    const purchasablePlans = plans.some((plan) => !plan.free) ? plans.filter((plan) => !plan.free) : plans;
+    purchasablePlans.forEach((plan) => (plan.skus || []).forEach((sku) => {
+      enabledModes.add(purchaseModeOf(sku));
+    }));
+    return purchaseModeConfig
+      .filter((option) => option.enabled && enabledModes.has(option.value))
+      .sort((left, right) => left.displayOrder - right.displayOrder);
+  }, [plans, purchaseModeConfig]);
+
+  useEffect(() => {
+    if (!purchaseModeOptions.length || purchaseModeOptions.some((option) => option.value === purchaseMode)) return;
+    setPurchaseMode(purchaseModeOptions[0].value);
+  }, [purchaseMode, purchaseModeOptions]);
 
   const comparisonRows = useMemo(() => {
     const rows = new Map<string, {
@@ -193,8 +213,73 @@ const MembershipHomePage = () => {
   const selectedPrice = Number(selectedSku?.price || 0);
   const discount = Math.max(0, selectedOriginalPrice - selectedPrice);
   const qrContent = order?.qrContent || order?.payParams?.qrCode || order?.payParams?.payUrl || '';
-  const autoRenewDisplayOn = (current?.autoRenew === true || current?.autoRenew === 1) && !current?.cancelAtPeriodEnd;
   const rewardPoints = pointsAccount?.availablePoints ?? 0;
+  const membershipExpiry = current?.currentPeriodEnd || current?.expireTime;
+  const currentPlan = plans.find((plan) => plan.id === current?.planId);
+  const canRequestExclusiveTemplate = Boolean(currentPlan?.benefits?.some((benefit) => (
+    benefit.code === 'EXCLUSIVE_TEMPLATE_REQUEST' && benefit.enabled && benefit.value === 'true'
+  )));
+
+  const showUnavailableBenefitReason = (benefit: MembershipBenefit, planName: string) => {
+    Modal.confirm({
+      title: `${benefit.name}暂未开通`,
+      content: `${planName}不包含“${benefit.name}”权益，因此当前无法使用。你可以查看权益对比，选择包含该功能的会员套餐。`,
+      okText: '查看权益对比',
+      cancelText: '知道了',
+      centered: true,
+      onOk: () => setComparisonOpen(true),
+    });
+  };
+
+  const handleExclusiveTemplateClick = () => {
+    if (canRequestExclusiveTemplate) {
+      void openCustomRequest();
+      return;
+    }
+    const benefit = currentPlan?.benefits?.find((item) => item.code === 'EXCLUSIVE_TEMPLATE_REQUEST');
+    showUnavailableBenefitReason(benefit || {
+      code: 'EXCLUSIVE_TEMPLATE_REQUEST',
+      name: '独家模板定制',
+      category: '模板权益',
+      value: 'false',
+      valueType: 'boolean',
+      enabled: true,
+      resetType: 'none',
+      previewOnly: false,
+    }, currentPlan?.name || '当前套餐');
+  };
+
+  const openCustomRequest = async () => {
+    setCustomRequestOpen(true);
+    try {
+      const result = await membershipApi.templateCustomRequests({ page: 1, pageSize: 10 });
+      setCustomRequests(result.list || []);
+    } catch (error) {
+      message.error((error as { message?: string })?.message || '定制模板工单加载失败');
+    }
+  };
+
+  const submitCustomRequest = async () => {
+    if (!customRequestForm.title.trim() || !customRequestForm.requirements.trim()) {
+      message.warning('请填写模板标题和详细需求');
+      return;
+    }
+    setCustomRequestSubmitting(true);
+    try {
+      const created = await membershipApi.createTemplateCustomRequest({
+        title: customRequestForm.title.trim(),
+        requirements: customRequestForm.requirements.trim(),
+        contact: customRequestForm.contact.trim() || undefined,
+      });
+      setCustomRequests((previous) => [created, ...previous]);
+      setCustomRequestForm({ title: '', requirements: '', contact: '' });
+      message.success('独家定制模板工单已提交');
+    } catch (error) {
+      message.error((error as { message?: string })?.message || '定制模板工单提交失败');
+    } finally {
+      setCustomRequestSubmitting(false);
+    }
+  };
 
   const claimDailyReward = async () => {
     setRewardClaiming(true);
@@ -215,12 +300,31 @@ const MembershipHomePage = () => {
     host.style.display = 'none';
     host.innerHTML = formHtml;
     const form = host.querySelector('form');
-    if (!form) throw new Error('签约表单缺失');
+    if (!form) throw new Error('支付表单缺失');
     document.body.appendChild(form);
     (form as HTMLFormElement).submit();
   };
 
   const handlePlanAction = async (plan: MembershipPlan) => {
+    if (plan.free) {
+      const sku = plan.skus?.find((item) => item.id === selectedSkuIds[plan.id]) || resolveSku(plan, purchaseMode);
+      if (!sku) {
+        message.warning('后台尚未配置可用的免费套餐订阅方案');
+        return;
+      }
+      setSubmittingSku(`free:${plan.id}`);
+      try {
+        const membership = await membershipApi.activateFreeTrial(sku.id);
+        setCurrent(membership);
+        message.success(`${formatPeriod(sku)}免费体验已开通`);
+        await load();
+      } catch (error) {
+        message.error((error as { message?: string })?.message || '免费体验开通失败');
+      } finally {
+        setSubmittingSku(null);
+      }
+      return;
+    }
     const sku = plan.skus?.find((item) => item.id === selectedSkuIds[plan.id]) || resolveSku(plan, purchaseMode);
     if (!sku) {
       message.warning('当前套餐没有可购买的订阅周期');
@@ -248,23 +352,12 @@ const MembershipHomePage = () => {
         skuId: sku.id,
         payMethod,
         idempotencyKey: crypto.randomUUID(),
-        ...(sku.billingMode === 'auto_renew' && payMethod === 'wechat' ? {
-          openid: getStoredOpenid(),
-          contractChannel: resolveContractChannel(),
-        } : {}),
       });
 
-      const isAutoRenewSku = sku.billingMode === 'auto_renew';
-      if (isAutoRenewSku && payMethod === 'alipay' && nextOrder.contractFormHtml) {
+      if (nextOrder.payParams?.formHtml) {
         setOrder(nextOrder);
-        message.success('订单已创建，正在跳转支付宝自动续费签约');
-        submitFormHtml(nextOrder.contractFormHtml);
-        return;
-      }
-      if (nextOrder.contractRedirectUrl) {
-        setOrder(nextOrder);
-        message.success(isAutoRenewSku ? '订单已创建，正在前往自动续费签约' : '订单已创建，正在跳转支付');
-        window.location.href = nextOrder.contractRedirectUrl;
+        message.success('订单已创建，正在跳转支付宝收银台');
+        submitFormHtml(nextOrder.payParams.formHtml);
         return;
       }
 
@@ -311,77 +404,76 @@ const MembershipHomePage = () => {
 
   return (
     <div className="membership-shell">
-      <HomeRail activeLabel="会员中心" membershipName={current?.planName || (loading ? '' : '免费体验版')} />
+      <HomeRail
+        activeLabel="会员中心"
+        membershipName={current?.planName || (loading ? '' : '未开通会员')}
+        pointBalance={pointsAccount?.availablePoints}
+      />
 
       <main className="membership-page">
-        <header className="membership-topbar">
-          <nav className="membership-tabs" aria-label="会员中心导航">
-            <button className="active" type="button">会员</button>
-            <button type="button" onClick={() => navigate('/membership/orders')}>查看订单记录</button>
-            <button type="button" onClick={() => navigate('/membership/auto-renew')}>管理自动续费</button>
-          </nav>
-          <button className="membership-refresh" type="button" onClick={() => void load()}>
-            <ReloadOutlined /> 刷新
-          </button>
-        </header>
+        <MembershipTopbar active="plans" onRefresh={() => void load()} refreshing={loading} />
 
         <section className="membership-summary">
-          <div>
+          <section className="membership-account" aria-label="当前会员信息">
+            <div className="membership-account-plan">
+              <span>当前套餐</span>
+              <strong>{current?.planName || '尚未开通'}</strong>
+              <small>套餐到期时间：{membershipExpiry ? formatDate(membershipExpiry, 'YYYY-MM-DD HH:mm:ss') : '—'}</small>
+            </div>
+            <div className="membership-account-actions">
+              <button
+                className={`membership-exclusive-button${canRequestExclusiveTemplate ? '' : ' is-locked'}`}
+                type="button"
+                onClick={handleExclusiveTemplateClick}
+              >
+                独家模板定制{canRequestExclusiveTemplate ? '' : '（未开通）'}
+              </button>
+              <button
+                className="membership-renew-button"
+                type="button"
+                onClick={() => document.querySelector('.membership-commerce')?.scrollIntoView({ behavior: 'smooth' })}
+              >
+                立即续费
+              </button>
+            </div>
+          </section>
+
+          <div className="membership-summary-intro">
             <span className="membership-eyebrow"><CrownOutlined /> 会员订阅</span>
             <h1>选择适合你的会员套餐</h1>
-            <p>升级立即生效，降级和自动续费管理在当前周期结束后生效。</p>
             <div className="membership-summary-actions">
               <button className="membership-compare-trigger membership-compare-trigger-inline" type="button" onClick={() => setComparisonOpen(true)}>
                 <QuestionCircleOutlined /> 查看权益对比
               </button>
             </div>
           </div>
-          <div className="membership-summary-side">
-            <div className="membership-account">
-              <div>
-                <span>当前套餐</span>
-                <strong>{current?.planName || '免费版'}</strong>
-                <small>有效期至 {current?.currentPeriodEnd || current?.expireTime || '长期有效'}</small>
-                <small className={`membership-auto-renew-state ${autoRenewDisplayOn ? 'is-on' : 'is-off'}`}>
-                  自动续费：{autoRenewDisplayOn ? '开' : '关'}
-                </small>
-              </div>
-              <div className="membership-account-actions membership-page-actions">
-                <button type="button" onClick={() => navigate('/membership/orders')}>查看订单记录</button>
-                <button type="button" onClick={() => navigate('/membership/auto-renew')}>管理自动续费</button>
-              </div>
-            </div>
 
-            <article className="membership-reward-card">
-              <div className="membership-reward-card-head">
-                <div>
-                  <span className="membership-eyebrow">Daily reward</span>
-                  <h2>每日登录积分</h2>
-                </div>
-                <span className={`membership-reward-state ${rewardClaimedToday ? 'is-claimed' : 'is-ready'}`}>
-                  {rewardClaimedToday ? '今日已领取' : '可领取'}
-                </span>
-              </div>
-              <div className="membership-reward-body">
-                <strong>当前积分 {rewardPoints}</strong>
-                <p>每日登录即可领取积分，连续登录别忘了来点一下。</p>
-              </div>
-              <button
-                className="membership-reward-button"
-                type="button"
-                onClick={() => void claimDailyReward()}
-                disabled={rewardClaiming || rewardClaimedToday}
-              >
-                {rewardClaiming ? '领取中…' : rewardClaimedToday ? '今日已领取' : '每日登录领取'}
-              </button>
-            </article>
-          </div>
+          <article className="membership-reward-card">
+            <div className="membership-reward-card-head">
+              <div><h2>每日登录积分</h2></div>
+              <span className={`membership-reward-state ${rewardClaimedToday ? 'is-claimed' : 'is-ready'}`}>
+                {rewardClaimedToday ? '今日已领取' : '可领取'}
+              </span>
+            </div>
+            <div className="membership-reward-body">
+              <strong>当前积分 {rewardPoints}</strong>
+              <p>每日登录即可领取积分，连续登录别忘了来点一下。</p>
+            </div>
+            <button
+              className="membership-reward-button"
+              type="button"
+              onClick={() => void claimDailyReward()}
+              disabled={rewardClaiming || rewardClaimedToday || !current}
+            >
+              {rewardClaiming ? '领取中…' : rewardClaimedToday ? '今日已领取' : !current ? '开通套餐后领取' : '每日登录领取'}
+            </button>
+          </article>
         </section>
 
         {loading ? <div className="membership-loading"><Spin size="large" /></div> : (
           <section className="membership-commerce">
             <div className="membership-catalog">
-              <div className="membership-cycle-switch" role="group" aria-label="购买方式">
+              <div className={`membership-cycle-switch mode-count-${Math.max(1, purchaseModeOptions.length)}`} role="group" aria-label="购买方式">
                 {purchaseModeOptions.map((option) => (
                   <button
                     key={option.value}
@@ -407,10 +499,7 @@ const MembershipHomePage = () => {
                     const isFeatured = (plan.level || 0) === maxPlanLevel && maxPlanLevel > 0;
                     const originalPrice = Number(sku?.originalPrice || sku?.price || 0);
                     const price = Number(sku?.price || 0);
-                    const visibleBenefits = (plan.benefits || []).filter((benefit) => {
-                      const value = String(benefit.value ?? '').trim().toLowerCase();
-                      return benefit.enabled && value !== '';
-                    });
+                    const configuredBenefits = (plan.benefits || []).filter((benefit) => benefit.enabled);
                     return (
                       <article
                         key={plan.id}
@@ -437,20 +526,45 @@ const MembershipHomePage = () => {
                           ) : null}
                         </header>
                         <div className="membership-price-row">
-                          <small>¥</small><strong>{price.toFixed(0)}</strong><span>/{formatPeriod(sku)}</span>
+                          <small>¥</small><strong>{sku ? price.toFixed(0) : '—'}</strong><span>/{sku ? formatPeriod(sku) : '该周期未开放'}</span>
                           {originalPrice > price && <del>¥{originalPrice.toFixed(0)}</del>}
                         </div>
                         <p>{plan.description || '适合稳定进行短视频内容生产的创作者与团队。'}</p>
-                        <div className="membership-benefit-title">套餐权益</div>
+                        <div className="membership-benefit-title">
+                          <span>套餐权益</span>
+                          <small>共 {configuredBenefits.length} 项</small>
+                        </div>
                         <ul>
-                          {visibleBenefits.map((benefit) => (
-                            <li key={benefit.code}>
-                              <CheckOutlined /><span>{benefit.name}</span><b>{benefitLabel(benefit.value, benefit.unit)}</b>
+                          {configuredBenefits.map((benefit) => {
+                            const available = isAvailableBenefit(benefit);
+                            return (
+                            <li
+                              key={benefit.code}
+                              className={available ? '' : 'is-unavailable'}
+                              role={available ? undefined : 'button'}
+                              tabIndex={available ? undefined : 0}
+                              title={available ? undefined : `点击查看${benefit.name}不可用的原因`}
+                              onClick={available ? undefined : (event) => {
+                                event.stopPropagation();
+                                showUnavailableBenefitReason(benefit, plan.name);
+                              }}
+                              onKeyDown={available ? undefined : (event) => {
+                                if (event.key === 'Enter' || event.key === ' ') {
+                                  event.preventDefault();
+                                  event.stopPropagation();
+                                  showUnavailableBenefitReason(benefit, plan.name);
+                                }
+                              }}
+                            >
+                              {available ? <CheckOutlined /> : <CloseOutlined />}
+                              <span>{benefit.name}</span>
+                              <b>{available ? benefitLabel(benefit.value, benefit.unit) : '未开通'}</b>
                             </li>
-                          ))}
+                            );
+                          })}
                         </ul>
-                        <button className="membership-card-select" type="button" disabled={isCurrent}>
-                          {isCurrent ? '已订阅' : '订阅'}
+                        <button className="membership-card-select" type="button" disabled={!sku}>
+                          {!sku ? '该周期未开放' : isCurrent ? '续费' : '购买'}
                         </button>
                       </article>
                     );
@@ -473,17 +587,27 @@ const MembershipHomePage = () => {
                 </>
               ) : (
                 <div className="membership-pay-methods" aria-label="支付方式">
-                  <button className={payMethod === 'wechat' ? 'active' : ''} type="button" onClick={() => setPayMethod('wechat')}><WechatOutlined /> 微信</button>
-                  <button className={payMethod === 'alipay' ? 'active' : ''} type="button" onClick={() => setPayMethod('alipay')}><AlipayCircleOutlined /> 支付宝</button>
+                  <button className="active" type="button">
+                    {selectedPlan?.free
+                      ? `${formatPeriod(selectedSku)}免费体验`
+                      : <><AlipayCircleOutlined /> 支付宝</>}
+                  </button>
                 </div>
               )}
 
-              {!order && selectedPlan?.skus?.length ? (
+              {!order && selectedPlan?.skus?.length && selectedSku ? (
                 <div className="membership-sku-picker">
                   <span>订阅方案</span>
                   <Select
                     value={selectedSku?.id}
-                    options={selectedPlan.skus.map((sku) => ({ value: sku.id, label: `${sku.name} · ¥${Number(sku.price).toFixed(2)}` }))}
+                    options={selectedPlan.skus
+                      .filter((sku) => selectedPlan.free || matchesPurchaseMode(sku, purchaseMode))
+                      .map((sku) => ({
+                        value: sku.id,
+                        label: selectedPlan.free
+                          ? `${formatPeriod(sku)} · 免费体验`
+                          : `${formatPeriod(sku)} · 单次购买 · ¥${Number(sku.price).toFixed(2)}`,
+                      }))}
                     classNames={{ popup: { root: 'membership-sku-dropdown' } }}
                     onChange={(skuId) => {
                       const nextSku = selectedPlan.skus?.find((sku) => sku.id === skuId);
@@ -508,13 +632,26 @@ const MembershipHomePage = () => {
                 <button
                   className="membership-submit"
                   type="button"
-                  disabled={!selectedPlan || selectedPlan.free || !selectedSku || selectedPlan.id === current?.planId || submittingSku === selectedSku?.id}
+                  disabled={!selectedPlan
+                    || Boolean(submittingSku)
+                    || (!selectedPlan.free && !selectedSku)
+                    || (selectedPlan.free && selectedPlan.id === current?.planId)}
                   onClick={() => selectedPlan && void handlePlanAction(selectedPlan)}
                 >
-                  {selectedPlan?.id === current?.planId ? '已订阅' : selectedPlan?.free ? '免费套餐' : submittingSku ? '创建订单中…' : '立即开通'}
+                  {selectedPlan?.free
+                    ? selectedPlan.id === current?.planId
+                      ? '已开通免费体验'
+                        : submittingSku
+                        ? '开通中…'
+                        : `开通${formatPeriod(selectedSku)}免费体验`
+                    : submittingSku
+                      ? '创建订单中…'
+                      : selectedPlan?.id === current?.planId
+                        ? '立即续费'
+                        : '立即购买'}
                 </button>
               )}
-              <p className="membership-agreement">开通前请阅读并同意《会员服务协议》</p>
+              <p className="membership-agreement">购买前请阅读并同意《会员服务协议》</p>
             </aside>
           </section>
         )}
@@ -601,6 +738,27 @@ const MembershipHomePage = () => {
             )}
           </div>
         </Modal>
+
+        <Modal
+          open={customRequestOpen}
+          title="至尊版独家模板定制"
+          okText="提交工单"
+          cancelText="关闭"
+          confirmLoading={customRequestSubmitting}
+          onOk={() => void submitCustomRequest()}
+          onCancel={() => setCustomRequestOpen(false)}
+          centered
+          width={680}
+          className="membership-custom-request-modal-wrapper"
+        >
+          <div className="membership-custom-request-form">
+            <label><span>模板标题</span><input maxLength={120} value={customRequestForm.title} onChange={(event) => setCustomRequestForm({ ...customRequestForm, title: event.target.value })} placeholder="例如：美妆新品种草脚本模板" /></label>
+            <label><span>详细需求</span><textarea maxLength={4000} rows={5} value={customRequestForm.requirements} onChange={(event) => setCustomRequestForm({ ...customRequestForm, requirements: event.target.value })} placeholder="请描述行业、目标平台、脚本结构和交付要求" /></label>
+            <label><span>联系方式（选填）</span><input maxLength={200} value={customRequestForm.contact} onChange={(event) => setCustomRequestForm({ ...customRequestForm, contact: event.target.value })} placeholder="手机号、邮箱或微信" /></label>
+            {customRequests.length ? <div className="membership-custom-request-history"><strong>已有工单</strong>{customRequests.map((item) => <div key={item.id}><span>{item.title}</span><b>{item.status}</b><small>{item.adminRemark || item.createdAt || ''}</small></div>)}</div> : null}
+          </div>
+        </Modal>
+
       </main>
     </div>
   );

@@ -11,6 +11,7 @@ public class PayCreateResponse {
     private String subject;
     private String payUrl;
     private String qrContent;
+    private String formHtml;
     private BigDecimal amount;
     private String rawPayload;
 }

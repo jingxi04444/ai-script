@@ -4,6 +4,7 @@ import com.aiscript.common.api.ResultCode;
 import com.aiscript.common.exception.BusinessException;
 import com.aiscript.integration.sms.SmsClient;
 import com.aiscript.modules.auth.dto.LoginDTO;
+import com.aiscript.modules.auth.dto.BindEmailDTO;
 import com.aiscript.modules.auth.dto.BindPhoneDTO;
 import com.aiscript.modules.auth.dto.RegisterDTO;
 import com.aiscript.modules.auth.dto.SendCodeDTO;
@@ -16,7 +17,6 @@ import com.aiscript.modules.auth.service.AuthService;
 import com.aiscript.modules.auth.vo.AdminUserVO;
 import com.aiscript.modules.auth.vo.LoginVO;
 import com.aiscript.modules.auth.vo.UserInfoVO;
-import com.aiscript.modules.membership.service.MembershipService;
 import com.aiscript.modules.system.entity.SysRole;
 import com.aiscript.modules.system.entity.SysUserRole;
 import com.aiscript.modules.system.mapper.SysRoleMapper;
@@ -31,6 +31,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -39,6 +41,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class AuthServiceImpl implements AuthService {
+    private static final Logger log = LoggerFactory.getLogger(AuthServiceImpl.class);
     private static final Integer DEFAULT_TENANT_ID = 1;
 
     private final JwtTokenProvider jwtTokenProvider;
@@ -49,7 +52,6 @@ public class AuthServiceImpl implements AuthService {
     private final PermissionService permissionService;
     private final SysRoleMapper roleMapper;
     private final SysUserRoleMapper userRoleMapper;
-    private final MembershipService membershipService;
 
     public AuthServiceImpl(
         JwtTokenProvider jwtTokenProvider,
@@ -59,8 +61,7 @@ public class AuthServiceImpl implements AuthService {
         SmsClient smsClient,
         PermissionService permissionService,
         SysRoleMapper roleMapper,
-        SysUserRoleMapper userRoleMapper,
-        MembershipService membershipService
+        SysUserRoleMapper userRoleMapper
     ) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.sysUserMapper = sysUserMapper;
@@ -70,16 +71,16 @@ public class AuthServiceImpl implements AuthService {
         this.permissionService = permissionService;
         this.roleMapper = roleMapper;
         this.userRoleMapper = userRoleMapper;
-        this.membershipService = membershipService;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public LoginVO login(LoginDTO dto, String userType) {
+        String loginName = dto.getUsername().trim();
         SysUser user = sysUserMapper.selectOne(new LambdaQueryWrapper<SysUser>()
-            .and(wrapper -> wrapper.eq(SysUser::getAccount, dto.getUsername())
+            .and(wrapper -> wrapper.eq(SysUser::getAccount, loginName)
                 .or()
-                .eq(SysUser::getEmail, dto.getUsername()))
+                .eq(SysUser::getEmail, loginName.toLowerCase()))
             .eq(SysUser::getUserType, userType)
             .last("limit 1"));
         if (user == null) {
@@ -95,7 +96,27 @@ public class AuthServiceImpl implements AuthService {
         if (user.getStatus() != null && user.getStatus() == 0) {
             throw new BusinessException(ResultCode.FORBIDDEN, "账号已被禁用");
         }
+        backfillEmailFromLoginCredential(user, loginName);
         return issueLogin(user, userType);
+    }
+
+    private void backfillEmailFromLoginCredential(SysUser user, String loginName) {
+        if (user.getEmail() != null && !user.getEmail().isBlank()) {
+            return;
+        }
+        String normalizedEmail = loginName.trim().toLowerCase();
+        if (!normalizedEmail.matches("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$")) {
+            return;
+        }
+        Long existingCount = sysUserMapper.selectCount(new LambdaQueryWrapper<SysUser>()
+            .eq(SysUser::getUserType, user.getUserType())
+            .eq(SysUser::getEmail, normalizedEmail)
+            .ne(SysUser::getId, user.getId()));
+        if (existingCount > 0) {
+            throw new BusinessException(ResultCode.CONFLICT, "该邮箱已绑定其他账号");
+        }
+        user.setEmail(normalizedEmail);
+        sysUserMapper.updateById(user);
     }
 
     private LoginVO issueLogin(SysUser user, String userType) {
@@ -113,6 +134,7 @@ public class AuthServiceImpl implements AuthService {
         loginVO.setToken(token);
         loginVO.setUser(toUserInfoVO(user));
         loginVO.setNeedsPhoneBinding(user.getPhone() == null || user.getPhone().isBlank());
+        loginVO.setNeedsEmailBinding(user.getEmail() == null || user.getEmail().isBlank());
         return loginVO;
     }
 
@@ -161,7 +183,6 @@ public class AuthServiceImpl implements AuthService {
         user.setMemberLevel(0);
         user.setStatus(1);
         sysUserMapper.insert(user);
-        membershipService.ensureFreeSubscription(user.getTenantId(), user.getId());
         return issueLogin(user, "front");
     }
 
@@ -181,7 +202,6 @@ public class AuthServiceImpl implements AuthService {
             user.setMemberLevel(0);
             user.setStatus(1);
             sysUserMapper.insert(user);
-            membershipService.ensureFreeSubscription(user.getTenantId(), user.getId());
         }
         return issueLogin(user, "front");
     }
@@ -214,6 +234,28 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public LoginVO bindEmail(BindEmailDTO dto) {
+        SysUser current = currentUser();
+        String normalizedEmail = dto.getEmail().trim().toLowerCase();
+        Long existingCount = sysUserMapper.selectCount(new LambdaQueryWrapper<SysUser>()
+            .eq(SysUser::getUserType, "front")
+            .eq(SysUser::getEmail, normalizedEmail)
+            .ne(SysUser::getId, current.getId()));
+        if (existingCount > 0) {
+            throw new BusinessException(ResultCode.CONFLICT, "该邮箱已绑定其他账号");
+        }
+        current.setEmail(normalizedEmail);
+        current.setPasswordHash(passwordEncoder.encode(dto.getPassword()));
+        if (current.getAccount() == null || current.getAccount().isBlank()
+            || current.getAccount().startsWith("wx_") || current.getAccount().equals(current.getPhone())) {
+            current.setAccount(normalizedEmail);
+        }
+        sysUserMapper.updateById(current);
+        return issueLogin(current, "front");
+    }
+
+    @Override
     public LoginVO loginWechatUser(Integer userId) {
         SysUser user = sysUserMapper.selectById(userId);
         if (user == null || !"front".equals(user.getUserType())) {
@@ -226,6 +268,8 @@ public class AuthServiceImpl implements AuthService {
     @Transactional(rollbackFor = Exception.class)
     public void sendCode(SendCodeDTO dto) {
         String scene = dto.getScene() == null || dto.getScene().isBlank() ? "login" : dto.getScene();
+        String maskedPhone = maskPhone(dto.getPhone());
+        log.info("[SMS] verification-code request received: phone={}, scene={}", maskedPhone, scene);
         SysVerificationCode latest = verificationCodeMapper.selectOne(new LambdaQueryWrapper<SysVerificationCode>()
             .eq(SysVerificationCode::getTarget, dto.getPhone())
             .eq(SysVerificationCode::getScene, scene)
@@ -233,6 +277,16 @@ public class AuthServiceImpl implements AuthService {
             .last("limit 1"));
         if (latest != null && latest.getCreateTime() != null
             && latest.getCreateTime().isAfter(LocalDateTime.now().minusSeconds(60))) {
+            long retryAfterSeconds = Math.max(
+                1,
+                60 - java.time.Duration.between(latest.getCreateTime(), LocalDateTime.now()).getSeconds()
+            );
+            log.warn(
+                "[SMS] verification-code request throttled: phone={}, scene={}, retryAfterSeconds={}",
+                maskedPhone,
+                scene,
+                retryAfterSeconds
+            );
             throw new BusinessException(ResultCode.TOO_MANY_REQUESTS, "验证码发送过于频繁，请稍后再试");
         }
         String code = String.valueOf(ThreadLocalRandom.current().nextInt(100000, 1000000));
@@ -243,7 +297,24 @@ public class AuthServiceImpl implements AuthService {
         verificationCode.setCodeHash(passwordEncoder.encode(code));
         verificationCode.setExpireTime(LocalDateTime.now().plusMinutes(5));
         verificationCodeMapper.insert(verificationCode);
-        smsClient.sendVerificationCode(dto.getPhone(), code);
+        try {
+            smsClient.sendVerificationCode(dto.getPhone(), code);
+            log.info(
+                "[SMS] verification-code request completed: phone={}, scene={}, verificationId={}, expiresAt={}",
+                maskedPhone,
+                scene,
+                verificationCode.getId(),
+                verificationCode.getExpireTime()
+            );
+        } catch (BusinessException exception) {
+            log.warn(
+                "[SMS] verification-code request failed: phone={}, scene={}, reason={}",
+                maskedPhone,
+                scene,
+                exception.getMessage()
+            );
+            throw exception;
+        }
     }
 
     @Override
@@ -355,5 +426,12 @@ public class AuthServiceImpl implements AuthService {
             return "admin";
         }
         return "admin";
+    }
+
+    private String maskPhone(String phone) {
+        if (phone == null || phone.length() < 7) {
+            return "***";
+        }
+        return phone.substring(0, 3) + "****" + phone.substring(phone.length() - 4);
     }
 }

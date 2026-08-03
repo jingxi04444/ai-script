@@ -4,6 +4,8 @@ export interface Notification {
   id: string;
   userId?: string;
   channel?: string;
+  bizType?: string;
+  bizId?: string;
   title: string;
   content?: string;
   status?: number;

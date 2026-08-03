@@ -16,6 +16,7 @@ import {
 } from '@ant-design/icons';
 import { message, Select } from 'antd';
 import { scriptApi } from '../../../api/script';
+import { getScriptStatusLabel, normalizeScriptStatus, scriptStatusOptions } from '../../../types/script';
 import type { Script } from '../../../types/script';
 import type { ScriptType } from '../../../types/script';
 import { formatDateTime } from '../../../utils/format';
@@ -32,14 +33,6 @@ const getCategoryTypeTones = (category: string) => {
     以产品维度的脚本: null,
   };
   return map[category] ?? null;
-};
-
-const getScriptProductGroup = (name: string) => {
-  const productName = name
-    .replace(/(?:爆款复刻|脚本模板库|AI原创).*$/i, '')
-    .replace(/20\d{6}.*$/, '')
-    .trim();
-  return productName || '其他产品';
 };
 
 interface StoryboardPanelProps {
@@ -106,10 +99,12 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
       type: typeTone === 'viral' ? '爆款复刻脚本' : typeTone === 'template' ? '平台模板脚本' : typeTone === 'product' || typeTone === 'product-dimension' ? '产品维度脚本' : 'AI原创脚本',
       typeTone,
       updatedAt: script.updatedAt,
-      status: script.status === 'done' ? '已完成' : script.status === 'pending' ? '待润色' : '草稿',
-      statusTone: script.status,
+      status: getScriptStatusLabel(script.status),
+      statusTone: normalizeScriptStatus(script.status),
       content: script.content || script.name,
-      productGroup: getScriptProductGroup(script.name),
+      briefId: script.briefId,
+      productGroupKey: script.briefId || 'unlinked',
+      productGroup: script.briefName || (script.briefId ? `Brief #${script.briefId}` : '未关联 Brief'),
     };
   });
   const allItems = apiItems;
@@ -252,7 +247,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
           <h2>{activeCategory}</h2>
           <p>
             {activeCategory}共 {totalScripts} 篇，
-            {activeCategory === '以产品维度的脚本' ? '按产品分组，组内按更新时间倒序展示。' : '按更新时间倒序展示。'}
+            {activeCategory === '以产品维度的脚本' ? '按生成时关联的 Brief 分组，修改脚本名称不会改变归属。' : '按更新时间倒序展示。'}
           </p>
         </div>
         <div className="storyboard-summary-actions">
@@ -288,9 +283,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
           <span>状态</span>
           <Select value={statusFilter} onChange={(value) => { setStatusFilter(value); setCurrentPage(1); }} suffixIcon={<DownOutlined />} options={[
             { value: 'all', label: '全部状态' },
-            { value: 'done', label: '已完成' },
-            { value: 'pending', label: '待润色' },
-            { value: 'draft', label: '草稿' },
+            ...scriptStatusOptions,
           ]} />
         </label>
         <button className="storyboard-reset-button" onClick={() => { setSearchText(''); setTypeFilter('all'); setStatusFilter('all'); setCurrentPage(1); }}><ReloadOutlined />重置</button>
@@ -298,7 +291,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
 
       <section className={viewMode === 'list' ? 'storyboard-library-panel list' : 'storyboard-library-panel card'}>
         {viewMode === 'list' ? (
-          <div className="storyboard-table-view">
+          <div className={`storyboard-table-view ${activeCategory === '以产品维度的脚本' ? 'is-brief-grouped' : ''}`}>
             <div className="storyboard-table-head">
               <span>脚本名称</span>
               <span>脚本类型</span>
@@ -309,11 +302,10 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
             {paginatedItems.length ? paginatedItems.map((item, index) => (
               <Fragment key={item.id}>
                 {activeCategory === '以产品维度的脚本'
-                  && (index === 0 || paginatedItems[index - 1].productGroup !== item.productGroup)
+                  && (index === 0 || paginatedItems[index - 1].productGroupKey !== item.productGroupKey)
                   && (
                     <div className="storyboard-product-group">
                       <span>{item.productGroup}</span>
-                      <small>产品脚本</small>
                     </div>
                   )}
                 <article className="storyboard-table-row">
@@ -365,11 +357,10 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
             {paginatedItems.length ? paginatedItems.map((item, index) => (
               <Fragment key={item.id}>
                 {activeCategory === '以产品维度的脚本'
-                  && (index === 0 || paginatedItems[index - 1].productGroup !== item.productGroup)
+                  && (index === 0 || paginatedItems[index - 1].productGroupKey !== item.productGroupKey)
                   && (
                     <div className="storyboard-product-group card-group">
                       <span>{item.productGroup}</span>
-                      <small>产品脚本</small>
                     </div>
                   )}
                 <article className={`storyboard-script-card ${item.typeTone}`}>
@@ -456,7 +447,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
                 <header>
                   <div className="storyboard-preview-status-line">
                     <span>脚本预览</span>
-                    <strong>{preview.status === 'done' ? '已完成' : preview.status === 'pending' ? '待润色' : '草稿'} · {formatDateTime(preview.updatedAt)}</strong>
+                    <strong>{getScriptStatusLabel(preview.status)} · {formatDateTime(preview.updatedAt)}</strong>
                   </div>
                 </header>
                 <div className="polish-preview-scroll">

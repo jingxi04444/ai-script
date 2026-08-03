@@ -26,6 +26,7 @@ import com.aiscript.modules.source.vo.SourceAnalysisVO;
 import com.aiscript.modules.system.service.PromptRenderService;
 import com.aiscript.modules.membership.service.MembershipEntitlementService;
 import com.aiscript.modules.membership.service.MembershipPointService;
+import com.aiscript.modules.membership.service.MembershipTaskQuotaService;
 import com.aiscript.security.LoginUser;
 import com.aiscript.task.parser.VideoParseTask;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -65,6 +66,7 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
     private final VideoParseTask videoParseTask;
     private final MembershipEntitlementService entitlementService;
     private final MembershipPointService pointService;
+    private final MembershipTaskQuotaService taskQuotaService;
     private static final List<DimensionSpec> DIMENSION_SPECS = List.of(
         new DimensionSpec("paragraphStructure", "段落结构拆解"),
         new DimensionSpec("keyIssues", "需要特别指出"),
@@ -85,7 +87,8 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
         @Lazy
         VideoParseTask videoParseTask
         , MembershipEntitlementService entitlementService,
-        MembershipPointService pointService
+        MembershipPointService pointService,
+        MembershipTaskQuotaService taskQuotaService
     ) {
         this.analysisMapper = analysisMapper;
         this.reportMapper = reportMapper;
@@ -97,6 +100,7 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
         this.videoParseTask = videoParseTask;
         this.entitlementService = entitlementService;
         this.pointService = pointService;
+        this.taskQuotaService = taskQuotaService;
     }
 
     @Override
@@ -139,6 +143,10 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
         if (existingTask != null) {
             return handleExistingParseTask(existingTask);
         }
+        LoginUser user = currentUser();
+        String quotaRequestNo = taskQuotaService.reserve(
+            tenantId, user.getUserId(), "parse_video", idempotencyKey
+        );
         AiGenerationTask task = new AiGenerationTask();
         task.setTenantId(tenantId);
         task.setProjectId(Integer.valueOf(dto.getProjectId()));
@@ -148,17 +156,23 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
         task.setProgress(5);
         task.setInputPayload(JsonUtils.toJson(dto));
         task.setIdempotencyKey(idempotencyKey);
+        task.setQuotaRequestNo(quotaRequestNo);
+        task.setCreateBy(user.getUserId());
         task.setStartTime(LocalDateTime.now());
         try {
             taskMapper.insert(task);
             runVideoParseTaskAfterCommit(task.getId());
             return toTaskVO(task);
         } catch (DuplicateKeyException ignored) {
+            taskQuotaService.release(quotaRequestNo);
             AiGenerationTask duplicateTask = findTaskByIdempotencyKey(tenantId, idempotencyKey);
             if (duplicateTask == null) {
                 throw ignored;
             }
             return handleExistingParseTask(duplicateTask);
+        } catch (RuntimeException exception) {
+            taskQuotaService.release(quotaRequestNo);
+            throw exception;
         }
     }
 
@@ -201,6 +215,8 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
                 throw businessException;
             }
             throw new BusinessException("视频解析任务失败：" + ex.getMessage());
+        } finally {
+            taskQuotaService.release(task.getQuotaRequestNo());
         }
     }
 
@@ -636,6 +652,10 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
                 .set(AiGenerationTask::getStartTime, now)
                 .set(AiGenerationTask::getFinishTime, null));
             if (updated > 0) {
+                LoginUser user = currentUser();
+                String quotaRequestNo = taskQuotaService.reserve(
+                    currentTenantId(), user.getUserId(), "parse_video", task.getIdempotencyKey()
+                );
                 task.setStatus("running");
                 task.setProgress(5);
                 task.setErrorCode(null);
@@ -643,6 +663,8 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
                 task.setResultPayload(null);
                 task.setStartTime(now);
                 task.setFinishTime(null);
+                task.setQuotaRequestNo(quotaRequestNo);
+                taskMapper.updateById(task);
                 runVideoParseTaskAfterCommit(task.getId());
             } else {
                 task = taskMapper.selectById(task.getId());

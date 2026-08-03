@@ -39,7 +39,8 @@ import { sourceApi } from '../../../api/source';
 import { useWorkspaceStore, type ScriptMode } from '../../../stores/workspaceStore';
 import type { Brief } from '../../../types/brief';
 import type { Asset } from '../../../types/asset';
-import type { Script, ScriptFormatOption, ScriptPolishMessage, ScriptTemplate, ScriptType } from '../../../types/script';
+import { normalizeScriptStatus, scriptStatusOptions } from '../../../types/script';
+import type { Script, ScriptFormatOption, ScriptPolishMessage, ScriptStatus, ScriptTemplate, ScriptType } from '../../../types/script';
 import type { AnalysisDimension } from '../../../types/source';
 import './script-generator-panel.css';
 
@@ -383,7 +384,7 @@ interface ScriptGeneratorPanelProps {
 
 const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPanelProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { setScriptMode } = useWorkspaceStore();
+  const { setActiveStep, setScriptMode } = useWorkspaceStore();
   const activeModeParam = searchParams.get('scriptMode');
   const activeMode = isScriptMode(activeModeParam) ? activeModeParam : null;
   const editScriptId = searchParams.get('editScriptId');
@@ -412,12 +413,14 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   const [resultDialogOpen, setResultDialogOpen] = useState(false);
   const [originalScriptContent, setOriginalScriptContent] = useState('');
   const [polishInput, setPolishInput] = useState('');
+  const [polishBriefId, setPolishBriefId] = useState<string>();
   const [isManualEditing, setIsManualEditing] = useState(false);
   const [polishMentionOpen, setPolishMentionOpen] = useState(false);
   const [polishMentionQuery, setPolishMentionQuery] = useState('');
   const [polishMentionRange, setPolishMentionRange] = useState<PolishMentionRange | null>(null);
   const [polishMessages, setPolishMessages] = useState<ScriptPolishMessage[]>([]);
   const [isPolishing, setIsPolishing] = useState(false);
+  const [isStatusSaving, setIsStatusSaving] = useState(false);
   const [generatingType, setGeneratingType] = useState<ScriptType | null>(null);
   const [generationElapsed, setGenerationElapsed] = useState(0);
   const [templates, setTemplates] = useState<TemplateCard[]>(templateCards);
@@ -461,6 +464,16 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     setResultDialogOpen(false);
     setIsManualEditing(false);
     setPolishMentionOpen(false);
+    if (searchParams.get('returnStep') === 'storyboard') {
+      const nextParams = new URLSearchParams(searchParams);
+      nextParams.set('step', 'storyboard');
+      nextParams.delete('scriptMode');
+      nextParams.delete('editScriptId');
+      nextParams.delete('returnStep');
+      setSearchParams(nextParams, { replace: true });
+      setActiveStep('storyboard');
+      return;
+    }
     clearEditScriptParam();
   };
 
@@ -557,10 +570,12 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   useEffect(() => {
     if (!editScriptId) return;
     scriptApi.getById(editScriptId).then((script) => {
-      setCurrentScript(script);
+      setCurrentScript({ ...script, status: normalizeScriptStatus(script.status) });
+      if (script.briefId) setSelectedBriefId(script.briefId);
       setOriginalScriptContent(script.content || '');
       setIsManualEditing(false);
       setPolishInput('');
+      setPolishBriefId(undefined);
       setPolishMessages([
         createPolishMessage('assistant', '我已读取原脚本。你可以直接告诉我“哪里不行、想怎么改”，例如：开场太平、卖点不突出、结尾转化弱。我会返回修改后的脚本并在右侧重新显示。'),
       ]);
@@ -568,6 +583,11 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
       clearEditScriptParam();
     }).catch(() => message.warning('脚本内容加载失败'));
   }, [editScriptId]);
+
+  useEffect(() => {
+    if (!currentScript?.briefId || !briefs.some((brief) => brief.id === currentScript.briefId)) return;
+    setSelectedBriefId(currentScript.briefId);
+  }, [briefs, currentScript?.briefId, currentScript?.id]);
 
   useEffect(() => {
     if (activeMode !== 'original') return;
@@ -708,6 +728,15 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
       .replace(/(?:\\[rn]|[\r\n\u2028\u2029])+/g, ' ')
       .replace(/\s+/g, ' ')
       .replace(/([\u3400-\u9fff，。！？；：、“”‘’（）])\s+(?=[\u3400-\u9fff，。！？；：、“”‘’（）])/g, '$1')
+      .trim();
+    return index === storyboardDurationColumnIndex ? normalized.replace(/\s*(?:s|秒)\s*$/i, '').trim() : normalized;
+  };
+  const storyboardCellEditorText = (cell: string | undefined, index: number) => {
+    const normalized = (cell ?? '')
+      .replace(/\*\*(.*?)\*\*/g, '$1')
+      .replace(/\s*(?:<br\s*\/?\s*>|&lt;br\s*\/?\s*&gt;)\s*/gi, ' ')
+      .replace(/(?:\\[rn]|[\r\n\u2028\u2029])+/g, ' ')
+      .replace(/\s+/g, ' ')
       .trim();
     return index === storyboardDurationColumnIndex ? normalized.replace(/\s*(?:s|秒)\s*$/i, '').trim() : normalized;
   };
@@ -874,7 +903,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     const nextValue = `${polishInput.slice(0, range.start)}${mentionText}${polishInput.slice(range.end)}`;
     const nextCursor = range.start + mentionText.length;
     setPolishInput(nextValue);
-    setSelectedBriefId(briefId);
+    setPolishBriefId(briefId);
     message.success(`已调用产品 Brief：${label}`);
     setPolishMentionOpen(false);
     setPolishMentionRange(null);
@@ -970,12 +999,29 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     setCurrentScript((script) => script ? {
       ...script,
       content: contentLines.join('\n'),
-      status: 'pending',
       updatedAt: new Date().toISOString(),
     } : script);
   };
 
-  const appendStoryboardRow = () => {
+  const renumberStoryboardShotLines = (contentLines: string[]) => {
+    const shotColumnIndex = storyboardHeaders.findIndex((header) => /镜号|镜头编号|^镜头$/.test(header));
+    if (shotColumnIndex < 0) return contentLines;
+    const nextLines = [...contentLines];
+    const tableLineIndexes = nextLines
+      .map((line, index) => ({ line: line.trim(), index }))
+      .filter((item) => item.line.startsWith('|') && item.line.endsWith('|'))
+      .map((item) => item.index);
+    let nextShotNo = 1;
+    tableLineIndexes.slice(2).forEach((lineIndex) => {
+      const cells = nextLines[lineIndex].split('|').slice(1, -1).map((cell) => cell.trim());
+      if (cells.some((cell) => /总计|总时长|总时间/.test(cell))) return;
+      cells[shotColumnIndex] = String(nextShotNo++);
+      nextLines[lineIndex] = `| ${cells.join(' | ')} |`;
+    });
+    return nextLines;
+  };
+
+  const insertStoryboardRow = (rowIndex?: number, placement: 'before' | 'after' = 'after') => {
     if (!currentScript?.content || !storyboardTableLines.length) {
       message.warning('当前内容不是分镜表格，暂时无法新增镜头行');
       return;
@@ -988,46 +1034,73 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     const summaryRowIndex = storyboardRows.findIndex((row) =>
       row.cells.some((cell) => /总计|总时长|总时间/.test(cell))
     );
-    const insertionIndex = summaryRowIndex >= 0
-      ? tableLineIndexes[summaryRowIndex + 2]
+    const lastRegularRowIndex = summaryRowIndex >= 0 ? summaryRowIndex - 1 : storyboardRows.length - 1;
+    const targetRowIndex = rowIndex === undefined ? lastRegularRowIndex : rowIndex;
+    const targetDataIndex = rowIndex === undefined
+      ? lastRegularRowIndex + 1
+      : targetRowIndex + (placement === 'after' ? 1 : 0);
+    const insertionDataIndex = Math.max(0, Math.min(targetDataIndex, summaryRowIndex >= 0 ? summaryRowIndex : storyboardRows.length));
+    const insertionIndex = insertionDataIndex < storyboardRows.length
+      ? tableLineIndexes[insertionDataIndex + 2]
       : (tableLineIndexes[tableLineIndexes.length - 1] ?? contentLines.length - 1) + 1;
     const nextCells = Array.from({ length: storyboardHeaders.length }, () => '');
-    const shotColumnIndex = storyboardHeaders.findIndex((header) => /镜号|镜头编号|^镜头$/.test(header));
-    if (shotColumnIndex >= 0) {
-      const regularRowCount = storyboardRows.filter((row) =>
-        !row.cells.some((cell) => /总计|总时长|总时间/.test(cell))
-      ).length;
-      nextCells[shotColumnIndex] = String(regularRowCount + 1);
-    }
     contentLines.splice(insertionIndex, 0, `| ${nextCells.join(' | ')} |`);
     setCurrentScript((script) => script ? {
       ...script,
-      content: contentLines.join('\n'),
-      status: 'pending',
+      content: renumberStoryboardShotLines(contentLines).join('\n'),
       updatedAt: new Date().toISOString(),
     } : script);
-    message.success('已新增一行，请填写新的镜头内容');
+    message.success(rowIndex === undefined
+      ? '已在末尾新增镜头行，请填写内容'
+      : `已在第 ${rowIndex + 1} 行${placement === 'before' ? '上方' : '下方'}插入镜头`);
+  };
+
+  const deleteStoryboardRow = (rowIndex: number) => {
+    if (!currentScript?.content || !storyboardTableLines.length) return;
+    const regularRowCount = storyboardRows.filter((row) =>
+      !row.cells.some((cell) => /总计|总时长|总时间/.test(cell))
+    ).length;
+    if (regularRowCount <= 1) {
+      message.warning('脚本表格至少需要保留一条镜头');
+      return;
+    }
+    const contentLines = currentScript.content.split('\n');
+    const tableLineIndexes = contentLines
+      .map((line, index) => ({ line: line.trim(), index }))
+      .filter((item) => item.line.startsWith('|') && item.line.endsWith('|'))
+      .map((item) => item.index);
+    const targetLineIndex = tableLineIndexes[rowIndex + 2];
+    if (targetLineIndex === undefined) return;
+    contentLines.splice(targetLineIndex, 1);
+    setCurrentScript((script) => script ? {
+      ...script,
+      content: renumberStoryboardShotLines(contentLines).join('\n'),
+      updatedAt: new Date().toISOString(),
+    } : script);
+    message.success(`已删除第 ${rowIndex + 1} 行，可点击“恢复原稿”撤销`);
   };
 
   const polishCurrentScript = async (quickInstruction?: string) => {
     if (!currentScript) return message.warning('请先选择脚本');
     const instruction = (quickInstruction || polishInput).trim();
     if (!instruction) return message.warning('请先输入要修改的地方');
+    const recalledBriefId = quickInstruction ? undefined : polishBriefId;
     const userMessage = createPolishMessage('user', instruction);
     setPolishMessages((messages) => [...messages, userMessage]);
     setPolishInput('');
+    setPolishBriefId(undefined);
     setIsPolishing(true);
     try {
       const result = await scriptApi.polish(currentScript.id, {
         instruction,
         content: currentScript.content || originalScriptContent || '',
-        briefId: selectedBriefId,
+        briefId: recalledBriefId,
         productFrameAssetId: productFrame?.assetId,
         productImage: productFrame?.url,
         productFrameFileName: productFrame?.fileName,
         productFrameContent: productFrame?.extractedText,
       });
-      setCurrentScript((script) => script ? { ...script, content: result.content, status: 'pending', updatedAt: new Date().toISOString() } : script);
+      setCurrentScript((script) => script ? { ...script, content: result.content, updatedAt: new Date().toISOString() } : script);
       setIsManualEditing(false);
       setPolishMessages((messages) => [...messages, createPolishMessage('assistant', result.summary || '已生成修改后的脚本，右侧已更新预览。确认后可保存脚本。')]);
       message.success('AI 已返回修改版，右侧已重新显示');
@@ -1041,7 +1114,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
 
   const restoreOriginalScript = () => {
     if (!currentScript) return;
-    setCurrentScript({ ...currentScript, content: originalScriptContent, status: 'pending', updatedAt: new Date().toISOString() });
+    setCurrentScript({ ...currentScript, content: originalScriptContent, updatedAt: new Date().toISOString() });
     setIsManualEditing(false);
     setPolishMessages((messages) => [...messages, createPolishMessage('assistant', '已恢复到进入润色时的原脚本内容。')]);
   };
@@ -1125,6 +1198,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
       });
       setCurrentScript(script);
       setOriginalScriptContent(script.content || '');
+      setPolishBriefId(undefined);
       setIsManualEditing(false);
       setResultDialogOpen(true);
       message.success('脚本生成成功');
@@ -1142,6 +1216,23 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     setOriginalScriptContent(currentScript.content || '');
     setIsManualEditing(false);
     message.success('脚本已保存');
+  };
+
+  const changeScriptStatus = async (status: ScriptStatus) => {
+    if (!currentScript || status === currentScript.status) return;
+    const previousStatus = currentScript.status;
+    setCurrentScript({ ...currentScript, status });
+    setIsStatusSaving(true);
+    try {
+      const saved = await scriptApi.update(currentScript.id, { status });
+      setCurrentScript((script) => script ? { ...script, status: normalizeScriptStatus(saved.status) } : script);
+      message.success(`脚本状态已标记为“${scriptStatusOptions.find((item) => item.value === status)?.label}”`);
+    } catch (error) {
+      setCurrentScript((script) => script ? { ...script, status: previousStatus } : script);
+      message.error(error instanceof Error ? error.message : '脚本状态修改失败');
+    } finally {
+      setIsStatusSaving(false);
+    }
   };
 
   const startEditingScriptName = () => {
@@ -1784,6 +1875,16 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                   )}
                 </div>
                 <div className="script-output-meta">
+                  <Select
+                    className={`script-status-select is-${currentScript.status}`}
+                    aria-label="脚本状态"
+                    value={normalizeScriptStatus(currentScript.status)}
+                    disabled={isStatusSaving}
+                    loading={isStatusSaving}
+                    onChange={changeScriptStatus}
+                    options={scriptStatusOptions}
+                    suffixIcon={<DownOutlined />}
+                  />
                   <em>{scriptDuration}</em>
                   <em>{selectedScriptFormat?.name || '分镜脚本表'}</em>
                   <em>{scriptSegmentRows.length || storyboardRows.length || 1} 个镜头</em>
@@ -1800,7 +1901,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                   </div>
                   <div className="polish-preview-actions">
                     {isManualEditing && (
-                      <button type="button" disabled={isPolishing} onClick={appendStoryboardRow}>
+                      <button type="button" disabled={isPolishing} onClick={() => insertStoryboardRow()}>
                         <PlusOutlined />新增一行
                       </button>
                     )}
@@ -1840,12 +1941,42 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                                     <textarea
                                       className="storyboard-cell-editor"
                                       aria-label={`编辑第 ${rowIndex + 1} 行${header}`}
-                                      value={storyboardCellText(row.cells[index], index)}
+                                      value={storyboardCellEditorText(row.cells[index], index)}
                                       onChange={(event) => updateStoryboardCell(rowIndex, index, event.target.value)}
                                     />
                                   ) : (
                                     <span className="storyboard-cell-content">{storyboardCellText(row.cells[index], index)}</span>
                                   )}
+                                  {isManualEditing
+                                    && index === 0
+                                    && !row.cells.some((cell) => /总计|总时长|总时间/.test(cell))
+                                    && (
+                                      <>
+                                        {rowIndex === 0 && (
+                                          <button
+                                            type="button"
+                                            className="storyboard-row-edge-insert is-before"
+                                            title="在第一行上方插入"
+                                            aria-label="在第一行上方插入"
+                                            onClick={() => insertStoryboardRow(rowIndex, 'before')}
+                                          ><PlusOutlined /></button>
+                                        )}
+                                        <button
+                                          type="button"
+                                          className="storyboard-row-edge-insert is-after"
+                                          title={`在第 ${rowIndex + 1} 行下方插入`}
+                                          aria-label={`在第 ${rowIndex + 1} 行下方插入`}
+                                          onClick={() => insertStoryboardRow(rowIndex, 'after')}
+                                        ><PlusOutlined /></button>
+                                        <button
+                                          type="button"
+                                          className="storyboard-row-delete-trigger"
+                                          title={`删除第 ${rowIndex + 1} 行`}
+                                          aria-label={`删除第 ${rowIndex + 1} 行`}
+                                          onClick={() => deleteStoryboardRow(rowIndex)}
+                                        ><DeleteOutlined /></button>
+                                      </>
+                                    )}
                                 </td>
                               ))}
                             </tr>
@@ -1961,6 +2092,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                     onChange={(event) => {
                       const { value, selectionStart } = event.target;
                       setPolishInput(value);
+                      if (!value.includes('@')) setPolishBriefId(undefined);
                       updatePolishMention(value, selectionStart);
                     }}
                     onKeyDown={(event) => {

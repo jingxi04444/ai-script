@@ -2,6 +2,7 @@ package com.aiscript.modules.auth.controller;
 
 import com.aiscript.common.api.R;
 import com.aiscript.modules.auth.dto.LoginDTO;
+import com.aiscript.modules.auth.dto.BindEmailDTO;
 import com.aiscript.modules.auth.dto.BindPhoneDTO;
 import com.aiscript.modules.auth.dto.RegisterDTO;
 import com.aiscript.modules.auth.dto.SendCodeDTO;
@@ -56,6 +57,11 @@ public class AuthController {
     @PostMapping("/bind-phone")
     public R<LoginVO> bindPhone(@Valid @RequestBody BindPhoneDTO dto) {
         return R.ok(authService.bindPhone(dto));
+    }
+
+    @PostMapping("/bind-email")
+    public R<LoginVO> bindEmail(@Valid @RequestBody BindEmailDTO dto) {
+        return R.ok(authService.bindEmail(dto));
     }
 
     @PostMapping("/send-code")

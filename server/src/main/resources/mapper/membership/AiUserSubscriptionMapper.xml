@@ -9,7 +9,7 @@
         SELECT
             id, tenant_id, user_id, plan_id, sku_id, status, auto_renew,
             start_time, current_period_start, current_period_end,
-            benefit_anchor_time, next_renew_time, cancel_at_period_end,
+            benefit_anchor_time, next_renew_time, grace_end_time, cancel_at_period_end,
             cancel_time, pending_plan_id, pending_sku_id,
             pending_effective_time, provider, agreement_no,
             plan_snapshot_json, source_order_no, version,

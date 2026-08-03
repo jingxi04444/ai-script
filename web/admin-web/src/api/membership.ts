@@ -42,6 +42,15 @@ export interface MembershipPlan {
   benefits: MembershipBenefit[];
 }
 
+export interface MembershipPurchaseMode {
+  value: 'once_month' | 'once_quarter' | 'once_year';
+  label: string;
+  hint: string;
+  badge?: string;
+  enabled: boolean;
+  displayOrder: number;
+}
+
 export interface MembershipPlanCreatePayload {
   code: string;
   name: string;
@@ -74,6 +83,17 @@ export interface AdminSubscription {
   createTime?: string;
 }
 
+export interface PointPackage {
+  id: string;
+  code: string;
+  name: string;
+  price: number;
+  points: number;
+  description?: string;
+  displayOrder?: number;
+  status: number;
+}
+
 export interface RefundOrder {
   id: string;
   refundNo: string;
@@ -88,8 +108,25 @@ export interface RefundOrder {
   reviewRemark?: string;
 }
 
+export interface TemplateCustomRequest {
+  id: string;
+  userId: string;
+  planId: string;
+  title: string;
+  requirements: string;
+  contact?: string;
+  status: 'pending' | 'processing' | 'completed' | 'rejected';
+  adminRemark?: string;
+  handledBy?: string;
+  handledTime?: string;
+  createdAt?: string;
+}
+
 export const membershipApi = {
   getPlans: (): Promise<MembershipPlan[]> => api.get('/membership/plans'),
+  purchaseModes: (): Promise<MembershipPurchaseMode[]> => api.get('/membership/purchase-modes'),
+  updatePurchaseModes: (items: MembershipPurchaseMode[]): Promise<MembershipPurchaseMode[]> =>
+    api.put('/membership/purchase-modes', { items }),
   createPlan: (payload: MembershipPlanCreatePayload): Promise<MembershipPlan> =>
     api.post('/membership/plans', payload),
   updatePlan: (id: string, payload: { name: string; description?: string; price: number; periodDays: number; displayOrder?: number; status: number }): Promise<MembershipPlan> =>
@@ -106,10 +143,19 @@ export const membershipApi = {
     api.get('/membership/subscriptions', { params }),
   adjustPoints: (payload: { userId: string; changePoints: number; remark?: string }) =>
     api.post('/membership/points/adjust', payload),
+  pointPackages: (): Promise<PointPackage[]> => api.get('/membership/point-packages'),
+  createPointPackage: (payload: Omit<PointPackage, 'id'>): Promise<PointPackage> =>
+    api.post('/membership/point-packages', payload),
+  updatePointPackage: (id: string, payload: Omit<PointPackage, 'id' | 'code'>): Promise<PointPackage> =>
+    api.put(`/membership/point-packages/${id}`, payload),
   refunds: (params: { page: number; pageSize: number; keyword?: string; status?: string }): Promise<PageResult<RefundOrder>> =>
     api.get('/payments/refunds', { params }),
   reviewRefund: (refundNo: string, approved: boolean, remark?: string): Promise<RefundOrder> =>
     api.post(`/payments/refunds/${encodeURIComponent(refundNo)}/review`, { approved, remark }),
   refreshRefund: (refundNo: string): Promise<RefundOrder> =>
     api.post(`/payments/refunds/${encodeURIComponent(refundNo)}/refresh`),
+  templateCustomRequests: (params: { page: number; pageSize: number; keyword?: string; status?: string }): Promise<PageResult<TemplateCustomRequest>> =>
+    api.get('/membership/template-custom-requests', { params }),
+  updateTemplateCustomRequest: (id: string, payload: { status: string; adminRemark?: string }): Promise<TemplateCustomRequest> =>
+    api.put(`/membership/template-custom-requests/${id}`, payload),
 };

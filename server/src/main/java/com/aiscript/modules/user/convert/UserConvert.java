@@ -11,9 +11,11 @@ public final class UserConvert {
         UserVO vo = new UserVO();
         vo.setId(String.valueOf(user.getId()));
         vo.setUsername(user.getUsername());
+        vo.setAccount(user.getAccount());
         vo.setEmail(user.getEmail());
         vo.setPhone(user.getPhone());
         vo.setMemberLevel(user.getMemberLevel());
+        vo.setInternalAccount(user.getInternalAccount() != null && user.getInternalAccount() == 1);
         vo.setStatus(user.getStatus() != null && user.getStatus() == 1 ? "active" : "disabled");
         vo.setCreatedAt(user.getCreateTime() == null ? null : user.getCreateTime().toString());
         return vo;

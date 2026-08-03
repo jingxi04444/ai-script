@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dropdown, message } from 'antd';
-import { CheckOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
+import { BellOutlined, CheckOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import { membershipApi } from '../../api/membership';
 import { siteApi } from '../../api/site';
+import { notificationApi } from '../../api/notification';
 import { useAuthStore } from '../../stores/authStore';
 import { applyTheme, getStoredThemeMode, type ThemeMode } from '../../utils/theme';
+import { TOKEN_KEY } from '../../utils/storage';
 import ProfileDialog from '../Modal/ProfileDialog';
 import './home-rail.css';
 
@@ -32,26 +34,34 @@ interface HomeNavItem {
 }
 
 type MembershipSummary = {
+  token: string;
   membershipName: string;
   pointBalance: number;
 };
 
 let cachedMembershipSummary: MembershipSummary | null = null;
 let membershipSummaryRequest: Promise<MembershipSummary> | null = null;
+let membershipSummaryRequestToken = '';
 
 const loadMembershipSummary = () => {
-  if (cachedMembershipSummary) return Promise.resolve(cachedMembershipSummary);
-  if (!membershipSummaryRequest) {
+  const token = localStorage.getItem(TOKEN_KEY) || '';
+  if (cachedMembershipSummary?.token === token) return Promise.resolve(cachedMembershipSummary);
+  if (!membershipSummaryRequest || membershipSummaryRequestToken !== token) {
+    membershipSummaryRequestToken = token;
     membershipSummaryRequest = Promise.all([membershipApi.current(), membershipApi.points()])
       .then(([membership, account]) => {
         cachedMembershipSummary = {
-          membershipName: membership?.planName || '免费体验版',
+          token,
+          membershipName: membership?.planName || '未开通会员',
           pointBalance: account?.availablePoints ?? 0,
         };
         return cachedMembershipSummary;
       })
       .finally(() => {
-        membershipSummaryRequest = null;
+        if (membershipSummaryRequestToken === token) {
+          membershipSummaryRequest = null;
+          membershipSummaryRequestToken = '';
+        }
       });
   }
   return membershipSummaryRequest;
@@ -76,11 +86,14 @@ const HomeRail = ({
 }: HomeRailProps) => {
   const navigate = useNavigate();
   const logout = useAuthStore((state) => state.logout);
-  const [membershipName, setMembershipName] = useState(initialMembershipName || cachedMembershipSummary?.membershipName || '');
-  const [pointBalance, setPointBalance] = useState<number | null>(initialPointBalance ?? cachedMembershipSummary?.pointBalance ?? null);
+  const currentToken = localStorage.getItem(TOKEN_KEY) || '';
+  const matchingCachedSummary = cachedMembershipSummary?.token === currentToken ? cachedMembershipSummary : null;
+  const [membershipName, setMembershipName] = useState(initialMembershipName || matchingCachedSummary?.membershipName || '');
+  const [pointBalance, setPointBalance] = useState<number | null>(initialPointBalance ?? matchingCachedSummary?.pointBalance ?? null);
   const [homeLogoUrl, setHomeLogoUrl] = useState(() => siteApi.getCachedConfig()?.homeLogoUrl || '');
   const [homeNavItems, setHomeNavItems] = useState<HomeNavItem[]>(defaultHomeNavItems);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [themeMode, setThemeMode] = useState<ThemeMode>(getStoredThemeMode);
 
   useEffect(() => {
@@ -90,20 +103,21 @@ const HomeRail = ({
   useEffect(() => {
     if (initialMembershipName !== undefined) setMembershipName(initialMembershipName);
     if (initialPointBalance !== undefined) setPointBalance(initialPointBalance);
-    if (initialMembershipName !== undefined || initialPointBalance !== undefined) {
-      if (initialMembershipName && initialPointBalance !== undefined) {
-        cachedMembershipSummary = {
-          membershipName: initialMembershipName,
-          pointBalance: initialPointBalance,
-        };
-      }
+    const hasMembershipName = Boolean(initialMembershipName);
+    const hasPointBalance = initialPointBalance !== undefined;
+    if (hasMembershipName && hasPointBalance) {
+      cachedMembershipSummary = {
+        token: localStorage.getItem(TOKEN_KEY) || '',
+        membershipName: initialMembershipName || '免费体验版',
+        pointBalance: initialPointBalance,
+      };
       return;
     }
 
     loadMembershipSummary()
       .then((summary) => {
-        setMembershipName(summary.membershipName);
-        setPointBalance(summary.pointBalance);
+        if (!hasMembershipName) setMembershipName(summary.membershipName);
+        if (!hasPointBalance) setPointBalance(summary.pointBalance);
       })
       .catch(() => {
         setMembershipName('免费体验版');
@@ -158,6 +172,25 @@ const HomeRail = ({
     };
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    const loadUnread = () => {
+      notificationApi.list({ page: 1, pageSize: 1, status: '0' })
+        .then((result) => {
+          if (active) setUnreadNotifications(result.total || 0);
+        })
+        .catch(() => {
+          if (active) setUnreadNotifications(0);
+        });
+    };
+    loadUnread();
+    window.addEventListener('notifications:changed', loadUnread);
+    return () => {
+      active = false;
+      window.removeEventListener('notifications:changed', loadUnread);
+    };
+  }, []);
+
   const handleNavClick = (key: HomeNavKey) => {
     if (key === 'create') {
       if (onCreate) {
@@ -206,6 +239,11 @@ const HomeRail = ({
       label: '我的信息',
     },
     {
+      key: 'notifications',
+      icon: <BellOutlined />,
+      label: unreadNotifications > 0 ? `消息中心（${unreadNotifications}）` : '消息中心',
+    },
+    {
       type: 'divider',
     },
     {
@@ -233,6 +271,10 @@ const HomeRail = ({
     }
     if (key === 'orders') {
       navigate('/payment/orders');
+      return;
+    }
+    if (key === 'notifications') {
+      navigate('/notifications');
       return;
     }
     if (key === 'logout') {
@@ -278,7 +320,15 @@ const HomeRail = ({
           <strong>{membershipName || '免费体验版'}</strong>
         </button>
         <button className="rail-avatar rail-profile-trigger" type="button" aria-label="打开个人信息" onClick={() => setProfileOpen(true)}>🐣</button>
-        <button className="rail-bottom-icon rail-bottom-bell" type="button" aria-label="消息" onClick={() => message.info('暂无新消息')}><span /></button>
+        <button
+          className={`rail-bottom-icon rail-bottom-bell${activeLabel === '消息中心' ? ' active' : ''}`}
+          type="button"
+          aria-label={unreadNotifications > 0 ? `${unreadNotifications} 条未读消息` : '消息中心'}
+          onClick={() => navigate('/notifications')}
+        >
+          <span />
+          {unreadNotifications > 0 ? <em>{unreadNotifications > 99 ? '99+' : unreadNotifications}</em> : null}
+        </button>
         <button className="rail-bottom-icon rail-bottom-cli" type="button" aria-label="更新日志" onClick={() => message.info('当前已是最新版本')}>CLI</button>
         <Dropdown
           menu={{ items: profileMenuItems, onClick: handleProfileMenuClick }}

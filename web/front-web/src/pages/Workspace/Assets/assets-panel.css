@@ -101,6 +101,41 @@
   overflow-y: auto;
 }
 
+.asset-library-link-row {
+  position: relative;
+}
+
+.asset-library-link-row.is-selected .asset-library-link {
+  border-color: #69d96c;
+  background: rgba(74, 157, 79, 0.15);
+}
+
+.asset-library-link-row .asset-library-link {
+  padding-right: 46px;
+}
+
+.asset-block .asset-library-delete {
+  position: absolute;
+  top: 50%;
+  right: 10px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateY(-50%);
+  border: 1px solid rgba(255, 111, 111, 0.25);
+  border-radius: 7px;
+  background: rgba(118, 34, 34, 0.18);
+  color: #ff8b8b;
+}
+
+.asset-block .asset-library-delete:hover {
+  border-color: rgba(255, 111, 111, 0.65);
+  background: rgba(118, 34, 34, 0.35);
+}
+
 .asset-block .asset-library-link {
   width: 100%;
   height: auto;

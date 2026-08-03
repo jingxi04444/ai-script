@@ -10,4 +10,5 @@ public class BriefAssetItemVO {
     private String productName;
     private String productModel;
     private String updatedAt;
+    private Boolean ownedByCurrentUser;
 }

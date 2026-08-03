@@ -32,9 +32,9 @@ export const scriptApi = {
       );
       if (params.sortBy === 'product') {
         filtered.sort((a, b) => {
-          const productA = a.name.replace(/(?:爆款复刻|脚本模板库|AI原创).*$/, '').trim();
-          const productB = b.name.replace(/(?:爆款复刻|脚本模板库|AI原创).*$/, '').trim();
-          return productA.localeCompare(productB, 'zh-CN') || b.updatedAt.localeCompare(a.updatedAt);
+          const briefA = a.briefId || '\uffff';
+          const briefB = b.briefId || '\uffff';
+          return briefA.localeCompare(briefB, 'zh-CN', { numeric: true }) || b.updatedAt.localeCompare(a.updatedAt);
         });
       }
       const start = (params.page - 1) * params.pageSize;

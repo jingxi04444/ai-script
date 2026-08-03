@@ -80,7 +80,7 @@ public class MembershipEntitlementServiceImpl implements MembershipEntitlementSe
 
     @Override
     public void clearEntitlementCache(Integer tenantId, Integer userId) {
-        if (userId == null) {
+        if (userId == null || redisTemplate == null) {
             return;
         }
         redisTemplate.delete(cacheKey(tenantId, userId));
@@ -252,19 +252,21 @@ public class MembershipEntitlementServiceImpl implements MembershipEntitlementSe
 
     private List<MembershipEntitlementRow> getCachedEntitlements(Integer tenantId, Integer userId, Long planId) {
         String key = cacheKey(tenantId, userId);
-        String cached = redisTemplate.opsForValue().get(key);
+        String cached = redisTemplate == null ? null : redisTemplate.opsForValue().get(key);
         if (StringUtils.hasText(cached)) {
             try {
                 return objectMapper.readValue(cached, ENTITLEMENT_ROWS_TYPE);
             } catch (Exception ignored) {
-                redisTemplate.delete(key);
+                if (redisTemplate != null) redisTemplate.delete(key);
             }
         }
         List<MembershipEntitlementRow> rows = planBenefitMapper.selectActiveEntitlements(planId);
-        try {
-            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(rows), ENTITLEMENT_CACHE_TTL);
-        } catch (Exception ignored) {
-            // Cache failures must not block entitlement checks.
+        if (redisTemplate != null) {
+            try {
+                redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(rows), ENTITLEMENT_CACHE_TTL);
+            } catch (Exception ignored) {
+                // Cache failures must not block entitlement checks.
+            }
         }
         return rows;
     }

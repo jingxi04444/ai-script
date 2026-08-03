@@ -6,6 +6,7 @@ import { authApi } from '../../api';
 import { useAuthStore } from '../../stores/authStore';
 import AuthLayout from './AuthLayout';
 import LegalDocumentDialog, { type LegalDocumentType } from './LegalDocumentDialog';
+import { getAuthErrorMessage } from './authError';
 import './auth.css';
 
 const RegisterPage = () => {
@@ -40,7 +41,7 @@ const RegisterPage = () => {
       setCountdown(60);
       message.success('阿里云短信验证码已发送');
     } catch (error) {
-      message.error((error as Error).message || '验证码发送失败');
+      message.error(getAuthErrorMessage(error, 'sendCode'));
     }
   };
 
@@ -48,7 +49,7 @@ const RegisterPage = () => {
     event.preventDefault();
     if (!agreed) return message.warning('请先阅读并同意用户协议和隐私政策');
     if (!/^1\d{10}$/.test(phone)) return message.warning('请输入正确手机号');
-    if (!code) return message.warning('请输入短信验证码');
+    if (!/^\d{6}$/.test(code)) return message.warning('请输入 6 位短信验证码');
     if (!/^\S+@\S+\.\S+$/.test(email)) return message.warning('请输入正确邮箱');
     if (password.length < 8) return message.warning('密码至少 8 位');
     if (password !== confirmPassword) return message.warning('两次输入的密码不一致');
@@ -56,7 +57,7 @@ const RegisterPage = () => {
       await register({ phone, code, email: email.trim().toLowerCase(), password });
       navigate(redirect, { replace: true });
     } catch (error) {
-      message.error((error as Error).message || '注册失败，请稍后重试');
+      message.error(getAuthErrorMessage(error, 'register'));
     }
   };
 

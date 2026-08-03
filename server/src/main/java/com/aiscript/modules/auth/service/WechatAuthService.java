@@ -6,7 +6,6 @@ import com.aiscript.modules.auth.entity.SysUser;
 import com.aiscript.modules.auth.mapper.SysUserMapper;
 import com.aiscript.modules.auth.vo.WechatLoginStartVO;
 import com.aiscript.modules.auth.vo.WechatLoginStatusVO;
-import com.aiscript.modules.membership.service.MembershipService;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.time.Duration;
 import java.util.Map;
@@ -23,17 +22,15 @@ public class WechatAuthService {
     private final StringRedisTemplate redisTemplate;
     private final SysUserMapper userMapper;
     private final PasswordEncoder passwordEncoder;
-    private final MembershipService membershipService;
     private final AuthService authService;
 
     public WechatAuthService(WechatOAuthClient wechatOAuthClient, StringRedisTemplate redisTemplate,
-        SysUserMapper userMapper, PasswordEncoder passwordEncoder, MembershipService membershipService,
+        SysUserMapper userMapper, PasswordEncoder passwordEncoder,
         AuthService authService) {
         this.wechatOAuthClient = wechatOAuthClient;
         this.redisTemplate = redisTemplate;
         this.userMapper = userMapper;
         this.passwordEncoder = passwordEncoder;
-        this.membershipService = membershipService;
         this.authService = authService;
     }
 
@@ -76,7 +73,6 @@ public class WechatAuthService {
             user.setMemberLevel(0);
             user.setStatus(1);
             userMapper.insert(user);
-            membershipService.ensureFreeSubscription(user.getTenantId(), user.getId());
         }
         redisTemplate.opsForValue().set(key, "complete:" + user.getId(), Duration.ofMinutes(2));
     }

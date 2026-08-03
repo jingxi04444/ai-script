@@ -77,6 +77,10 @@ export const router: RouteObject[] = [
         element: <LazyLoad><BillingPage /></LazyLoad>,
       },
       {
+        path: 'membership/custom-requests',
+        element: <LazyLoad><BillingPage /></LazyLoad>,
+      },
+      {
         path: 'payments/orders',
         element: <LazyLoad><PaymentOrdersPage /></LazyLoad>,
       },

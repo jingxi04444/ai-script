@@ -1,10 +1,30 @@
 export type ScriptType = 'viral' | 'template' | 'original' | 'product' | 'product-dimension';
-export type ScriptStatus = 'draft' | 'pending' | 'done';
+export type ScriptStatus = 'draft' | 'pending_review' | 'changes_requested' | 'revised_pending_review' | 'approved';
+
+export const scriptStatusOptions: Array<{ value: ScriptStatus; label: string }> = [
+  { value: 'draft', label: '草稿中' },
+  { value: 'pending_review', label: '待审核' },
+  { value: 'changes_requested', label: '已审需修改' },
+  { value: 'revised_pending_review', label: '已改待审核' },
+  { value: 'approved', label: '通过' },
+];
+
+export const normalizeScriptStatus = (status?: string): ScriptStatus => {
+  if (status === 'pending') return 'pending_review';
+  if (status === 'done') return 'approved';
+  return scriptStatusOptions.some((item) => item.value === status) ? status as ScriptStatus : 'draft';
+};
+
+export const getScriptStatusLabel = (status?: string) => (
+  scriptStatusOptions.find((item) => item.value === normalizeScriptStatus(status))?.label || '草稿中'
+);
 
 export interface Script {
   id: string;
   name: string;
   projectId: string;
+  briefId?: string;
+  briefName?: string;
   type: ScriptType;
   status: ScriptStatus;
   content?: string;

@@ -34,6 +34,11 @@ export const authApi = {
     return api.post('/auth/bind-phone', { phone, code });
   },
 
+  bindEmail: (email: string, password: string): Promise<AuthResult> => {
+    if (config.useMock) return mockAuthApi.bindEmail(email, password);
+    return api.post('/auth/bind-email', { email, password });
+  },
+
   sendCode: (phone: string, scene: SmsScene): Promise<void> => {
     if (config.useMock) return mockAuthApi.sendCode(phone, scene);
     return api.post('/auth/send-code', { phone, scene });

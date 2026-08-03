@@ -4,11 +4,11 @@ import { createSuccessResponse, unwrapApiResponse } from '../types/api';
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const mockScripts: Script[] = [
-  { id: 'script-1', name: '爆款复刻脚本_2026-05-30', projectId: 'project-1', type: 'viral', status: 'done', content: '熬夜累眼圈、毛孔粗大、胶原崩塌？别再拿美妆硬撑了！', createdAt: '2026-05-30', updatedAt: '2026-05-30 23:51:10' },
-  { id: 'script-2', name: '模板脚本_2026-05-30', projectId: 'project-1', type: 'template', status: 'pending', createdAt: '2026-05-30', updatedAt: '2026-05-30 22:47:37' },
-  { id: 'script-3', name: 'AI原创脚本_2026-05-30', projectId: 'project-1', type: 'original', status: 'draft', createdAt: '2026-05-30', updatedAt: '2026-05-30 22:47:37' },
-  { id: 'script-4', name: '产品维度脚本_2026-05-30', projectId: 'project-1', type: 'product', status: 'done', content: '围绕产品核心卖点拆解：开场点出场景痛点，中段展示成分/功能证据，结尾给出明确购买理由。', createdAt: '2026-05-30', updatedAt: '2026-05-30 21:35:18' },
-  { id: 'script-5', name: '产品卖点拆解脚本_2026-05-30', projectId: 'project-1', type: 'product-dimension', status: 'pending', content: '从产品维度展开：目标人群、使用场景、差异化卖点、行动引导四段式脚本。', createdAt: '2026-05-30', updatedAt: '2026-05-30 20:18:42' },
+  { id: 'script-1', name: '爆款复刻脚本_2026-05-30', projectId: 'project-1', briefId: 'b1', briefName: 'JRFH-2026', type: 'viral', status: 'approved', content: '熬夜累眼圈、毛孔粗大、胶原崩塌？别再拿美妆硬撑了！', createdAt: '2026-05-30', updatedAt: '2026-05-30 23:51:10' },
+  { id: 'script-2', name: '模板脚本_2026-05-30', projectId: 'project-1', briefId: 'b1', briefName: 'JRFH-2026', type: 'template', status: 'pending_review', createdAt: '2026-05-30', updatedAt: '2026-05-30 22:47:37' },
+  { id: 'script-3', name: 'AI原创脚本_2026-05-30', projectId: 'project-1', briefId: 'b2', briefName: 'A60MAX', type: 'original', status: 'draft', createdAt: '2026-05-30', updatedAt: '2026-05-30 22:47:37' },
+  { id: 'script-4', name: '产品维度脚本_2026-05-30', projectId: 'project-1', briefId: 'b2', briefName: 'A60MAX', type: 'product', status: 'approved', content: '围绕产品核心卖点拆解：开场点出场景痛点，中段展示成分/功能证据，结尾给出明确购买理由。', createdAt: '2026-05-30', updatedAt: '2026-05-30 21:35:18' },
+  { id: 'script-5', name: '产品卖点拆解脚本_2026-05-30', projectId: 'project-1', briefId: 'b3', briefName: '分层便当盒', type: 'product-dimension', status: 'pending_review', content: '从产品维度展开：目标人群、使用场景、差异化卖点、行动引导四段式脚本。', createdAt: '2026-05-30', updatedAt: '2026-05-30 20:18:42' },
 ];
 
 const getProjectMockScripts = (projectId: string): Script[] => {
@@ -56,8 +56,9 @@ export const mockScriptApi = {
       id: `script-${Date.now()}`,
       name: `生成脚本_${new Date().toISOString().split('T')[0]}`,
       projectId: _params.projectId,
+      briefId: _params.briefId,
       type: _params.type,
-      status: 'done' as const,
+      status: 'approved' as const,
       content: `【${_params.type === 'viral' ? '爆款复刻' : _params.type === 'template' ? '模板生成' : _params.type === 'product' || _params.type === 'product-dimension' ? '产品维度' : 'AI原创'}】开场抛出痛点，展示产品卖点，结尾引导立即行动。`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),

@@ -3,12 +3,21 @@ export interface MembershipPlanSku {
   code: string;
   name: string;
   billingMode: 'one_time' | 'auto_renew';
-  periodUnit: 'month' | 'quarter' | 'year';
+  periodUnit: 'day' | 'month' | 'quarter' | 'year';
   periodCount: number;
   price: number;
   originalPrice?: number;
   refundDays: number;
   displayOrder?: number;
+}
+
+export interface MembershipPurchaseMode {
+  value: 'once_month' | 'once_quarter' | 'once_year';
+  label: string;
+  hint: string;
+  badge?: string;
+  enabled: boolean;
+  displayOrder: number;
 }
 
 export interface MembershipBenefit {
@@ -80,6 +89,32 @@ export interface PointAccount {
   availablePoints: number;
   frozenPoints: number;
   updatedAt?: string;
+}
+
+export interface PointPackage {
+  id: string;
+  code: string;
+  name: string;
+  price: number;
+  points: number;
+  basePoints?: number;
+  pointsPer10Yuan?: number;
+  description?: string;
+  displayOrder?: number;
+  status?: number;
+}
+
+export interface TemplateCustomRequest {
+  id: string;
+  userId: string;
+  planId: string;
+  title: string;
+  requirements: string;
+  contact?: string;
+  status: 'pending' | 'processing' | 'completed' | 'rejected';
+  adminRemark?: string;
+  handledTime?: string;
+  createdAt?: string;
 }
 
 export interface DailyPointReward {

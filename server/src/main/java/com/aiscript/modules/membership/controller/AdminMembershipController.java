@@ -7,15 +7,21 @@ import com.aiscript.common.exception.BusinessException;
 import com.aiscript.common.pagination.PageQuery;
 import com.aiscript.modules.membership.dto.AdminMembershipPlanCreateDTO;
 import com.aiscript.modules.membership.dto.AdminMembershipPlanUpdateDTO;
+import com.aiscript.modules.membership.dto.AdminMembershipPurchaseModeUpdateDTO;
 import com.aiscript.modules.membership.dto.AdminMembershipSkuCreateDTO;
 import com.aiscript.modules.membership.dto.AdminMembershipSkuUpdateDTO;
 import com.aiscript.modules.membership.dto.AdminPlanBenefitCreateDTO;
 import com.aiscript.modules.membership.dto.AdminPlanBenefitUpdateDTO;
 import com.aiscript.modules.membership.dto.AdminPointAdjustDTO;
+import com.aiscript.modules.membership.dto.AdminPointPackageCreateDTO;
+import com.aiscript.modules.membership.dto.AdminPointPackageUpdateDTO;
 import com.aiscript.modules.membership.service.AdminMembershipService;
+import com.aiscript.modules.membership.service.MembershipPurchaseModeService;
 import com.aiscript.modules.membership.vo.AdminSubscriptionVO;
 import com.aiscript.modules.membership.vo.MembershipPlanVO;
+import com.aiscript.modules.membership.vo.MembershipPurchaseModeVO;
 import com.aiscript.modules.membership.vo.PointTransactionVO;
+import com.aiscript.modules.membership.vo.PointPackageVO;
 import com.aiscript.security.LoginUser;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -34,15 +40,29 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/admin/membership")
 public class AdminMembershipController {
     private final AdminMembershipService adminMembershipService;
+    private final MembershipPurchaseModeService purchaseModeService;
 
-    public AdminMembershipController(AdminMembershipService adminMembershipService) {
+    public AdminMembershipController(AdminMembershipService adminMembershipService, MembershipPurchaseModeService purchaseModeService) {
         this.adminMembershipService = adminMembershipService;
+        this.purchaseModeService = purchaseModeService;
     }
 
     @GetMapping("/plans")
     public R<List<MembershipPlanVO>> plans() {
         currentUser();
         return R.ok(adminMembershipService.plans());
+    }
+
+    @GetMapping("/purchase-modes")
+    public R<List<MembershipPurchaseModeVO>> purchaseModes() {
+        currentUser();
+        return R.ok(purchaseModeService.list());
+    }
+
+    @PutMapping("/purchase-modes")
+    public R<List<MembershipPurchaseModeVO>> updatePurchaseModes(@RequestBody AdminMembershipPurchaseModeUpdateDTO dto) {
+        currentUser();
+        return R.ok(purchaseModeService.save(dto));
     }
 
     @PostMapping("/plans")
@@ -110,6 +130,27 @@ public class AdminMembershipController {
     public R<PointTransactionVO> adjustPoints(@Valid @RequestBody AdminPointAdjustDTO dto) {
         LoginUser user = currentUser();
         return R.ok(adminMembershipService.adjustPoints(dto, user.getUserId()));
+    }
+
+    @GetMapping("/point-packages")
+    public R<List<PointPackageVO>> pointPackages() {
+        currentUser();
+        return R.ok(adminMembershipService.pointPackages());
+    }
+
+    @PostMapping("/point-packages")
+    public R<PointPackageVO> createPointPackage(@Valid @RequestBody AdminPointPackageCreateDTO dto) {
+        currentUser();
+        return R.ok(adminMembershipService.createPointPackage(dto));
+    }
+
+    @PutMapping("/point-packages/{id}")
+    public R<PointPackageVO> updatePointPackage(
+        @PathVariable Long id,
+        @Valid @RequestBody AdminPointPackageUpdateDTO dto
+    ) {
+        currentUser();
+        return R.ok(adminMembershipService.updatePointPackage(id, dto));
     }
 
     private LoginUser currentUser() {

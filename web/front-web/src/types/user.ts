@@ -24,6 +24,7 @@ export interface AuthResult {
   token: string;
   user: UserInfo;
   needsPhoneBinding?: boolean;
+  needsEmailBinding?: boolean;
 }
 
 export type SmsScene = 'login' | 'register' | 'bind';

@@ -25,6 +25,7 @@ import com.aiscript.modules.generation.vo.ExportJobVO;
 import com.aiscript.modules.generation.vo.TimelineConfigVO;
 import com.aiscript.modules.generation.vo.VideoSegmentVO;
 import com.aiscript.modules.membership.service.MembershipEntitlementService;
+import com.aiscript.modules.membership.service.MembershipTaskQuotaService;
 import com.aiscript.security.LoginUser;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -47,6 +48,7 @@ public class ProductionServiceImpl implements ProductionService {
     private final AiTimelineConfigMapper timelineConfigMapper;
     private final AiExportJobMapper exportJobMapper;
     private final MembershipEntitlementService entitlementService;
+    private final MembershipTaskQuotaService taskQuotaService;
 
     public ProductionServiceImpl(
         AiGenerationTaskMapper taskMapper,
@@ -54,7 +56,8 @@ public class ProductionServiceImpl implements ProductionService {
         AiDubbingAssetMapper dubbingAssetMapper,
         AiTimelineConfigMapper timelineConfigMapper,
         AiExportJobMapper exportJobMapper,
-        MembershipEntitlementService entitlementService
+        MembershipEntitlementService entitlementService,
+        MembershipTaskQuotaService taskQuotaService
     ) {
         this.taskMapper = taskMapper;
         this.videoSegmentMapper = videoSegmentMapper;
@@ -62,6 +65,7 @@ public class ProductionServiceImpl implements ProductionService {
         this.timelineConfigMapper = timelineConfigMapper;
         this.exportJobMapper = exportJobMapper;
         this.entitlementService = entitlementService;
+        this.taskQuotaService = taskQuotaService;
     }
 
     @Override
@@ -163,19 +167,29 @@ public class ProductionServiceImpl implements ProductionService {
     }
 
     private AiGenerationTask createTask(Integer projectId, String type, String label, String inputPayload) {
+        Integer userId = currentUserId();
+        String quotaRequestNo = taskQuotaService.reserve(
+            currentTenantId(), userId, type, projectId == null ? type : String.valueOf(projectId)
+        );
         AiGenerationTask task = new AiGenerationTask();
         task.setTenantId(currentTenantId());
         task.setProjectId(projectId);
-        task.setCreateBy(DEFAULT_USER_ID);
+        task.setCreateBy(userId);
         task.setTaskType(type);
         task.setProviderCode(type);
         task.setTaskLabel(label);
         task.setStatus("pending");
         task.setProgress(0);
         task.setInputPayload(inputPayload);
+        task.setQuotaRequestNo(quotaRequestNo);
         task.setStartTime(LocalDateTime.now());
-        taskMapper.insert(task);
-        return task;
+        try {
+            taskMapper.insert(task);
+            return task;
+        } catch (RuntimeException exception) {
+            taskQuotaService.release(quotaRequestNo);
+            throw exception;
+        }
     }
 
     private VideoSegmentVO toVideoSegmentVO(AiVideoSegment item) {

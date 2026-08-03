@@ -7,6 +7,7 @@ import lombok.Data;
 public class PaymentOrderDTO {
     private String planId;
     private String skuId;
+    private String pointPackageId;
     private String payMethod;
     private BigDecimal amount;
     private String idempotencyKey;

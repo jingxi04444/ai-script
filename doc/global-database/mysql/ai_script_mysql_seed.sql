@@ -32,7 +32,8 @@ INSERT INTO sys_config_item (
 ) VALUES
   (NULL, 'group', 'page-visual', 'visual', '页面视觉', NULL, 'string', '用户端页面图标、图片和文案配置', 10, 1),
   (NULL, 'group', 'script-generator', 'content', '脚本生成器', NULL, 'string', '脚本生成器案例与提示词配置', 20, 1),
-  (NULL, 'group', 'legal', 'legal', '协议管理', NULL, 'string', '用户协议和隐私政策发布配置', 30, 1)
+  (NULL, 'group', 'legal', 'legal', '协议管理', NULL, 'string', '用户协议和隐私政策发布配置', 30, 1),
+  (NULL, 'group', 'membership', 'membership', '会员中心', NULL, 'string', '会员购买方式和展示配置', 40, 1)
 ON DUPLICATE KEY UPDATE
   config_name = VALUES(config_name),
   description = VALUES(description),
@@ -42,6 +43,7 @@ ON DUPLICATE KEY UPDATE
 SET @visual_root_id = (SELECT id FROM sys_config_item WHERE config_key = 'visual' LIMIT 1);
 SET @content_root_id = (SELECT id FROM sys_config_item WHERE config_key = 'content' LIMIT 1);
 SET @legal_root_id = (SELECT id FROM sys_config_item WHERE config_key = 'legal' LIMIT 1);
+SET @membership_root_id = (SELECT id FROM sys_config_item WHERE config_key = 'membership' LIMIT 1);
 
 INSERT INTO sys_config_item (
   parent_id, node_type, group_code, config_key, config_name, config_value, value_type, description, sort_order, status
@@ -53,6 +55,20 @@ INSERT INTO sys_config_item (
 ON DUPLICATE KEY UPDATE
   parent_id = VALUES(parent_id),
   config_name = VALUES(config_name),
+  description = VALUES(description),
+  sort_order = VALUES(sort_order),
+  status = VALUES(status);
+
+INSERT INTO sys_config_item (
+  parent_id, node_type, group_code, config_key, config_name, config_value, value_type, description, sort_order, status
+) VALUES (
+  @membership_root_id, 'item', 'membership', 'membership.purchase-modes', '会员购买方式 Tab 配置',
+  '[{"value":"once_month","label":"单月购买","hint":"购买一个月","badge":"","enabled":true,"displayOrder":10},{"value":"once_quarter","label":"季卡","hint":"购买一个季度","badge":"","enabled":true,"displayOrder":20},{"value":"once_year","label":"年卡","hint":"购买一年","badge":"限时优惠","enabled":true,"displayOrder":30}]',
+  'json', '控制会员中心购买方式 Tab 的文案、角标、显隐和顺序', 10, 1
+) ON DUPLICATE KEY UPDATE
+  parent_id = VALUES(parent_id),
+  config_name = VALUES(config_name),
+  value_type = VALUES(value_type),
   description = VALUES(description),
   sort_order = VALUES(sort_order),
   status = VALUES(status);
@@ -148,14 +164,15 @@ INSERT INTO sys_tenant (
   plan_code = VALUES(plan_code);
 
 INSERT INTO sys_user (
-  id, tenant_id, username, account, password_hash, user_type, member_level, status
+  id, tenant_id, username, account, password_hash, email, user_type, member_level, status
 ) VALUES
-  (1, 1, '超级管理员', 'admin@ai-script.local', '$2a$10$replace_with_bcrypt_hash', 'admin', 0, 1),
-  (2, 1, '演示用户', 'demo@ai-script.local', '$2a$10$replace_with_bcrypt_hash', 'front', 1, 1),
-  (3, 1, '协作编导', 'collab@ai-script.local', '$2a$10$replace_with_bcrypt_hash', 'front', 1, 1)
+  (1, 1, '超级管理员', 'admin@ai-script.local', '$2a$10$replace_with_bcrypt_hash', 'admin@ai-script.local', 'admin', 0, 1),
+  (2, 1, '演示用户', 'demo@ai-script.local', '$2a$10$replace_with_bcrypt_hash', 'demo@ai-script.local', 'front', 1, 1),
+  (3, 1, '协作编导', 'collab@ai-script.local', '$2a$10$replace_with_bcrypt_hash', 'collab@ai-script.local', 'front', 1, 1)
 ON DUPLICATE KEY UPDATE
   tenant_id = VALUES(tenant_id),
   username = VALUES(username),
+  email = COALESCE(NULLIF(email, ''), VALUES(email)),
   user_type = VALUES(user_type),
   member_level = VALUES(member_level),
   status = VALUES(status);
@@ -313,7 +330,7 @@ INSERT INTO ai_membership_plan (
   period_days, price, benefits_json,
   description, display_order, status
 ) VALUES
-  ('free', '免费体验版', 0, 1, 30, 0.00, NULL, '免费体验基础能力，脚本次数由权益配置控制', 10, 1),
+  ('free', '免费体验版', 0, 1, 7, 0.00, NULL, '7天免费体验基础能力，脚本次数由权益配置控制', 10, 1),
   ('light', '轻量版', 10, 0, 30, 79.00, NULL, '适合个人与轻量内容创作', 20, 1),
   ('pro', '专业版', 20, 0, 30, 239.00, NULL, '适合稳定批量内容生产', 30, 1),
   ('ultimate', '至尊版', 30, 0, 30, 649.00, NULL, '适合团队协作与高频生产', 40, 1)
@@ -321,6 +338,8 @@ ON DUPLICATE KEY UPDATE
   plan_name = VALUES(plan_name),
   plan_level = VALUES(plan_level),
   is_free = VALUES(is_free),
+  period_days = VALUES(period_days),
+  price = VALUES(price),
   description = VALUES(description),
   display_order = VALUES(display_order),
   status = VALUES(status);
@@ -336,20 +355,17 @@ SELECT p.id, sku.sku_code, sku.sku_name, sku.billing_mode,
 FROM ai_membership_plan p
 JOIN (
   SELECT 'free' plan_code, 'free_default' sku_code, '免费体验版' sku_name,
-         'one_time' billing_mode, 'month' period_unit, 1 period_count,
+         'one_time' billing_mode, 'day' period_unit, 7 period_count,
          0.00 price, 0.00 original_price, 0 refund_days, 10 display_order
-  UNION ALL SELECT 'light', 'light_once_month', '轻量版单月', 'one_time', 'month', 1, 79.00, 79.00, 3, 20
-  UNION ALL SELECT 'light', 'light_auto_month', '轻量版连续包月', 'auto_renew', 'month', 1, 59.00, 79.00, 3, 21
-  UNION ALL SELECT 'light', 'light_auto_quarter', '轻量版连续包季', 'auto_renew', 'quarter', 1, 135.00, 237.00, 3, 22
-  UNION ALL SELECT 'light', 'light_auto_year', '轻量版连续包年', 'auto_renew', 'year', 1, 499.00, 948.00, 3, 23
-  UNION ALL SELECT 'pro', 'pro_once_month', '专业版单月', 'one_time', 'month', 1, 239.00, 239.00, 7, 30
-  UNION ALL SELECT 'pro', 'pro_auto_month', '专业版连续包月', 'auto_renew', 'month', 1, 199.00, 239.00, 7, 31
-  UNION ALL SELECT 'pro', 'pro_auto_quarter', '专业版连续包季', 'auto_renew', 'quarter', 1, 499.00, 717.00, 7, 32
-  UNION ALL SELECT 'pro', 'pro_auto_year', '专业版连续包年', 'auto_renew', 'year', 1, 1499.00, 2868.00, 7, 33
-  UNION ALL SELECT 'ultimate', 'ultimate_once_month', '至尊版单月', 'one_time', 'month', 1, 649.00, 649.00, 15, 40
-  UNION ALL SELECT 'ultimate', 'ultimate_auto_month', '至尊版连续包月', 'auto_renew', 'month', 1, 499.00, 649.00, 15, 41
-  UNION ALL SELECT 'ultimate', 'ultimate_auto_quarter', '至尊版连续包季', 'auto_renew', 'quarter', 1, 1469.00, 1947.00, 15, 42
-  UNION ALL SELECT 'ultimate', 'ultimate_auto_year', '至尊版连续包年', 'auto_renew', 'year', 1, 3999.00, 7788.00, 15, 43
+  UNION ALL SELECT 'light', 'light_month', '轻量版月卡', 'one_time', 'month', 1, 59.00, 79.00, 3, 20
+  UNION ALL SELECT 'light', 'light_quarter', '轻量版季卡', 'one_time', 'quarter', 1, 135.00, 237.00, 3, 21
+  UNION ALL SELECT 'light', 'light_year', '轻量版年卡', 'one_time', 'year', 1, 499.00, 948.00, 3, 22
+  UNION ALL SELECT 'pro', 'pro_month', '专业版月卡', 'one_time', 'month', 1, 199.00, 239.00, 7, 30
+  UNION ALL SELECT 'pro', 'pro_quarter', '专业版季卡', 'one_time', 'quarter', 1, 499.00, 717.00, 7, 31
+  UNION ALL SELECT 'pro', 'pro_year', '专业版年卡', 'one_time', 'year', 1, 1499.00, 2868.00, 7, 32
+  UNION ALL SELECT 'ultimate', 'ultimate_month', '至尊版月卡', 'one_time', 'month', 1, 499.00, 649.00, 15, 40
+  UNION ALL SELECT 'ultimate', 'ultimate_quarter', '至尊版季卡', 'one_time', 'quarter', 1, 1469.00, 1947.00, 15, 41
+  UNION ALL SELECT 'ultimate', 'ultimate_year', '至尊版年卡', 'one_time', 'year', 1, 3999.00, 7788.00, 15, 42
 ) sku ON sku.plan_code = p.plan_code
 ON DUPLICATE KEY UPDATE
   plan_id = VALUES(plan_id),
@@ -401,6 +417,21 @@ ON DUPLICATE KEY UPDATE
   enabled = VALUES(enabled),
   description = VALUES(description),
   display_order = VALUES(display_order);
+
+INSERT INTO ai_point_package (
+  package_code, package_name, price, points, description, display_order, status
+) VALUES
+  ('points_500', '基础积分包', 10.00, 500, '适合少量补充积分', 10, 1),
+  ('points_2500', '进阶积分包', 50.00, 2500, '适合日常内容创作', 20, 1),
+  ('points_5000', '专业积分包', 100.00, 5000, '适合稳定批量生产', 30, 1),
+  ('points_15000', '团队积分包', 300.00, 15000, '适合团队集中采购', 40, 1)
+ON DUPLICATE KEY UPDATE
+  package_name = VALUES(package_name),
+  price = VALUES(price),
+  points = VALUES(points),
+  description = VALUES(description),
+  display_order = VALUES(display_order),
+  status = VALUES(status);
 
 INSERT INTO ai_membership_plan_benefit (
   plan_id, benefit_id, benefit_value, enabled

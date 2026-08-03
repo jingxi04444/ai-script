@@ -24,6 +24,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -32,6 +33,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 
 @Service
+@Slf4j
 public class PaymentRefundServiceImpl implements PaymentRefundService {
     private final AiRefundOrderMapper refundMapper;
     private final AiPaymentOrderMapper paymentOrderMapper;
@@ -169,10 +171,15 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
         if (!"processing".equals(refund.getStatus()) && !"failed".equals(refund.getStatus())) {
             throw new BusinessException(ResultCode.CONFLICT, "当前退款状态不允许刷新");
         }
+        boolean retryFailedRefund = "failed".equals(refund.getStatus());
         refund.setStatus("processing");
         refund.setFailureReason(null);
         refundMapper.updateById(refund);
-        executeRefund(refund);
+        if (retryFailedRefund) {
+            executeRefund(refund);
+        } else {
+            queryRefund(refund);
+        }
         return toVO(requireRefund(refundNo), paymentOrderMapper.selectById(refund.getPaymentOrderId()));
     }
 
@@ -218,23 +225,10 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
             return;
         }
         try {
-            PayRefundRequest request = new PayRefundRequest();
-            request.setOrderNo(order.getOrderNo());
-            request.setProviderTradeNo(order.getProviderTradeNo());
-            request.setRefundNo(refund.getRefundNo());
-            request.setRefundAmount(refund.getRefundAmount());
-            request.setTotalAmount(order.getPaidAmount() == null ? order.getAmount() : order.getPaidAmount());
-            request.setReason(refund.getRefundReason());
+            PayRefundRequest request = buildRefundRequest(order, refund);
             PayClient client = payClientRouter.route(order.getProvider(), order.getPayMethod());
             PayRefundResponse response = client.refund(request);
-            refund.setProviderRefundNo(response.getProviderRefundNo());
-            refund.setProviderStatus(response.getStatus());
-            if (response.isSuccess()) {
-                completeRefund(order, refund, response.getStatus(), response.getProviderRefundNo());
-            } else {
-                refund.setStatus("processing");
-                refundMapper.updateById(refund);
-            }
+            applyRefundResponse(order, refund, response);
         } catch (Exception exception) {
             fail(refund, exception.getMessage());
             if (exception instanceof RuntimeException runtimeException) {
@@ -242,6 +236,52 @@ public class PaymentRefundServiceImpl implements PaymentRefundService {
             }
             throw new BusinessException("退款渠道调用失败");
         }
+    }
+
+    private void queryRefund(AiRefundOrder refund) {
+        AiPaymentOrder order = paymentOrderMapper.selectById(refund.getPaymentOrderId());
+        if (order == null) {
+            fail(refund, "原支付订单不存在");
+            return;
+        }
+        try {
+            PayClient client = payClientRouter.route(order.getProvider(), order.getPayMethod());
+            PayRefundResponse response = client.queryRefund(buildRefundRequest(order, refund));
+            applyRefundResponse(order, refund, response);
+        } catch (Exception exception) {
+            log.warn("退款结果查询失败，保持处理中状态, refundNo={}, orderId={}",
+                refund.getRefundNo(), refund.getPaymentOrderId(), exception);
+            refund.setStatus("processing");
+            refund.setFailureReason("退款结果暂未确认，请稍后重新查询");
+            refundMapper.updateById(refund);
+        }
+    }
+
+    private PayRefundRequest buildRefundRequest(AiPaymentOrder order, AiRefundOrder refund) {
+        PayRefundRequest request = new PayRefundRequest();
+        request.setOrderNo(order.getOrderNo());
+        request.setProviderTradeNo(order.getProviderTradeNo());
+        request.setRefundNo(refund.getRefundNo());
+        request.setRefundAmount(refund.getRefundAmount());
+        request.setTotalAmount(order.getPaidAmount() == null ? order.getAmount() : order.getPaidAmount());
+        request.setReason(refund.getRefundReason());
+        return request;
+    }
+
+    private void applyRefundResponse(
+        AiPaymentOrder order,
+        AiRefundOrder refund,
+        PayRefundResponse response
+    ) {
+        refund.setProviderRefundNo(response.getProviderRefundNo());
+        refund.setProviderStatus(response.getStatus());
+        refund.setFailureReason(null);
+        if (response.isSuccess()) {
+            completeRefund(order, refund, response.getStatus(), response.getProviderRefundNo());
+            return;
+        }
+        refund.setStatus("processing");
+        refundMapper.updateById(refund);
     }
 
     private void completeRefund(

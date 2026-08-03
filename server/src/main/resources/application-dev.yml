@@ -37,7 +37,7 @@ payment:
   enabled: ${PAYMENT_ENABLED:false}
   dev-mode: ${PAYMENT_DEV_MODE:true}
   base-notify-url: ${PAYMENT_BASE_NOTIFY_URL:http://localhost:8080}
-  front-return-url: ${PAYMENT_FRONT_RETURN_URL:http://localhost:5173/payment/result}
+  front-return-url: ${PAYMENT_FRONT_RETURN_URL:http://localhost:4000/payment/result}
 
 # 应用自定义安全配置（开发环境使用本地占位密钥）
 app:

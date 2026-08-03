@@ -57,7 +57,7 @@ public class WechatAutoDeductPayClient implements PayClient {
             PayContractSignResponse r = new PayContractSignResponse();
             r.setProvider(provider()); r.setOutContractCode(request.getOutContractCode());
             r.setPreEntrustwebId(str(resp.get("pre_entrustweb_id"))); r.setRedirectUrl(str(resp.get("redirect_url")));
-            r.setMiniProgramUsername(str(resp.get("miniprogram_username"))); r.setRawPayload(objectMapper.writeValueAsString(resp));
+            r.setMiniProgramUsername(str(resp.get("miniprogram_username"))); r.setMiniProgramPath(str(resp.get("miniprogram_path"))); r.setRawPayload(objectMapper.writeValueAsString(resp));
             return r;
         } catch (Exception ex) { throw new BusinessException("微信周期扣费预签约失败: " + ex.getMessage()); }
     }
@@ -95,13 +95,13 @@ public class WechatAutoDeductPayClient implements PayClient {
         try {
             RequestParam p = new RequestParam.Builder().serialNumber(header(message, "Wechatpay-Serial")).nonce(header(message, "Wechatpay-Nonce")).signature(header(message, "Wechatpay-Signature")).timestamp(header(message, "Wechatpay-Timestamp")).body(message.getRawBody()).build();
             Map<String, Object> data = new NotificationParser(config()).parse(p, Map.class);
-            message.setProvider(provider()); message.setVerified(true); message.setParams(flat(data));
+            message.setProvider(provider()); message.setVerified(true); message.setParams(flat(data)); fillNotifyId(message);
             if (!payment) {
                 message.getParams().put("change_type", any(data, "change_type"));
                 message.getParams().put("contract_id", any(data, "contract_id"));
                 message.getParams().put("out_contract_code", any(data, "out_contract_code"));
             }
-            if (payment) { message.setOrderNo(any(data, "out_trade_no")); message.setProviderTradeNo(any(data, "transaction_id")); message.setTradeStatus(any(data, "trade_state", "trade_status")); message.setPaid("SUCCESS".equalsIgnoreCase(message.getTradeStatus())); Object amount = data.get("amount"); if (amount instanceof Map<?, ?> m) message.setTotalAmount(yuan(asInt(m.get("payer_total") == null ? m.get("total") : m.get("payer_total")))); }
+            if (payment) { message.setOrderNo(any(data, "out_trade_no")); message.setProviderTradeNo(any(data, "transaction_id")); message.setTradeStatus(any(data, "trade_state", "trade_status")); message.setPaid("SUCCESS".equalsIgnoreCase(message.getTradeStatus())); Object amount = data.get("amount"); if (amount instanceof Map<?, ?> m) message.setTotalAmount(yuan(asInt(m.get("total")))); }
             return message;
         } catch (Exception ex) { message.setVerified(false); message.setErrorMsg(ex.getMessage()); throw new BusinessException("微信周期扣费回调验签失败"); }
     }
@@ -123,4 +123,8 @@ public class WechatAutoDeductPayClient implements PayClient {
     private Integer asInt(Object v) { return v == null ? null : Integer.valueOf(String.valueOf(v)); }
     private String any(Map<String, Object> map, String... keys) { for (String key : keys) if (map.get(key) != null) return str(map.get(key)); return null; }
     private Map<String, String> flat(Map<String, Object> data) { Map<String, String> r = new LinkedHashMap<>(); data.forEach((k, v) -> r.put(k, str(v))); return r; }
+    private void fillNotifyId(PayNotifyMessage message) {
+        try { message.setNotifyId(objectMapper.readTree(message.getRawBody()).path("id").asText(null)); }
+        catch (Exception ignored) { }
+    }
 }

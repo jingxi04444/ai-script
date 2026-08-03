@@ -7,6 +7,7 @@ public class ScriptVO {
     private String id;
     private String name;
     private String projectId;
+    private String briefId;
     private String type;
     private String status;
     private String content;

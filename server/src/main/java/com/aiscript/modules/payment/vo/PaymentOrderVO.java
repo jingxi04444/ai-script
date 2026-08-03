@@ -34,6 +34,10 @@ public class PaymentOrderVO {
     private String lastQueryTime;
     private String fulfillTime;
     private String fulfillError;
+    private Integer refundDays;
+    private String refundDeadline;
+    private Boolean refundable;
+    private String refundUnavailableReason;
     private PaymentParamsVO payParams;
     private String contractCode;
     private String preEntrustwebId;

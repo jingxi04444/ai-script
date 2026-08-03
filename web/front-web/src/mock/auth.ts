@@ -31,12 +31,32 @@ export const mockAuthApi = {
 
   smsLogin: async (phone: string, _code: string) => {
     await delay(500);
-    return { token: 'mock-token-123456', user: { ...mockUser, phone }, needsPhoneBinding: false };
+    return {
+      token: 'mock-token-123456',
+      user: { ...mockUser, phone, email: undefined },
+      needsPhoneBinding: false,
+      needsEmailBinding: true,
+    };
   },
 
   bindPhone: async (phone: string, _code: string) => {
     await delay(500);
-    return { token: 'mock-token-123456', user: { ...mockUser, phone }, needsPhoneBinding: false };
+    return {
+      token: 'mock-token-123456',
+      user: { ...mockUser, phone, email: undefined },
+      needsPhoneBinding: false,
+      needsEmailBinding: true,
+    };
+  },
+
+  bindEmail: async (email: string, _password: string) => {
+    await delay(500);
+    return {
+      token: 'mock-token-123456',
+      user: { ...mockUser, email },
+      needsPhoneBinding: false,
+      needsEmailBinding: false,
+    };
   },
 
   logout: async () => {
@@ -70,6 +90,7 @@ export const mockAuthApi = {
         token: 'mock-wechat-token-123456',
         user: { ...mockUser, phone: undefined, username: '微信用户' },
         needsPhoneBinding: true,
+        needsEmailBinding: false,
       },
     };
   },

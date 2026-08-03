@@ -69,7 +69,7 @@ public class PayNotifyController {
         return msg;
     }
 
-    @PostMapping(value = "/alipay/scan", produces = MediaType.TEXT_PLAIN_VALUE)
+    @PostMapping(value = {"/alipay/page", "/alipay/scan"}, produces = MediaType.TEXT_PLAIN_VALUE)
     public String alipay(@RequestParam Map<String, String> params) {
         try {
             PayNotifyMessage msg = new PayNotifyMessage(); msg.setProvider("alipay"); msg.setParams(new HashMap<>(params));

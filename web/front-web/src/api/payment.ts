@@ -11,7 +11,7 @@ import type {
 } from '../types/payment';
 
 export const paymentApi = {
-  pointOrder: (params: { amount: number; payMethod: string; idempotencyKey: string }): Promise<PaymentOrder> =>
+  pointOrder: (params: { pointPackageId: string; payMethod: string; idempotencyKey: string }): Promise<PaymentOrder> =>
     api.post('/payments/point-orders', params),
 
   memberOrder: (params: MemberOrderParams): Promise<PaymentOrder> =>

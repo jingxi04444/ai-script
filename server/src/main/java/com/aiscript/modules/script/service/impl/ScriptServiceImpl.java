@@ -47,6 +47,7 @@ import java.util.HashMap;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -57,6 +58,9 @@ import org.springframework.security.core.context.SecurityContextHolder;
 @Service
 public class ScriptServiceImpl implements ScriptService {
     private static final Integer DEFAULT_TENANT_ID = 1;
+    private static final Set<String> SCRIPT_STATUSES = Set.of(
+        "draft", "pending_review", "changes_requested", "revised_pending_review", "approved"
+    );
 
     private final AiStoryboardScriptMapper scriptMapper;
     private final AiScriptTemplateMapper templateMapper;
@@ -173,11 +177,14 @@ public class ScriptServiceImpl implements ScriptService {
             monthlyRequestNo, "script_generate", null
         );
         hydrateProductFrame(dto);
+        AiBrief generationBrief = findBrief(dto);
         AiGenerationTask task = createGenerationTask(dto);
-        String generatedContent = generateContent(dto, task);
+        String generatedContent = generateContent(dto, task, generationBrief);
         AiStoryboardScript script = new AiStoryboardScript();
         script.setTenantId(TenantContext.getTenantId() == null ? DEFAULT_TENANT_ID : TenantContext.getTenantId());
         script.setProjectId(Integer.valueOf(dto.getProjectId()));
+        script.setBriefId(generationBrief.getId());
+        script.setBriefSnapshot(buildProductInfo(generationBrief));
         script.setScriptName(defaultScriptName(dto));
         script.setScriptType(StringUtils.hasText(dto.getType()) ? dto.getType() : "original");
         script.setStatus("draft");
@@ -231,19 +238,32 @@ public class ScriptServiceImpl implements ScriptService {
         }
 
         String instruction = dto.getInstruction().trim();
-        AiBrief brief = null;
+        String briefContext = "";
         if (StringUtils.hasText(dto.getBriefId())) {
             try {
-                brief = briefMapper.selectOne(new LambdaQueryWrapper<AiBrief>()
-                    .eq(AiBrief::getId, Integer.valueOf(dto.getBriefId()))
-                    .eq(AiBrief::getTenantId, currentTenantId())
-                    .last("LIMIT 1"));
-            } catch (NumberFormatException ignored) {
-                brief = null;
+                AiBrief recalledBrief = briefMapper.selectAccessibleProjectBrief(
+                    Integer.valueOf(dto.getBriefId()),
+                    script.getProjectId(),
+                    currentUserId(),
+                    currentTenantId()
+                );
+                if (recalledBrief == null) {
+                    throw new BusinessException("本次调用的产品 Brief 不属于当前项目或已被删除");
+                }
+                briefContext = "【本次明确调用的产品 Brief】\n" + buildProductInfo(recalledBrief);
+            } catch (NumberFormatException exception) {
+                throw new BusinessException("本次调用的产品 Brief 参数错误");
+            }
+        } else if (StringUtils.hasText(script.getBriefSnapshot())) {
+            briefContext = "【脚本生成时的产品 Brief 快照】\n" + script.getBriefSnapshot();
+        } else if (script.getBriefId() != null) {
+            AiBrief originalBrief = briefMapper.selectById(script.getBriefId());
+            if (originalBrief != null) {
+                briefContext = "【原脚本关联的产品 Brief】\n" + buildProductInfo(originalBrief);
             }
         }
         String referenceContext = List.of(
-            brief == null ? "" : "【本次重新调用的产品 Brief】\n" + buildProductInfo(brief),
+            briefContext,
             StringUtils.hasText(dto.getProductFrameFileName())
                 ? "【本次引用的画面文件】\n文件名：" + dto.getProductFrameFileName()
                 : "",
@@ -260,15 +280,31 @@ public class ScriptServiceImpl implements ScriptService {
             : instruction);
         variables.put("content", sourceContent);
         variables.put("referenceContext", referenceContext);
+        boolean preserveStructure = !requestsStructureChange(instruction);
+        String structureRequirement = preserveStructure
+            ? "\n\n【不可变结构约束】用户本次没有要求修改脚本配置。必须逐字保留原表头、列顺序、镜头行数、镜号和每一行时长；不得改变脚本格式、总时长或增删/合并/拆分镜头。只修改用户明确指出的内容字段。"
+            : "\n\n【结构修改范围】用户明确要求调整时长、镜头或格式时，只修改要求明确涉及的结构项，其余表头、列顺序和配置保持不变。";
         PromptRenderService.RenderedPrompt renderedPrompt = promptRenderService.render(
             "script_polish",
-            "你是专业商业短视频脚本编辑。请严格依据用户的修改要求，以及本次重新提供的产品 Brief、画面 OCR 文字或表格解析文字润色原脚本。用户要求重新选择卖点时，只能从 Brief 和已解析文字中的真实信息选择，不能推测图片里未提供的视觉内容。保持原脚本的输出格式和表格列结构，只输出修改后的完整脚本，不要解释修改过程，不要添加 Markdown 代码块。",
+            "你是专业商业短视频脚本编辑。请严格依据用户的修改要求，以及本次重新提供的产品 Brief、画面 OCR 文字或表格解析文字润色原脚本。用户要求重新选择卖点时，只能从 Brief 和已解析文字中的真实信息选择，不能推测图片里未提供的视觉内容。保持原脚本的输出格式和表格列结构，只输出修改后的完整脚本，不要解释修改过程，不要添加 Markdown 代码块。" + structureRequirement,
             "请按修改要求重写原脚本。\n\n【修改要求】\n{{instruction}}\n\n{{referenceContext}}\n\n【原脚本】\n{{content}}",
             variables
         );
-        String polishedContent = llmClient.chat(renderedPrompt.getSystemPrompt(), renderedPrompt.getUserPrompt());
+        String polishedContent = llmClient.chat(
+            renderedPrompt.getSystemPrompt() + structureRequirement,
+            renderedPrompt.getUserPrompt()
+        );
         if (!StringUtils.hasText(polishedContent) || "{}".equals(polishedContent.trim())) {
             throw new BusinessException("AI 未返回有效的润色内容，请稍后重试");
+        }
+        if (preserveStructure && !hasSameScriptStructure(sourceContent, polishedContent)) {
+            String repairSystemPrompt = "你是脚本格式校正器。保持候选稿已经完成的文案修改，但必须恢复原稿的表头、列顺序、镜头行数、镜号和每一行时长。禁止改变脚本格式、总时长，禁止增删、合并或拆分镜头。只输出校正后的完整脚本。";
+            String repairUserPrompt = "【原稿（结构与时长唯一标准）】\n" + sourceContent
+                + "\n\n【需要校正的候选稿】\n" + polishedContent;
+            polishedContent = llmClient.chat(repairSystemPrompt, repairUserPrompt);
+            if (!StringUtils.hasText(polishedContent) || !hasSameScriptStructure(sourceContent, polishedContent)) {
+                throw new BusinessException("AI 返回内容改变了原脚本的时长、镜头数或表格格式，系统已阻止覆盖，请重试");
+            }
         }
 
         String summaryInstruction = instruction.length() > 60 ? instruction.substring(0, 60) + "…" : instruction;
@@ -286,11 +322,83 @@ public class ScriptServiceImpl implements ScriptService {
             script.setScriptType(dto.getType());
         }
         if (StringUtils.hasText(dto.getStatus())) {
-            script.setStatus(dto.getStatus());
+            String status = normalizeScriptStatus(dto.getStatus());
+            if (!SCRIPT_STATUSES.contains(status)) {
+                throw new BusinessException("脚本状态无效");
+            }
+            script.setStatus(status);
         }
-        script.setContentText(dto.getContent());
+        if (dto.getContent() != null) {
+            script.setContentText(dto.getContent());
+        }
         scriptMapper.updateById(script);
         return ScriptConvert.toScriptVO(script);
+    }
+
+    private String normalizeScriptStatus(String status) {
+        if ("pending".equals(status)) return "pending_review";
+        if ("done".equals(status)) return "approved";
+        return status;
+    }
+
+    private boolean requestsStructureChange(String instruction) {
+        return instruction.matches("(?s).*?(?:时长|总时长|秒|分钟|镜头数|镜头数量|新增镜头|增加镜头|删除镜头|删掉镜头|合并镜头|拆分镜头|(?:改|调整|变成|控制为|控制在).{0,12}个?镜头|脚本格式|表格格式|表头|列顺序|改成.{0,8}(?:口播稿|拍摄稿|分镜表)).*");
+    }
+
+    private boolean hasSameScriptStructure(String source, String candidate) {
+        MarkdownTableShape sourceShape = markdownTableShape(source);
+        if (sourceShape == null) return true;
+        MarkdownTableShape candidateShape = markdownTableShape(candidate);
+        return candidateShape != null
+            && sourceShape.headers().equals(candidateShape.headers())
+            && sourceShape.rowCount() == candidateShape.rowCount()
+            && sourceShape.shotNumbers().equals(candidateShape.shotNumbers())
+            && sourceShape.durations().equals(candidateShape.durations());
+    }
+
+    private MarkdownTableShape markdownTableShape(String content) {
+        List<List<String>> rows = Arrays.stream(content.split("\\R"))
+            .map(String::trim)
+            .filter(line -> line.startsWith("|") && line.endsWith("|"))
+            .map(this::markdownCells)
+            .filter(cells -> !cells.isEmpty())
+            .toList();
+        if (rows.size() < 3) return null;
+        List<String> headers = rows.get(0).stream().map(this::normalizeStructureCell).toList();
+        int durationIndex = -1;
+        int shotIndex = -1;
+        for (int index = 0; index < headers.size(); index++) {
+            if (durationIndex < 0 && headers.get(index).contains("时长")) durationIndex = index;
+            if (shotIndex < 0 && headers.get(index).matches("镜号|镜头编号|镜头")) shotIndex = index;
+        }
+        List<List<String>> dataRows = rows.subList(2, rows.size());
+        List<String> durations = durationIndex < 0 ? List.of() : columnValues(dataRows, durationIndex);
+        List<String> shotNumbers = shotIndex < 0 ? List.of() : columnValues(dataRows, shotIndex);
+        return new MarkdownTableShape(headers, dataRows.size(), shotNumbers, durations);
+    }
+
+    private List<String> markdownCells(String line) {
+        return Arrays.stream(line.substring(1, line.length() - 1).split("\\|", -1))
+            .map(String::trim)
+            .toList();
+    }
+
+    private List<String> columnValues(List<List<String>> rows, int index) {
+        return rows.stream()
+            .map(row -> index < row.size() ? normalizeStructureCell(row.get(index)) : "")
+            .toList();
+    }
+
+    private String normalizeStructureCell(String value) {
+        return value.replaceAll("\\s+", "").replaceAll("(?i)(秒|s)$", "");
+    }
+
+    private record MarkdownTableShape(
+        List<String> headers,
+        int rowCount,
+        List<String> shotNumbers,
+        List<String> durations
+    ) {
     }
 
     @Override
@@ -446,9 +554,8 @@ public class ScriptServiceImpl implements ScriptService {
         return task;
     }
 
-    private String generateContent(GenerateScriptDTO dto, AiGenerationTask task) {
+    private String generateContent(GenerateScriptDTO dto, AiGenerationTask task, AiBrief brief) {
         String userPrompt = StringUtils.hasText(dto.getPrompt()) ? dto.getPrompt() : "";
-        AiBrief brief = findBrief(dto);
         String productInfo = buildProductInfo(brief);
         String templateText = templateInstruction(dto.getTemplateId());
         ScriptFormatInfo formatInfo = scriptFormatInfo(dto);

@@ -15,6 +15,7 @@ public class AiUserPayContract {
     private Long tenantId;
     private Long userId;
     private Long subscriptionId;
+    private String initialOrderNo;
     private String channel;
     private String planId;
     private String contractCode;

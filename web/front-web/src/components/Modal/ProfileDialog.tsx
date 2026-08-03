@@ -50,7 +50,7 @@ const ProfileDialog = ({ onClose }: ProfileDialogProps) => {
               <div><strong>{profile.username || '未设置用户名'}</strong><span>ID：{profile.id}</span></div>
             </div>
             <dl>
-              <div><dt>当前套餐</dt><dd>{membership?.planName || '免费体验版'}</dd></div>
+              <div><dt>当前套餐</dt><dd>{membership?.planName || '未开通会员'}</dd></div>
               <div><dt>积分余额</dt><dd>{Math.floor(points?.availablePoints ?? 0)} 积分</dd></div>
               <div><dt>手机号码</dt><dd>{profile.phone || '未绑定'}</dd></div>
               <div><dt>电子邮箱</dt><dd>{profile.email || '未绑定'}</dd></div>

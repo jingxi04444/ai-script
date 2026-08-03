@@ -15,9 +15,10 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.stereotype.Component;
@@ -25,6 +26,15 @@ import org.springframework.util.StringUtils;
 
 @Component
 public class MinioStorageClient implements StorageClient {
+    /**
+     * OSS V1 signatures require an IMF-fixdate value with a two-digit day of month.
+     * DateTimeFormatter.RFC_1123_DATE_TIME emits a one-digit day for the 1st-9th,
+     * which OSS rejects as "authentication requires a valid Date".
+     */
+    private static final DateTimeFormatter OSS_HTTP_DATE_FORMATTER = DateTimeFormatter
+        .ofPattern("EEE, dd MMM yyyy HH:mm:ss 'GMT'", Locale.US)
+        .withZone(ZoneOffset.UTC);
+
     private final StorageProperties storageProperties;
     private final AliyunOssProperties aliyunOssProperties;
     private final HttpClient httpClient;
@@ -128,7 +138,7 @@ public class MinioStorageClient implements StorageClient {
     private void putAliyunOssObject(String objectKey, InputStream inputStream, long size, String contentType) {
         String endpoint = trimEnd(normalizeEndpoint(effectiveEndpoint()), "/");
         String resourcePath = "/" + effectiveBucket() + "/" + objectKey;
-        String date = DateTimeFormatter.RFC_1123_DATE_TIME.format(ZonedDateTime.now(ZoneOffset.UTC));
+        String date = formatOssHttpDate(Instant.now());
         String effectiveContentType = StringUtils.hasText(contentType) ? contentType : "application/octet-stream";
         String authorization = aliyunOssAuthorization("PUT", resourcePath, date, effectiveContentType);
         HttpRequest request = HttpRequest.newBuilder()
@@ -153,6 +163,10 @@ public class MinioStorageClient implements StorageClient {
             }
             throw new BusinessException("阿里云OSS上传失败：" + ex.getMessage());
         }
+    }
+
+    static String formatOssHttpDate(Instant instant) {
+        return OSS_HTTP_DATE_FORMATTER.format(instant);
     }
 
     private String aliyunOssAuthorization(String method, String resourcePath, String date, String contentType) {

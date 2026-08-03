@@ -220,8 +220,11 @@ export const mockBriefApi = {
     return unwrapApiResponse(createSuccessResponse(undefined));
   },
 
-  delete: async (_id: string) => {
+  delete: async (id: string) => {
     await delay(300);
+    const index = mockBriefs.findIndex((brief) => brief.id === id);
+    if (index >= 0) mockBriefs.splice(index, 1);
+    mockProjectBriefRefs.forEach((references) => references.delete(id));
   },
 
   import: async (_file: File) => {

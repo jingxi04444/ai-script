@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
-import { Home, Image, Plus, RefreshCcw, Save, Sparkles, Trash2, UploadCloud, Video } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { Camera, Home, Image, Plus, RefreshCcw, Save, Sparkles, Trash2, UploadCloud, Video } from 'lucide-react';
 import { systemApi, type SiteConfig } from '../../api/system';
 import { uploadApi } from '../../api/upload';
-import { PageHeader, SectionCard } from '../../components/common/AdminUI';
+import { Modal, PageHeader, SectionCard } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
 import HomeBannersPage from './HomeBannersPage';
 import './page-visual-page.css';
@@ -21,6 +21,9 @@ interface VisualItem {
   imageKey?: string;
   videoUrl?: string;
   videoKey?: string;
+  coverUrl?: string;
+  coverKey?: string;
+  frameTime?: number;
   linkUrl?: string;
 }
 
@@ -95,6 +98,10 @@ const PageVisualPage = () => {
   const [saving, setSaving] = useState(false);
   const [uploadingKey, setUploadingKey] = useState('');
   const [dirty, setDirty] = useState(false);
+  const [framePicker, setFramePicker] = useState<{ itemKey: string; videoUrl: string; time: number; duration: number } | null>(null);
+  const [frameReady, setFrameReady] = useState(false);
+  const [frameSaving, setFrameSaving] = useState(false);
+  const frameVideoRef = useRef<HTMLVideoElement>(null);
 
   const load = async () => {
     setLoading(true);
@@ -206,34 +213,34 @@ const PageVisualPage = () => {
     onChange: (patch: Partial<VisualItem>) => Promise<void> | void,
   ) => {
     const uploadKey = `work-${item.key}`;
-    const mediaUrl = item.videoUrl || item.imageUrl;
+    const mediaUrl = item.videoUrl;
     return (
+      <div className="visual-upload-field">
+      <span>作品视频</span>
       <div className="visual-image-control visual-work-media-control">
         <div className="visual-image-preview visual-media-preview">
           {item.videoUrl
-            ? <video src={item.videoUrl} muted playsInline />
-            : item.imageUrl
-              ? <img src={item.imageUrl} alt="" />
-              : <Video size={18} />}
+            ? <video src={item.videoUrl} poster={item.coverUrl} muted playsInline />
+            : <Video size={18} />}
         </div>
         <label className="toolbar-btn upload-btn">
-          <UploadCloud size={15} />{uploadingKey === uploadKey ? '上传中' : '上传图片/视频'}
+          <UploadCloud size={15} />{uploadingKey === uploadKey ? '上传中' : '上传视频'}
           <input
             type="file"
             hidden
-            accept="image/*,video/*"
-            onChange={(event) => void uploadMedia(uploadKey, event.target.files?.[0], (url, objectKey, contentType) => onChange(
-              contentType.startsWith('video/')
-                ? { videoUrl: url, videoKey: objectKey, imageUrl: '', imageKey: '' }
-                : { imageUrl: url, imageKey: objectKey, videoUrl: '', videoKey: '' },
-            ))}
+            accept="video/*"
+            onChange={(event) => void uploadMedia(uploadKey, event.target.files?.[0], async (url, objectKey) => {
+              await onChange({ videoUrl: url, videoKey: objectKey, frameTime: undefined });
+              setFrameReady(false);
+              setFramePicker({ itemKey: item.key, videoUrl: url, time: 0, duration: 0 });
+            })}
           />
         </label>
         {mediaUrl && <button className="table-btn danger icon-only" type="button" title="移除媒体并自动保存" onClick={async () => {
           setUploadingKey(uploadKey);
           try {
-            await onChange({ imageUrl: '', imageKey: '', videoUrl: '', videoKey: '' });
-            notify('作品媒体已移除并自动保存');
+            await onChange({ videoUrl: '', videoKey: '', frameTime: undefined });
+            notify('作品视频已移除并自动保存');
           } catch {
             setDirty(true);
             notify('媒体移除后自动保存失败');
@@ -242,7 +249,75 @@ const PageVisualPage = () => {
           }
         }}><Trash2 size={14} /></button>}
       </div>
+      </div>
     );
+  };
+
+  const renderWorkCoverControl = (
+    item: VisualItem,
+    onChange: (patch: Partial<VisualItem>) => Promise<void> | void,
+  ) => {
+    const uploadKey = `work-cover-${item.key}`;
+    return (
+      <div className="visual-upload-field">
+      <span>作品封面</span>
+      <div className="visual-image-control visual-work-media-control visual-work-cover-control">
+        <div className="visual-image-preview visual-media-preview">
+          {item.coverUrl || item.imageUrl
+            ? <img src={item.coverUrl || item.imageUrl} alt="作品封面" />
+            : item.videoUrl
+              ? <video src={item.videoUrl} muted playsInline preload="metadata" onLoadedMetadata={(event) => {
+                const duration = Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0;
+                event.currentTarget.currentTime = Math.min(item.frameTime ?? Math.min(1, duration / 4), duration || 0);
+              }} />
+              : <Image size={18} />}
+        </div>
+        <div className="visual-cover-actions">
+          <label className="toolbar-btn upload-btn">
+            <UploadCloud size={15} />{uploadingKey === uploadKey ? '上传中' : '本地封面'}
+            <input
+              type="file"
+              hidden
+              accept="image/*"
+              onChange={(event) => void uploadMedia(uploadKey, event.target.files?.[0], (url, objectKey) => onChange({ coverUrl: url, coverKey: objectKey }))}
+            />
+          </label>
+          {item.videoUrl ? <button className="toolbar-btn" type="button" onClick={() => {
+            setFrameReady(false);
+            setFramePicker({ itemKey: item.key, videoUrl: item.videoUrl || '', time: item.frameTime || 0, duration: 0 });
+          }}><Camera size={15} />选择视频帧</button> : null}
+        </div>
+        {item.coverUrl && <button className="table-btn danger icon-only" type="button" title="移除视频封面" onClick={() => void onChange({ coverUrl: '', coverKey: '' })}><Trash2 size={14} /></button>}
+      </div>
+      <small className="visual-cover-hint">{item.coverUrl ? '当前使用本地封面' : item.videoUrl ? `当前直接显示视频第 ${Number(item.frameTime ?? 1).toFixed(1)} 秒画面` : '请上传封面或先上传视频'}</small>
+      </div>
+    );
+  };
+
+  const saveSelectedVideoFrame = async () => {
+    const video = frameVideoRef.current;
+    if (!framePicker || !video || !video.videoWidth || !video.videoHeight) {
+      notify('视频画面尚未准备完成');
+      return;
+    }
+    setFrameSaving(true);
+    try {
+      const frameTime = Number(video.currentTime.toFixed(3));
+      const nextHomeVisual = {
+        ...homeVisual,
+        works: homeVisual.works.map((item) => item.key === framePicker.itemKey
+          ? { ...item, frameTime }
+          : item),
+      };
+      setHomeVisual(nextHomeVisual);
+      await persistVisualConfig(config, nextHomeVisual, scriptVisual);
+      setFramePicker(null);
+      notify('已保存该视频画面作为封面');
+    } catch (error) {
+      notify(error instanceof Error ? error.message : '视频封面时间保存失败');
+    } finally {
+      setFrameSaving(false);
+    }
   };
 
   return (
@@ -341,6 +416,16 @@ const PageVisualPage = () => {
             <div className="visual-list">
               {homeVisual.works.map((item, index) => (
                 <article className="visual-row visual-row-work" key={item.key}>
+                  {renderWorkCoverControl(item, async (patch) => {
+                    const nextHomeVisual = {
+                      ...homeVisual,
+                      works: homeVisual.works.map((currentItem, itemIndex) => itemIndex === index
+                        ? { ...currentItem, ...patch }
+                        : currentItem),
+                    };
+                    setHomeVisual(nextHomeVisual);
+                    await persistVisualConfig(config, nextHomeVisual, scriptVisual);
+                  })}
                   {renderWorkMediaControl(item, async (patch) => {
                     const nextHomeVisual = {
                       ...homeVisual,
@@ -410,6 +495,55 @@ const PageVisualPage = () => {
           </SectionCard>
         </>
       )}
+
+      <Modal
+        open={Boolean(framePicker)}
+        title="选择视频画面作为封面"
+        description="拖动时间轴选择任意画面。系统只保存视频时间点，不会另外生成或上传封面图片；如果另有本地封面，仍优先显示本地封面。"
+        size="lg"
+        closeOnBackdrop={false}
+        onClose={() => setFramePicker(null)}
+        footer={<>
+          <button className="modal-btn" type="button" onClick={() => setFramePicker(null)}>取消</button>
+          <button className="modal-btn primary" type="button" disabled={!frameReady || frameSaving} onClick={() => void saveSelectedVideoFrame()}>
+            <Camera size={16} />{frameSaving ? '保存中' : '使用当前画面'}
+          </button>
+        </>}
+      >
+        {framePicker ? <div className="video-frame-picker">
+          <video
+            ref={frameVideoRef}
+            src={framePicker.videoUrl}
+            muted
+            playsInline
+            preload="auto"
+            onLoadedMetadata={(event) => {
+              const duration = Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0;
+              const initialTime = Math.min(duration || 0, framePicker.time > 0 ? framePicker.time : Math.min(1, duration / 4));
+              event.currentTarget.currentTime = initialTime;
+              setFramePicker((current) => current ? { ...current, duration, time: initialTime } : current);
+            }}
+            onSeeked={() => setFrameReady(true)}
+            onError={() => notify('视频加载失败，暂时无法选择画面')}
+          />
+          <div className="video-frame-timeline">
+            <input
+              type="range"
+              min="0"
+              max={Math.max(framePicker.duration, 0.1)}
+              step="0.1"
+              value={Math.min(framePicker.time, Math.max(framePicker.duration, 0.1))}
+              onChange={(event) => {
+                const nextTime = Number(event.target.value);
+                setFrameReady(false);
+                if (frameVideoRef.current) frameVideoRef.current.currentTime = nextTime;
+                setFramePicker((current) => current ? { ...current, time: nextTime } : current);
+              }}
+            />
+            <strong>{framePicker.time.toFixed(1)} 秒 / {framePicker.duration.toFixed(1)} 秒</strong>
+          </div>
+        </div> : null}
+      </Modal>
     </div>
   );
 };

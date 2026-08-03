@@ -20,5 +20,6 @@ public class SysUser extends TenantBaseEntity {
     private String avatarUrl;
     private String userType;
     private Integer memberLevel;
+    private Integer internalAccount;
     private Integer status;
 }

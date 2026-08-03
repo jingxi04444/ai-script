@@ -1,6 +1,6 @@
 import axios from 'axios';
 import type { AxiosError } from 'axios';
-import { message } from 'antd';
+import { message, Modal } from 'antd';
 import { config } from '../config';
 import { isApiResponse } from '../types/api';
 import { TOKEN_KEY } from '../utils/storage';
@@ -15,6 +15,8 @@ const api = axios.create({
 
 let lastErrorMessage = '';
 let lastErrorTime = 0;
+let lastPermissionMessage = '';
+let lastPermissionTime = 0;
 
 const showErrorMessage = (content: string) => {
   const now = Date.now();
@@ -22,6 +24,25 @@ const showErrorMessage = (content: string) => {
   lastErrorMessage = content;
   lastErrorTime = now;
   message.error(content);
+};
+
+const showPermissionReason = (content: string) => {
+  const now = Date.now();
+  if (content === lastPermissionMessage && now - lastPermissionTime < 1500) return;
+  lastPermissionMessage = content;
+  lastPermissionTime = now;
+  Modal.confirm({
+    title: '当前套餐暂未开通此权益',
+    content: content || '当前会员套餐不支持该功能，请查看会员权益说明后选择合适的套餐。',
+    okText: '查看会员套餐',
+    cancelText: '知道了',
+    centered: true,
+    onOk: () => {
+      if (!window.location.pathname.startsWith('/membership')) {
+        window.location.href = '/membership';
+      }
+    },
+  });
 };
 
 const redirectToLogin = () => {
@@ -49,6 +70,20 @@ const getHttpErrorMessage = (error: AxiosError) => {
   return '请求失败，请稍后重试';
 };
 
+const isInteractiveAuthRequest = (url?: string) => {
+  const path = String(url || '').replace(/\?.*$/, '');
+  return [
+    '/auth/login',
+    '/auth/register',
+    '/auth/sms-login',
+    '/auth/bind-phone',
+    '/auth/bind-email',
+    '/auth/send-code',
+    '/auth/wechat/start',
+    '/auth/wechat/status',
+  ].some((suffix) => path.endsWith(suffix));
+};
+
 api.interceptors.request.use(
   (apiConfig) => {
     const token = localStorage.getItem(TOKEN_KEY);
@@ -72,16 +107,24 @@ api.interceptors.response.use(
       if (body.code === 0 || body.code === 200) return body.data;
       if (body.code === 40100) {
         redirectToLogin();
+      } else if (body.code === 40300) {
+        showPermissionReason(body.message);
       }
       return Promise.reject(body);
     }
     return body;
   }) as Parameters<typeof api.interceptors.response.use>[0],
   (error: AxiosError) => {
-    if (error.response?.status === 401) {
+    const handledByAuthPage = isInteractiveAuthRequest(error.config?.url);
+    if (error.response?.status === 401 && !handledByAuthPage) {
       redirectToLogin();
-    } else {
-      showErrorMessage(getHttpErrorMessage(error));
+    } else if (!handledByAuthPage) {
+      const errorMessage = getHttpErrorMessage(error);
+      if (error.response?.status === 403) {
+        showPermissionReason(errorMessage);
+      } else {
+        showErrorMessage(errorMessage);
+      }
     }
     return Promise.reject(error.response?.data || error);
   }

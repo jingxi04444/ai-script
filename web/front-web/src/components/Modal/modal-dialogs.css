@@ -2092,6 +2092,18 @@
   color: #8be581 !important;
 }
 
+.brief-studio-actions > .brief-delete-action {
+  border-color: rgba(255, 105, 105, 0.34) !important;
+  background: rgba(126, 39, 39, 0.14) !important;
+  color: #ff9a9a !important;
+}
+
+.brief-studio-actions > .brief-delete-action:hover {
+  border-color: rgba(255, 105, 105, 0.72) !important;
+  background: rgba(126, 39, 39, 0.3) !important;
+  color: #ffc0c0 !important;
+}
+
 .brief-studio-body {
   min-height: 0;
   display: grid;
@@ -2924,6 +2936,40 @@
   border-color: rgba(104, 219, 100, 0.7);
   background: rgba(75, 170, 83, 0.18);
   color: #91ef89;
+}
+
+.brief-folder-batch-delete,
+.brief-batch-share-actions .danger,
+.brief-folder-delete {
+  border-color: rgba(255, 91, 91, 0.42);
+  color: #ff8c8c;
+}
+
+.brief-folder-batch-delete.active,
+.brief-batch-share-actions .danger {
+  border-color: rgba(255, 91, 91, 0.72);
+  background: rgba(154, 45, 45, 0.2);
+  color: #ffaaaa;
+}
+
+.brief-folder-delete {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 91, 91, 0.38);
+  border-radius: 8px;
+  background: rgba(111, 34, 34, 0.16);
+  cursor: pointer;
+}
+
+.brief-folder-delete:hover {
+  border-color: #ff6c6c;
+  background: rgba(154, 45, 45, 0.28);
 }
 
 .brief-batch-share-actions {

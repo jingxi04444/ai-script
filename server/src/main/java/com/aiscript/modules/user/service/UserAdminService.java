@@ -2,6 +2,8 @@ package com.aiscript.modules.user.service;
 
 import com.aiscript.common.api.PageResult;
 import com.aiscript.modules.user.dto.UserQueryDTO;
+import com.aiscript.modules.user.dto.InternalMembershipAdjustDTO;
+import com.aiscript.modules.user.dto.InternalUserCreateDTO;
 import com.aiscript.modules.user.vo.UserVO;
 
 public interface UserAdminService {
@@ -10,6 +12,10 @@ public interface UserAdminService {
     UserVO getById(Integer id);
 
     UserVO update(Integer id, UserVO payload);
+
+    UserVO createInternalAccount(InternalUserCreateDTO dto, Integer operatorId, Integer tenantId);
+
+    UserVO adjustInternalMembership(Integer id, InternalMembershipAdjustDTO dto, Integer operatorId);
 
     void enable(Integer id);
 

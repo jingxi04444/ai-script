@@ -1596,6 +1596,41 @@
   font-weight: 850;
 }
 
+.script-output-meta .script-status-select {
+  width: 126px;
+  height: 30px;
+}
+
+.script-output-meta .script-status-select .ant-select-selector {
+  height: 30px !important;
+  padding: 0 11px !important;
+  border: 1px solid rgba(116, 255, 120, 0.28) !important;
+  border-radius: 999px !important;
+  background: rgba(116, 255, 120, 0.08) !important;
+  box-shadow: none !important;
+}
+
+.script-output-meta .script-status-select .ant-select-selection-item {
+  color: #dffbdd !important;
+  font-size: 12px !important;
+  font-weight: 850 !important;
+  line-height: 28px !important;
+}
+
+.script-output-meta .script-status-select .ant-select-arrow {
+  color: #89ef6e;
+}
+
+.script-output-meta .script-status-select.is-changes_requested .ant-select-selector {
+  border-color: rgba(255, 166, 41, 0.4) !important;
+  background: rgba(255, 166, 41, 0.1) !important;
+}
+
+.script-output-meta .script-status-select.is-approved .ant-select-selector {
+  border-color: rgba(72, 232, 115, 0.46) !important;
+  background: rgba(43, 183, 94, 0.14) !important;
+}
+
 .script-output-head button {
   width: 36px;
   height: 36px;
@@ -2438,6 +2473,92 @@
   .storyboard-column-note
 ) .storyboard-cell-editor {
   min-height: 88px;
+}
+
+.polish-preview-scroll.is-manual-editing .script-storyboard-table td:first-child {
+  position: relative;
+  overflow: visible;
+}
+
+.storyboard-row-edge-insert {
+  position: absolute;
+  z-index: 5;
+  left: -11px;
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(116, 255, 120, 0.58);
+  border-radius: 50%;
+  background: #202823;
+  color: #89ef6e;
+  font-size: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.32);
+  opacity: 0;
+  transform: scale(0.78);
+  transition: opacity 120ms ease, transform 120ms ease, background 120ms ease;
+}
+
+.storyboard-row-delete-trigger {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  left: -11px;
+  width: 22px;
+  height: 22px;
+  min-height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid rgba(255, 112, 112, 0.46);
+  border-radius: 50%;
+  background: #2a2223;
+  color: #ff9a9a;
+  font-size: 10px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.32);
+  opacity: 0;
+  transform: translateY(-50%) scale(0.78);
+  transition: opacity 120ms ease, transform 120ms ease, background 120ms ease;
+}
+
+.storyboard-row-edge-insert.is-before {
+  top: -11px;
+}
+
+.storyboard-row-edge-insert.is-after {
+  bottom: -11px;
+}
+
+.script-storyboard-table tbody tr:hover .storyboard-row-edge-insert,
+.script-storyboard-table tbody tr:hover .storyboard-row-delete-trigger,
+.storyboard-row-edge-insert:hover,
+.storyboard-row-edge-insert:focus-visible,
+.storyboard-row-delete-trigger:hover,
+.storyboard-row-delete-trigger:focus-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.script-storyboard-table tbody tr:hover .storyboard-row-delete-trigger,
+.storyboard-row-delete-trigger:hover,
+.storyboard-row-delete-trigger:focus-visible {
+  transform: translateY(-50%) scale(1);
+}
+
+.storyboard-row-edge-insert:hover,
+.storyboard-row-edge-insert:focus-visible {
+  border-color: #89ef6e;
+  outline: none;
+  background: #2d4633;
+}
+
+.storyboard-row-delete-trigger:hover,
+.storyboard-row-delete-trigger:focus-visible {
+  border-color: #ff9a9a;
+  outline: none;
+  background: #4a292c;
 }
 
 .script-output-side-grid {

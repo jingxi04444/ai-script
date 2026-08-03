@@ -7,6 +7,8 @@ public class ScriptListVO {
     private String id;
     private String name;
     private String projectId;
+    private String briefId;
+    private String briefName;
     private String type;
     private String status;
     private String createdAt;

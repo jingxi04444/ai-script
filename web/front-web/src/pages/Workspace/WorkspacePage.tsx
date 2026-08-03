@@ -147,6 +147,7 @@ const WorkspacePage = () => {
     nextParams.set('step', 'script-generator');
     nextParams.delete('scriptMode');
     nextParams.delete('editScriptId');
+    nextParams.delete('returnStep');
     if (projectId) nextParams.set('projectId', projectId);
     setSearchParams(nextParams, { replace: true });
     setActiveStep('script-generator');
@@ -242,6 +243,7 @@ const WorkspacePage = () => {
           nextParams.set('step', 'script-generator');
           nextParams.set('scriptMode', mode);
           nextParams.set('editScriptId', scriptId);
+          nextParams.set('returnStep', 'storyboard');
           if (projectId) nextParams.set('projectId', projectId);
           setSearchParams(nextParams, { replace: true });
           setActiveStep('script-generator');

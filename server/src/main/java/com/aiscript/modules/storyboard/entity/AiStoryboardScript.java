@@ -11,6 +11,8 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 public class AiStoryboardScript extends TenantBaseEntity {
     private Integer projectId;
+    private Integer briefId;
+    private String briefSnapshot;
     private String scriptName;
     private String scriptType;
     private String status;

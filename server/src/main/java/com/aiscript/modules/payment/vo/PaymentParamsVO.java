@@ -12,5 +12,6 @@ public class PaymentParamsVO {
     private String subject;
     private String payUrl;
     private String qrCode;
+    private String formHtml;
     private String rawPayload;
 }

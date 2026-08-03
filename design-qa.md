@@ -42,8 +42,6 @@ No actionable P0, P1, or P2 differences remain.
 
 final result: passed
 
----
-
 # Single membership card preview and card editor QA
 
 - Source visual truth: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-00355f20-79cb-485e-9acf-da9e8c6b58e1.png`
@@ -86,6 +84,205 @@ No actionable P0, P1, or P2 differences remain.
 - P3: on short browser windows the modal body scrolls to expose the full tall card; a future compact-preview density can reduce scrolling without changing the user-card proportions.
 
 final result: passed
+
+---
+
+# Membership catalog whitespace and summary layout QA
+
+- Source visual truth: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-6e9e18e3-8f78-4d6f-8f15-0d90d440df8b.png`
+- Implementation screenshot: unavailable; the isolated in-app browser redirected `/membership` to `/login?redirect=%2Fmembership` because it had no authenticated user session.
+- Intended browser/CSS viewport: `2048 x 1186`
+- Source pixels: `3324 x 1916`
+- Implementation pixels: unavailable
+- Density normalization: not applicable because an authenticated implementation capture could not be produced.
+- State: desktop dark theme, free plan current, quarter purchase mode, four membership plans, Alipay checkout.
+
+## Findings
+
+- The source clearly shows a P1 layout defect: the catalog and cards are forced to the remaining viewport height while the benefits list is capped at `260px`, producing a large blank region above each bottom CTA.
+- The implementation removes the fixed viewport grid, card `height: 100%`, catalog `height: 100%`, and the benefits-list `max-height`/inner scroll. All configured benefits now flow naturally, and each card height follows the tallest plan content.
+- The source top summary duplicates order and renewal actions and spreads related information across a wide empty band. The implementation keeps those destinations in the top navigation and reorganizes the summary into three compact surfaces: plan guidance, current membership/status, and daily reward.
+- Typography, color tokens, icons, and app-specific copy continue to use the existing membership page design system. No image assets were added or replaced.
+- Responsive CSS was updated so the summary becomes one column below `1080px`, its two status panels stack below `980px`, and the current-plan detail becomes one column on mobile.
+
+## Comparison history
+
+1. Code inspection identified the conflicting `height: 100%`, `flex: 1`, `max-height: 260px`, and `overflow-y: auto` rules. These were removed so page scrolling owns long benefit content.
+2. Frontend production build passed after the layout changes.
+3. A browser-rendered post-fix comparison could not be completed because the available browser session was unauthenticated; Chrome was unavailable to the automation session.
+
+## Required fidelity surfaces
+
+- Fonts and typography: unchanged existing membership typography; the new benefit count uses the existing muted small-text scale.
+- Spacing and layout rhythm: fixed-height stretching and internal benefit scrolling removed; summary uses a responsive card grid.
+- Colors and visual tokens: existing `--theme-accent`, `--line`, `--membership-card-bg`, and muted text tokens reused.
+- Image quality and asset fidelity: no raster imagery is present in this screen; existing Ant Design icons are retained.
+- Copy and content: navigation labels were shortened to `会员套餐`、`订单记录`、`自动续费`; current membership status and benefit count are explicit.
+
+## Remaining blocker
+
+- Capture the authenticated `/membership` page at `2048 x 1186`, compare it with the source in one combined image, and check browser console errors before changing this result to passed.
+
+final result: blocked
+
+---
+
+# Notifications full-width content QA
+
+- Source visual truth: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-ab93361a-ac84-4c2e-be2d-1bde4781e7a8.png`
+- Implementation screenshot: `/Users/jingxi/Desktop/projectmoneny/ai-script/notifications-layout-after.png`
+- Full-view comparison: `/Users/jingxi/Desktop/projectmoneny/ai-script/notifications-layout-comparison.png`
+- Browser/CSS viewport: `2048 x 1190`
+- Source pixels: `3432 x 1952`
+- Implementation pixels: `2048 x 1190`
+- Density normalization: both full views were scaled to `1024px` width and placed side by side; browser chrome in the source was treated as non-app content.
+- State: authenticated dark-theme `/notifications`, all-message filter, one read membership-expiry notification.
+
+## Findings
+
+No actionable P0, P1, or P2 differences remain for the requested width correction.
+
+- Fonts and typography: existing hierarchy, weights, wrapping, and muted text treatment remain unchanged and legible.
+- Spacing and layout rhythm: the prior `1080px` cap on the header and panel caused the large side gutters. Both regions now use the full content width, with responsive outer padding capped at `48px`. At the verified viewport, the panel is `1840px` wide inside a `1936px` main region.
+- Colors and visual tokens: the established neutral dark surfaces and green accent are unchanged.
+- Image quality and asset fidelity: existing logo and Ant Design icons remain sharp; no image assets were introduced or replaced.
+- Copy and content: message title, status, body, timestamp, actions, and filter labels are unchanged.
+
+## Comparison history
+
+1. Initial source evidence showed a P1 major-region width mismatch: a `1080px` centered header and panel left large unused gutters on a wide desktop viewport.
+2. Removed both width caps and reduced the outer horizontal padding ceiling from `72px` to `48px`.
+3. Post-fix browser evidence measures the header and panel at `1840px`; the message card measures `1798px`, confirming that all three tracks expand together.
+
+## Browser verification
+
+- Authenticated email/password login succeeded and the backend notification rendered.
+- Primary interactions tested: switch to unread messages, verify the empty state, then switch back to all messages and restore the notification list.
+- Console checked: no notification-page runtime error; one unrelated pre-existing Ant Design `destroyOnClose` deprecation warning remains.
+- Frontend production build passed.
+
+## Focused comparison
+
+A separate crop was unnecessary: the defect was the full content region's horizontal constraint, and the combined full-view evidence plus measured bounding boxes directly verifies the correction.
+
+final result: passed
+
+---
+
+# Notifications neutral-background QA
+
+- Source visual truth: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-b568624a-11f4-4d43-9292-bf995b1228a9.png`
+- Implementation screenshot: `/Users/jingxi/Desktop/projectmoneny/ai-script/artifacts/notifications-neutral-background-1393x745.png`
+- Source pixels: `2786 x 1490`; source CSS viewport inferred as `1393 x 745` at `2x` density.
+- Implementation pixels/CSS viewport: `1393 x 745` at `1x` density.
+- State: authenticated dark-theme notification page with the membership-expiry message marked read.
+
+## Comparison and findings
+
+- [P1] The message panel inherited the global navy `--panel` token and remained visually inconsistent with the black-gray user experience. The page now owns neutral background tokens: page `#111314`, panel `#17191a`, card `#202324`, and read card `#181b1c`.
+- [P2] Read and unread messages did not have a sufficiently clear surface-state difference. Read cards now use a neutral charcoal surface and soft border; unread cards use a stronger green tint and accent border.
+- Light mode receives matching page-local neutral-light tokens instead of retaining dark literals.
+
+## Required fidelity surfaces
+
+- Fonts and typography: unchanged and free of clipping or unexpected wrapping.
+- Spacing and layout rhythm: unchanged; the background correction does not alter geometry.
+- Colors and visual tokens: navy surfaces are removed from the notification page, while the existing green semantic accent is preserved.
+- Image quality and asset fidelity: existing logo and Ant Design icons are unchanged.
+- Copy and content: message title, status, body, and time remain unchanged.
+
+## Verification
+
+- Computed colors were checked in the authenticated browser at `1393 x 745`.
+- Browser console contains no errors.
+- Frontend production build passed and `git diff --check` passed.
+
+final result: passed
+
+---
+
+# Notifications first-viewport layout QA
+
+- Source visual truth: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-d9b83007-f2de-4748-8749-edf2329ec817.png`
+- Implementation screenshot: `/Users/jingxi/Desktop/projectmoneny/ai-script/artifacts/notifications-fixed-1744x1052.png`
+- Source pixels: `3488 x 2104`; source CSS viewport inferred as `1744 x 1052` at `2x` density.
+- Implementation pixels/CSS viewport: `1744 x 1052` at `1x` density.
+- Density normalization: compared at the same `1744 x 1052` CSS viewport; source browser chrome was excluded from layout measurements.
+- State: authenticated user, dark theme, `/notifications`, one existing membership-expiry platform message.
+
+## Full-view comparison evidence
+
+- Before: the fixed-height left rail remained in normal document flow and consumed the entire first viewport. The message page started at `y = 1052`, so the user saw only the navigation rail and black background.
+- After: the rail is fixed at `x = 0, y = 0`, while `.notifications-page` starts at `x = 112, y = 0`. The heading, filters, notification card, read action, and refresh action are all visible above the fold.
+
+## Focused region comparison evidence
+
+- A separate crop was unnecessary because the defect affected the whole content region. Browser DOM measurements confirmed the repaired main-region origin and the full-view screenshot clearly shows the previously missing content.
+
+## Findings and comparison history
+
+- [P0] Message content was entirely below the first viewport.
+  - Location: `NotificationsPage` shell / `.notifications-shell > .home-rail`.
+  - Evidence: pre-fix `.notifications-page` measured `y = 720` in a `720px` viewport; at the source viewport it likewise began after the rail's `100vh` height.
+  - Fix: make the notifications route's rail fixed with `inset: 0 auto 0 0` and reserve its width through the existing `112px` main margin.
+  - Post-fix evidence: `.notifications-page` measures `x = 112, y = 0, width = 1632, height = 1052` at the matched viewport.
+
+## Required fidelity surfaces
+
+- Fonts and typography: existing project typography, weights, and hierarchy render correctly; no clipping or unexpected wrapping is visible.
+- Spacing and layout rhythm: header, actions, filters, and message panel are aligned within the existing `1080px` content width; the rail no longer inserts a full-viewport vertical gap.
+- Colors and visual tokens: existing dark surfaces, muted copy, borders, and green status accents are preserved.
+- Image quality and asset fidelity: existing configured logo and Ant Design icons render sharply; no replacement assets were introduced.
+- Copy and content: the heading, explanatory copy, filters, status, timestamp, and backend-provided message content are visible.
+
+## Verification
+
+- Authenticated email-password login succeeded.
+- Notification API data rendered successfully.
+- The `1744 x 1052` viewport was checked with DOM geometry and a browser screenshot.
+- No notification-page runtime error was logged; remaining console output is an unrelated pre-existing Ant Design deprecation warning.
+- Frontend production build passed.
+
+final result: passed
+
+---
+
+# Notification blank-screen and membership overlap QA
+
+- Source visual truth: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-cb68e966-842e-4b56-8cfd-d04ad4632943.png`
+- Implementation screenshot: unavailable for the authenticated state; the isolated in-app browser redirected to login because it did not share the user's session.
+- Intended browser/CSS viewport: supplied desktop membership crop and authenticated `/notifications` route.
+- Source pixels: `2048 x 294`
+- Implementation pixels: unavailable.
+- Density normalization: not applicable without an authenticated post-fix capture.
+- State: free trial with five days remaining; expiry reminder visible and overlapping the catalog.
+
+## Findings and implemented fixes
+
+- [P1] The seven-day expiry reminder was rendered inside the fixed-height centered membership card, so it overflowed into the purchase-cycle/catalog region. The reminder calculation, markup, desktop styles, and mobile styles were removed completely.
+- [P1] The notification page could leave users with an uninformative dark surface when its list request failed or returned malformed pagination data. The page now normalizes the list and total, clears stale rows on failure, and renders an explicit retry state instead of relying only on a transient toast.
+- [P2] The notification route remains lazy-loaded to preserve bundle splitting; its production chunk compiles successfully.
+
+## Required fidelity surfaces
+
+- Fonts and typography: existing membership and notification typography is unchanged.
+- Spacing and layout rhythm: removal of the variable-height expiry block restores the compact three-card summary and prevents catalog overlap.
+- Colors and visual tokens: the notification retry state uses the existing dark panel, muted text, and green accent tokens.
+- Image quality and asset fidelity: no raster assets were added or replaced; existing Ant Design icons are used.
+- Copy and content: the membership expiry warning copy is no longer rendered; notification failures now use a specific, actionable message.
+
+## Verification
+
+- The supplied defect screenshot was opened and inspected.
+- The local notification route was opened in the in-app browser, but the authenticated state could not be retained because the isolated session had no valid backend token.
+- Frontend TypeScript and production build passed.
+- `git diff --check` passed.
+
+## Remaining blocker
+
+- Re-open `/notifications` and `/membership` in an authenticated browser session and capture the rendered pages before marking visual QA as passed.
+
+final result: blocked
 
 ---
 
@@ -178,3 +375,89 @@ No actionable P0, P1, or P2 differences remain.
 - P3: plan and SKU status are now editable and reflected in the list; a future pass can add a dedicated status filter when the number of plans grows.
 
 final result: passed
+
+---
+
+# Membership purchase modes and compact account card QA
+
+- Source visual truth: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-ad98759b-b2f3-4273-80c1-19240c828369.png`
+- Alignment reference: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-01e7fb50-40e4-4a77-b612-09befb79aa67.png` (`3362 x 384` pixels).
+- Compact-copy reference: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-b97caa5e-5052-4594-bcd2-90b770d57497.png` (`1512 x 170` pixels).
+- Overflow defect reference: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-1e0912a5-6c0b-4aed-8a8b-1f6d9c3def48.png` (`3320 x 292` pixels).
+- Summary-width defect reference: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-62fca8ac-cdf5-4868-9b8e-4c652f5078a4.png` (`3310 x 288` pixels).
+- Auto-renew switch defect reference: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-b98db9c5-1ce6-47ed-8a15-650fc6974007.png` (`1326 x 328` pixels).
+- Implementation screenshot: unavailable; the available in-app browser session has no authenticated membership-page state, and the connected Chrome surface is unavailable.
+- Intended browser/CSS viewport: desktop wide-screen membership header.
+- Source pixels: `3330 x 368`
+- Implementation pixels: unavailable.
+- Density normalization: not applicable without a browser-rendered implementation capture.
+- State: free plan current, auto-renew disabled, daily login reward claimed.
+
+## Findings and implemented fixes
+
+- [P1] The purchase selector had only three modes. It now restores four backend SKU modes: single month, monthly auto-renew, quarterly auto-renew, and annual auto-renew.
+- [P1] The current-plan panel used excessive height and duplicated status information. It is now an intrinsic-height compact row containing the plan name, expiry time, an Ant Design switch for auto-renew state/management, and a renewal CTA.
+- [P2] The top navigation duplicated auto-renew management. That destination is now accessed through the switch, while the navigation action opens the existing point-package purchase dialog.
+- [P1] The three summary cards had mismatched heights. The intro, current-plan panel, and daily-reward panel now share one `144px` desktop grid row and stretch to the same height.
+- [P1] The summary row remained too tall. Its desktop height is now `124px`, with tighter internal spacing while retaining equal-height cards.
+- [P1] The `124px` row proved too short for the reward content and allowed the catalog to visually cover it. The row is now `140px`, which remains compact but contains all three aligned cards without overlap.
+- [P2] The membership expiry timestamp wrapped because the action group consumed the available middle-card width. The timestamp now stays on one line while the switch and renewal CTA remain non-wrapping.
+- [P1] The auto-renew switch previously navigated to another page. It now directly confirms and calls the existing cancel-auto-renew API; when auto-renew is already off, the switch is disabled because enabling requires purchasing an auto-renew SKU.
+- [P2] The auto-renew label, switch, and renewal CTA are now one non-wrapping horizontal action row.
+- [P2] The intro card occupied too much horizontal space and squeezed the current-plan actions. The desktop summary grid now gives the intro `0.72fr` and the right group `1.28fr`; inside that group, the current-plan card receives `1.2fr` with a `420px` minimum while the reward card receives `0.8fr`.
+- [P2] The benefit-comparison action could wrap under width pressure. Its label is now explicitly non-wrapping.
+- [P3] The redundant English `Daily reward` eyebrow was removed while retaining the Chinese daily-points heading and status.
+- [P1] The Ant Design auto-renew switch inherited the global `button { min-height: 44px; }` rule, stretching its `28px` track vertically. The membership-page override now pins the small switch to `28px × 16px`, restores the horizontal track, and prevents flex stretching.
+- [P2] The payment/renewal helper sentence was removed from the intro card, leaving the membership title and benefit-comparison action.
+- [P1] The desktop membership page could scroll. Wide desktop viewports now use a fixed `100vh` three-row layout; the catalog, four plan cards, checkout, and benefit rows consume the remaining height without page or nested-list scrolling.
+- Responsive widths at or below `1380px` retain normal document scrolling because the plans become a two-column/one-column layout and cannot safely fit in one viewport.
+- Typography, colors, icons, and component surfaces continue to use the existing membership page and Ant Design system.
+- The production frontend build passes, including TypeScript compilation.
+
+## Browser verification blocker
+
+- An authenticated implementation screenshot, side-by-side comparison, interaction test for the four purchase modes/renewal switch/point dialog, and console-error check are still required for a passing visual QA result.
+
+final result: blocked
+
+---
+
+# Membership navigation, points page, and card content QA
+
+- Source visual truth: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-11d1c6bf-e27f-4bca-b07b-baaf9d0f7572.png`
+- Implementation screenshot: unavailable; the available browser session does not contain an authenticated membership state.
+- Intended browser/CSS viewport: desktop membership center, matching the supplied top-navigation crop.
+- Source pixels: `924 x 210`
+- Implementation pixels: unavailable.
+- Density normalization: not applicable without an authenticated browser-rendered implementation capture.
+- State: membership center with the `会员套餐` top tab active.
+
+## Findings and implemented fixes
+
+- [P1] The top navigation was previously owned by individual pages and could change between routes. It is now a shared `MembershipTopbar` used by membership plans, order history, and the new points-purchase page, with a stable three-tab layout and route-specific active state.
+- [P1] Points purchase previously depended on a dialog. It is now an independent `/membership/points` page. Its packages come from enabled backend point-package records, and payment submission sends only the selected package ID; the server reloads its configured price and point amount.
+- [P1] The summary cards did not match the requested order and alignment. The current-plan card now precedes the centered membership-subscription card, while the daily-points card remains the third compact surface.
+- [P2] Plan prices lacked the desired prominence. The primary price is now white and `36px`, preserving the existing muted period and original-price treatments.
+- [P1] Benefits with disabled, empty, boolean-false, or numeric-zero values are removed from the customer-facing plan card instead of being rendered as unavailable rows.
+- [P1] The free membership period was effectively permanent. New and fallback free subscriptions now expire seven days after creation, the free SKU is represented as `7天`, and the migration shortens legacy far-future free subscriptions to `start_time + 7 days`.
+
+## Required fidelity surfaces
+
+- Fonts and typography: the shared tab typography remains unchanged; plan prices are intentionally larger and white.
+- Spacing and layout rhythm: the current-plan card is first, the membership intro is centered, and all three summary surfaces keep matched heights through the existing responsive grid.
+- Colors and visual tokens: existing membership dark-theme tokens and green accent are reused.
+- Image quality and asset fidelity: no raster imagery is present in the supplied navigation crop; existing Ant Design icons are retained.
+- Copy and content: stable tabs are `会员套餐`、`订单记录`、`购买积分`; points-package copy and amounts are backend-driven.
+
+## Verification
+
+- User frontend production build passed.
+- Admin frontend production build passed.
+- Backend Maven test suite passed.
+- `git diff --check` passed.
+
+## Remaining blocker
+
+- Capture the authenticated membership plans, orders, and points routes at the same desktop viewport, combine the implementation capture with the source image, and check console errors before changing this result to passed.
+
+final result: blocked

@@ -28,7 +28,14 @@ public class RequestLogFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
         } finally {
             long cost = System.currentTimeMillis() - start;
-            log.info("{} {} status={} cost={}ms", request.getMethod(), request.getRequestURI(), response.getStatus(), cost);
+            log.info(
+                "[HTTP] {} {} status={} cost={}ms traceId={}",
+                request.getMethod(),
+                request.getRequestURI(),
+                response.getStatus(),
+                cost,
+                traceId
+            );
             MDC.remove(TraceIdHolder.TRACE_ID);
         }
     }
