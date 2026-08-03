@@ -159,12 +159,12 @@
 }
 
 .visual-work-media-control {
-  grid-template-columns: 54px minmax(132px, 1fr) 34px;
+  grid-template-columns: 45px minmax(132px, 1fr) 34px;
 }
 
 .visual-work-media-control .visual-media-preview {
-  width: 56px;
-  height: 42px;
+  width: 45px;
+  height: 60px;
 }
 
 .visual-upload-field {
