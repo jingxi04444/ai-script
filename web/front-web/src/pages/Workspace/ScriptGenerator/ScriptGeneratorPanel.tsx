@@ -28,6 +28,8 @@ import {
   MessageOutlined,
   RobotOutlined,
   PlusOutlined,
+  HistoryOutlined,
+  CommentOutlined,
 } from '@ant-design/icons';
 import { message, Modal, Popover, Select, Upload } from 'antd';
 import { briefApi } from '../../../api/brief';
@@ -40,7 +42,7 @@ import { useWorkspaceStore, type ScriptMode } from '../../../stores/workspaceSto
 import type { Brief } from '../../../types/brief';
 import type { Asset } from '../../../types/asset';
 import { normalizeScriptStatus, scriptStatusOptions } from '../../../types/script';
-import type { Script, ScriptFormatOption, ScriptPolishMessage, ScriptStatus, ScriptTemplate, ScriptType } from '../../../types/script';
+import type { Script, ScriptFormatOption, ScriptPolishMessage, ScriptStatus, ScriptTemplate, ScriptType, ScriptVersion } from '../../../types/script';
 import type { AnalysisDimension } from '../../../types/source';
 import './script-generator-panel.css';
 
@@ -55,6 +57,15 @@ interface ProductFrameUploadState {
 interface PolishMentionRange {
   start: number;
   end: number;
+}
+
+interface ScriptAnnotation {
+  id: string;
+  rowIndex: number;
+  columnIndex: number;
+  columnLabel: string;
+  originalText: string;
+  content: string;
 }
 
 type TemplateCategory = '最新热点' | '产品介绍' | '创意剧情' | '活动福利' | '选购攻略';
@@ -380,9 +391,10 @@ const getTemplateSpecFields = (card: TemplateCard): TemplateSpecFields => {
 interface ScriptGeneratorPanelProps {
   projectId: string | null;
   ensureProjectId: () => Promise<string>;
+  dialogOnly?: boolean;
 }
 
-const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPanelProps) => {
+const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }: ScriptGeneratorPanelProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const { setActiveStep, setScriptMode } = useWorkspaceStore();
   const activeModeParam = searchParams.get('scriptMode');
@@ -419,6 +431,14 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   const [polishMentionQuery, setPolishMentionQuery] = useState('');
   const [polishMentionRange, setPolishMentionRange] = useState<PolishMentionRange | null>(null);
   const [polishMessages, setPolishMessages] = useState<ScriptPolishMessage[]>([]);
+  const [scriptVersions, setScriptVersions] = useState<ScriptVersion[]>([]);
+  const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+  const [restoringVersionId, setRestoringVersionId] = useState<string>();
+  const [annotationMode, setAnnotationMode] = useState(false);
+  const [scriptAnnotations, setScriptAnnotations] = useState<ScriptAnnotation[]>([]);
+  const [annotationsLoadedFor, setAnnotationsLoadedFor] = useState<string>();
+  const [annotationTarget, setAnnotationTarget] = useState<Omit<ScriptAnnotation, 'id' | 'content'> | null>(null);
+  const [annotationDraft, setAnnotationDraft] = useState('');
   const [isPolishing, setIsPolishing] = useState(false);
   const [isStatusSaving, setIsStatusSaving] = useState(false);
   const [generatingType, setGeneratingType] = useState<ScriptType | null>(null);
@@ -483,6 +503,24 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     content,
     createdAt: new Date().toISOString(),
   });
+
+  const defaultPolishMessage = () => createPolishMessage(
+    'assistant',
+    '我已读取原脚本。你可以直接告诉我“哪里不行、想怎么改”，也可以点击“批注修改”在具体单元格添加意见。我会保留每次修改记录，并返回完整修改稿。',
+  );
+
+  const loadScriptVersions = async (scriptId: string, fallbackContent = '') => {
+    const versions = await scriptApi.getVersions(scriptId);
+    setScriptVersions(versions);
+    setOriginalScriptContent(versions[0]?.content || fallbackContent);
+    return versions;
+  };
+
+  const loadPolishMessages = async (scriptId: string) => {
+    const messages = await scriptApi.getPolishMessages(scriptId);
+    setPolishMessages(messages.length ? messages : [defaultPolishMessage()]);
+    return messages;
+  };
 
   useEffect(() => {
     scriptApi.getTemplates().then((list) => {
@@ -572,17 +610,50 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     scriptApi.getById(editScriptId).then((script) => {
       setCurrentScript({ ...script, status: normalizeScriptStatus(script.status) });
       if (script.briefId) setSelectedBriefId(script.briefId);
-      setOriginalScriptContent(script.content || '');
       setIsManualEditing(false);
       setPolishInput('');
       setPolishBriefId(undefined);
-      setPolishMessages([
-        createPolishMessage('assistant', '我已读取原脚本。你可以直接告诉我“哪里不行、想怎么改”，例如：开场太平、卖点不突出、结尾转化弱。我会返回修改后的脚本并在右侧重新显示。'),
-      ]);
+      Promise.all([
+        loadScriptVersions(script.id, script.content || ''),
+        loadPolishMessages(script.id),
+      ]).catch(() => {
+        setOriginalScriptContent(script.content || '');
+        setPolishMessages([defaultPolishMessage()]);
+      });
       setResultDialogOpen(true);
       clearEditScriptParam();
     }).catch(() => message.warning('脚本内容加载失败'));
   }, [editScriptId]);
+
+  useEffect(() => {
+    if (!currentScript?.id) {
+      setScriptAnnotations([]);
+      setAnnotationsLoadedFor(undefined);
+      return;
+    }
+    const stored = window.localStorage.getItem(`ai-script:annotations:${currentScript.id}`);
+    if (!stored) {
+      setScriptAnnotations([]);
+      setAnnotationsLoadedFor(currentScript.id);
+      return;
+    }
+    try {
+      setScriptAnnotations(JSON.parse(stored) as ScriptAnnotation[]);
+    } catch {
+      setScriptAnnotations([]);
+    }
+    setAnnotationsLoadedFor(currentScript.id);
+  }, [currentScript?.id]);
+
+  useEffect(() => {
+    if (!currentScript?.id || annotationsLoadedFor !== currentScript.id) return;
+    const key = `ai-script:annotations:${currentScript.id}`;
+    if (scriptAnnotations.length) {
+      window.localStorage.setItem(key, JSON.stringify(scriptAnnotations));
+    } else {
+      window.localStorage.removeItem(key);
+    }
+  }, [annotationsLoadedFor, currentScript?.id, scriptAnnotations]);
 
   useEffect(() => {
     if (!currentScript?.briefId || !briefs.some((brief) => brief.id === currentScript.briefId)) return;
@@ -1080,9 +1151,53 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
     message.success(`已删除第 ${rowIndex + 1} 行，可点击“恢复原稿”撤销`);
   };
 
+  const openCellAnnotation = (rowIndex: number, columnIndex: number, columnLabel: string, originalText: string) => {
+    const existing = scriptAnnotations.find((item) => item.rowIndex === rowIndex && item.columnIndex === columnIndex);
+    setAnnotationTarget({ rowIndex, columnIndex, columnLabel, originalText });
+    setAnnotationDraft(existing?.content || '');
+  };
+
+  const saveCellAnnotation = () => {
+    if (!annotationTarget || !annotationDraft.trim()) {
+      message.warning('请输入具体的修改建议');
+      return;
+    }
+    setScriptAnnotations((annotations) => {
+      const nextAnnotation: ScriptAnnotation = {
+        id: annotations.find((item) => item.rowIndex === annotationTarget.rowIndex && item.columnIndex === annotationTarget.columnIndex)?.id
+          || `annotation-${Date.now()}`,
+        ...annotationTarget,
+        content: annotationDraft.trim(),
+      };
+      return [
+        ...annotations.filter((item) => item.rowIndex !== annotationTarget.rowIndex || item.columnIndex !== annotationTarget.columnIndex),
+        nextAnnotation,
+      ];
+    });
+    setAnnotationTarget(null);
+    setAnnotationDraft('');
+    message.success('批注已添加，可继续标注其他单元格或直接发送给 AI');
+  };
+
+  const removeCellAnnotation = () => {
+    if (!annotationTarget) return;
+    setScriptAnnotations((annotations) => annotations.filter(
+      (item) => item.rowIndex !== annotationTarget.rowIndex || item.columnIndex !== annotationTarget.columnIndex,
+    ));
+    setAnnotationTarget(null);
+    setAnnotationDraft('');
+  };
+
   const polishCurrentScript = async (quickInstruction?: string) => {
     if (!currentScript) return message.warning('请先选择脚本');
-    const instruction = (quickInstruction || polishInput).trim();
+    const inputInstruction = (quickInstruction || polishInput).trim();
+    const annotationInstruction = scriptAnnotations.length
+      ? `【逐格批注修改】\n${[...scriptAnnotations]
+          .sort((a, b) => a.rowIndex - b.rowIndex || a.columnIndex - b.columnIndex)
+          .map((item) => `${item.rowIndex + 1}. 第 ${item.rowIndex + 1} 行「${item.columnLabel}」：原内容“${item.originalText}”；修改建议“${item.content}”`)
+          .join('\n')}`
+      : '';
+    const instruction = [inputInstruction, annotationInstruction].filter(Boolean).join('\n\n');
     if (!instruction) return message.warning('请先输入要修改的地方');
     const recalledBriefId = quickInstruction ? undefined : polishBriefId;
     const userMessage = createPolishMessage('user', instruction);
@@ -1102,21 +1217,44 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
       });
       setCurrentScript((script) => script ? { ...script, content: result.content, updatedAt: new Date().toISOString() } : script);
       setIsManualEditing(false);
-      setPolishMessages((messages) => [...messages, createPolishMessage('assistant', result.summary || '已生成修改后的脚本，右侧已更新预览。确认后可保存脚本。')]);
+      setScriptAnnotations([]);
+      setAnnotationMode(false);
+      await Promise.all([
+        loadScriptVersions(currentScript.id, originalScriptContent),
+        loadPolishMessages(currentScript.id),
+      ]);
       message.success('AI 已返回修改版，右侧已重新显示');
     } catch (error) {
-      setPolishMessages((messages) => [...messages, createPolishMessage('assistant', '这次润色没有成功，请稍后重试或换一种说法。')]);
+      await loadPolishMessages(currentScript.id).catch(() => {
+        setPolishMessages((messages) => [...messages, createPolishMessage('assistant', '这次润色没有成功，请稍后重试或换一种说法。')]);
+      });
       message.error(error instanceof Error ? error.message : '脚本润色失败');
     } finally {
       setIsPolishing(false);
     }
   };
 
-  const restoreOriginalScript = () => {
-    if (!currentScript) return;
-    setCurrentScript({ ...currentScript, content: originalScriptContent, updatedAt: new Date().toISOString() });
-    setIsManualEditing(false);
-    setPolishMessages((messages) => [...messages, createPolishMessage('assistant', '已恢复到进入润色时的原脚本内容。')]);
+  const restoreScriptVersion = async (version: ScriptVersion) => {
+    if (!currentScript || version.current) return;
+    setRestoringVersionId(version.id);
+    try {
+      const restored = await scriptApi.restoreVersion(currentScript.id, version.id);
+      setCurrentScript({ ...restored, status: normalizeScriptStatus(restored.status) });
+      await loadScriptVersions(currentScript.id, restored.content || '');
+      setIsManualEditing(false);
+      setVersionHistoryOpen(false);
+      message.success(`已恢复到 V${version.versionNo}，恢复前内容仍保留在历史版本中`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '历史版本恢复失败');
+    } finally {
+      setRestoringVersionId(undefined);
+    }
+  };
+
+  const restoreOriginalScript = async () => {
+    const originalVersion = scriptVersions[0];
+    if (!currentScript || !originalVersion) return;
+    await restoreScriptVersion(originalVersion);
   };
 
   const analyzeReferenceCopy = async (): Promise<string | null> => {
@@ -1181,9 +1319,9 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
       const script = await scriptApi.generate({
         projectId: currentProjectId,
         type,
-        templateId: selectedTemplate,
+        templateId: type === 'template' ? selectedTemplate : undefined,
         briefId: selectedBriefId,
-        referenceUrl,
+        referenceUrl: type === 'viral' ? referenceUrl : undefined,
         duration: scriptDuration,
         format: scriptFormat,
         formatRequirement: selectedScriptFormat?.formatRequirement,
@@ -1192,12 +1330,15 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
         productImage: productFrame?.url,
         productFrameFileName: productFrame?.fileName,
         productFrameContent: productFrame?.extractedText,
-        referenceCopy: type === 'viral' ? analysisText.trim() : '',
-        structureAnalysis: type === 'viral' ? resolvedStructureText : '',
+        referenceCopy: type === 'viral' ? analysisText.trim() : undefined,
+        structureAnalysis: type === 'viral' ? resolvedStructureText : undefined,
         prompt,
       });
       setCurrentScript(script);
       setOriginalScriptContent(script.content || '');
+      setScriptVersions([]);
+      setPolishMessages([defaultPolishMessage()]);
+      loadScriptVersions(script.id, script.content || '').catch(() => undefined);
       setPolishBriefId(undefined);
       setIsManualEditing(false);
       setResultDialogOpen(true);
@@ -1212,10 +1353,15 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
 
   const saveCurrentScript = async () => {
     if (!currentScript) return message.warning('请先生成脚本');
-    await scriptApi.update(currentScript.id, currentScript);
-    setOriginalScriptContent(currentScript.content || '');
-    setIsManualEditing(false);
-    message.success('脚本已保存');
+    try {
+      const saved = await scriptApi.update(currentScript.id, currentScript);
+      setCurrentScript({ ...saved, status: normalizeScriptStatus(saved.status) });
+      await loadScriptVersions(saved.id, saved.content || '');
+      setIsManualEditing(false);
+      message.success('脚本已保存，并已生成可恢复的历史版本');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '脚本保存失败');
+    }
   };
 
   const changeScriptStatus = async (status: ScriptStatus) => {
@@ -1337,6 +1483,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   );
 
   if (!activeMode) {
+    if (dialogOnly) return null;
     return (
       <section className="script-generator-page script-generator-entry-page">
         <header className="script-entry-hero">
@@ -1367,7 +1514,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
   }
 
   return (
-    <section className={`script-generator-page replica-script-page script-generator-workspace ${activeMode === 'template' ? 'script-template-workspace' : ''} script-mode-${activeMode}`}>
+    <section className={`script-generator-page replica-script-page script-generator-workspace ${dialogOnly ? 'is-dialog-only' : ''} ${activeMode === 'template' ? 'script-template-workspace' : ''} script-mode-${activeMode}`}>
       {/* 爆款复刻模式 */}
       {activeMode === 'viral' && (
         <>
@@ -1885,8 +2032,8 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                     options={scriptStatusOptions}
                     suffixIcon={<DownOutlined />}
                   />
-                  <em>{scriptDuration}</em>
-                  <em>{selectedScriptFormat?.name || '分镜脚本表'}</em>
+                  <em>{currentScript.duration || scriptDuration}</em>
+                  <em>{currentScript.formatName || scriptFormats.find((item) => item.code === currentScript.format)?.name || selectedScriptFormat?.name || '分镜脚本表'}</em>
                   <em>{scriptSegmentRows.length || storyboardRows.length || 1} 个镜头</em>
                 </div>
               </div>
@@ -1912,6 +2059,17 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                       onClick={() => setIsManualEditing((editing) => !editing)}
                     >
                       <EditOutlined />{isManualEditing ? '完成编辑' : '人工编辑'}
+                    </button>
+                    <button
+                      type="button"
+                      className={annotationMode ? 'active' : ''}
+                      disabled={isPolishing || isManualEditing}
+                      onClick={() => setAnnotationMode((enabled) => !enabled)}
+                    >
+                      <CommentOutlined />批注修改{scriptAnnotations.length ? `（${scriptAnnotations.length}）` : ''}
+                    </button>
+                    <button type="button" disabled={!scriptVersions.length || isPolishing} onClick={() => setVersionHistoryOpen(true)}>
+                      <HistoryOutlined />历史版本{scriptVersions.length ? `（${scriptVersions.length}）` : ''}
                     </button>
                     <button type="button" disabled={!originalScriptContent || isPolishing} onClick={restoreOriginalScript}>恢复原稿</button>
                   </div>
@@ -1945,7 +2103,28 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                                       onChange={(event) => updateStoryboardCell(rowIndex, index, event.target.value)}
                                     />
                                   ) : (
-                                    <span className="storyboard-cell-content">{storyboardCellText(row.cells[index], index)}</span>
+                                    <div className={`storyboard-cell-display ${annotationMode ? 'is-annotating' : ''}`}>
+                                      <span className="storyboard-cell-content">{storyboardCellText(row.cells[index], index)}</span>
+                                      {scriptAnnotations.find((item) => item.rowIndex === rowIndex && item.columnIndex === index) ? (
+                                        <button
+                                          type="button"
+                                          className="storyboard-cell-annotation"
+                                          aria-label={`编辑第 ${rowIndex + 1} 行${header}批注`}
+                                          title={scriptAnnotations.find((item) => item.rowIndex === rowIndex && item.columnIndex === index)?.content}
+                                          onClick={() => openCellAnnotation(rowIndex, index, header, storyboardCellText(row.cells[index], index))}
+                                        >
+                                          <CommentOutlined />
+                                        </button>
+                                      ) : annotationMode ? (
+                                        <button
+                                          type="button"
+                                          className="storyboard-cell-comment-trigger"
+                                          aria-label={`添加第 ${rowIndex + 1} 行${header}批注`}
+                                          title={`批注第 ${rowIndex + 1} 行${header}`}
+                                          onClick={() => openCellAnnotation(rowIndex, index, header, storyboardCellText(row.cells[index], index))}
+                                        ><CommentOutlined /></button>
+                                      ) : null}
+                                    </div>
                                   )}
                                   {isManualEditing
                                     && index === 0
@@ -2002,9 +2181,9 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                 </div>
                 <div className="polish-chat-messages">
                   {polishMessages.map((item) => (
-                    <div key={item.id} className={`polish-message ${item.role}`}>
+                    <div key={item.id} className={`polish-message ${item.role} ${item.status === 'failed' ? 'failed' : ''}`}>
                       <span>{item.role === 'assistant' ? <RobotOutlined /> : '我'}</span>
-                      <p>{item.content}</p>
+                      <p>{item.content}{item.status === 'failed' && <small>失败记录</small>}</p>
                     </div>
                   ))}
                   {isPolishing && (
@@ -2020,6 +2199,12 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                   ))}
                 </div>
                 <div className="polish-input-box">
+                  {scriptAnnotations.length > 0 && (
+                    <div className="polish-annotation-summary">
+                      <span><CommentOutlined />已添加 {scriptAnnotations.length} 条逐格批注，将随本次修改要求发送</span>
+                      <button type="button" disabled={isPolishing} onClick={() => setScriptAnnotations([])}>清空批注</button>
+                    </div>
+                  )}
                   {polishMentionOpen && (
                     <div className="polish-mention-menu">
                       <header>
@@ -2109,7 +2294,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
                     }}
                     placeholder="输入修改要求；键入 @ 可调用产品 Brief，例如：@九号平衡车 只选两个特色卖点重写第 2、3 个镜头。"
                   />
-                  <button type="button" disabled={isPolishing || !polishInput.trim()} onClick={() => polishCurrentScript()}><SendOutlined />发送修改要求</button>
+                  <button type="button" disabled={isPolishing || (!polishInput.trim() && !scriptAnnotations.length)} onClick={() => polishCurrentScript()}><SendOutlined />发送修改要求</button>
                 </div>
               </section>
             </article>
@@ -2123,6 +2308,79 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId }: ScriptGeneratorPan
           </section>
         </div>
       )}
+      <Modal
+        open={Boolean(annotationTarget)}
+        title={annotationTarget ? `批注第 ${annotationTarget.rowIndex + 1} 行 · ${annotationTarget.columnLabel}` : '添加批注'}
+        className="script-annotation-modal"
+        centered
+        okText="保存批注"
+        cancelText="取消"
+        onOk={saveCellAnnotation}
+        onCancel={() => {
+          setAnnotationTarget(null);
+          setAnnotationDraft('');
+        }}
+        footer={(_, { OkBtn, CancelBtn }) => (
+          <>
+            {annotationTarget && scriptAnnotations.some((item) => item.rowIndex === annotationTarget.rowIndex && item.columnIndex === annotationTarget.columnIndex) && (
+              <button type="button" className="script-annotation-delete" onClick={removeCellAnnotation}><DeleteOutlined />删除批注</button>
+            )}
+            <CancelBtn />
+            <OkBtn />
+          </>
+        )}
+      >
+        <div className="script-annotation-target">
+          <span>当前内容</span>
+          <p>{annotationTarget?.originalText || '—'}</p>
+        </div>
+        <label className="script-annotation-editor">
+          <span>修改建议</span>
+          <textarea
+            autoFocus
+            value={annotationDraft}
+            maxLength={500}
+            placeholder="例如：这句太书面，改成更自然的口语；保留卖点但缩短到 12 个字。"
+            onChange={(event) => setAnnotationDraft(event.target.value)}
+          />
+        </label>
+      </Modal>
+      <Modal
+        open={versionHistoryOpen}
+        title="脚本历史版本"
+        className="script-version-modal"
+        centered
+        width={720}
+        footer={null}
+        onCancel={() => setVersionHistoryOpen(false)}
+      >
+        <p className="script-version-tip">每次 AI 润色、人工保存和历史恢复都会生成一个版本，可恢复到任意中间稿；恢复操作本身也会留痕。</p>
+        <div className="script-version-list">
+          {[...scriptVersions].reverse().map((version) => (
+            <article key={version.id} className={version.current ? 'is-current' : ''}>
+              <div className="script-version-index">V{version.versionNo}</div>
+              <div className="script-version-detail">
+                <header>
+                  <strong>{version.changeNote || version.title || `版本 V${version.versionNo}`}</strong>
+                  {version.current && <em>当前版本</em>}
+                </header>
+                <time>{version.createdAt || '时间未记录'}</time>
+                {version.instruction && <p><span>修改要求：</span>{version.instruction}</p>}
+                <small>{version.content.slice(0, 100) || '该版本暂无内容'}{version.content.length > 100 ? '…' : ''}</small>
+              </div>
+              <button
+                type="button"
+                disabled={version.current || Boolean(restoringVersionId)}
+                onClick={() => restoreScriptVersion(version)}
+              >
+                {restoringVersionId === version.id ? <LoadingOutlined spin /> : <HistoryOutlined />}
+                {version.current ? '当前使用' : '恢复此版本'}
+              </button>
+            </article>
+          ))}
+          {!scriptVersions.length && <div className="script-version-empty">暂无历史版本</div>}
+        </div>
+      </Modal>
     </section>
   );
 };

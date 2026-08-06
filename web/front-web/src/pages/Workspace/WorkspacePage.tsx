@@ -28,9 +28,7 @@ import type { SellingPointsPanelRef } from './SellingPoints/SellingPointsPanel';
 import type { Brief } from '../../types/brief';
 import ScriptGeneratorPanel from './ScriptGenerator/ScriptGeneratorPanel';
 import StoryboardPanel from './Storyboard/StoryboardPanel';
-import AssetsPanel from './Assets/AssetsPanel';
-import ProductionPanel from './Production/ProductionPanel';
-import DeliveryPanel from './Delivery/DeliveryPanel';
+import DevelopmentPanel from './Development/DevelopmentPanel';
 import './workspace-page.css';
 
 const isWorkspaceStep = (value: string | null): value is StepKey => !!value && steps.some((step) => step.id === value);
@@ -76,6 +74,7 @@ const WorkspacePage = () => {
   const scriptModeParam = searchParams.get('scriptMode');
   const activeScriptMode = isScriptMode(scriptModeParam) ? scriptModeParam : null;
   const requestedBriefId = searchParams.get('briefId');
+  const editingScriptId = searchParams.get('editScriptId');
   const briefOrigin = searchParams.get('briefOrigin');
   const assetBriefProjectId = searchParams.get('assetProjectId');
   const currentProjectId = searchParams.get('projectId') || projectId;
@@ -237,23 +236,29 @@ const WorkspacePage = () => {
       case 'script-generator':
         return <ScriptGeneratorPanel projectId={projectId} ensureProjectId={ensureProjectId} />;
       case 'storyboard':
-        return <StoryboardPanel projectId={projectId} onPolishScript={(mode, scriptId) => {
-          setScriptMode(mode);
-          const nextParams = new URLSearchParams(searchParams);
-          nextParams.set('step', 'script-generator');
-          nextParams.set('scriptMode', mode);
-          nextParams.set('editScriptId', scriptId);
-          nextParams.set('returnStep', 'storyboard');
-          if (projectId) nextParams.set('projectId', projectId);
-          setSearchParams(nextParams, { replace: true });
-          setActiveStep('script-generator');
-        }} />;
+        return (
+          <>
+            <StoryboardPanel projectId={projectId} onPolishScript={(mode, scriptId) => {
+              setScriptMode(mode);
+              const nextParams = new URLSearchParams(searchParams);
+              nextParams.set('step', 'storyboard');
+              nextParams.set('scriptMode', mode);
+              nextParams.set('editScriptId', scriptId);
+              nextParams.set('returnStep', 'storyboard');
+              if (projectId) nextParams.set('projectId', projectId);
+              setSearchParams(nextParams, { replace: true });
+            }} />
+            {editingScriptId && (
+              <ScriptGeneratorPanel dialogOnly projectId={projectId} ensureProjectId={ensureProjectId} />
+            )}
+          </>
+        );
       case 'visual':
-        return <AssetsPanel projectId={projectId} ensureProjectId={ensureProjectId} />;
+        return <DevelopmentPanel featureName="场景、角色与道具" />;
       case 'video':
-        return <ProductionPanel projectId={projectId} ensureProjectId={ensureProjectId} />;
+        return <DevelopmentPanel featureName="分镜视频" />;
       case 'preview':
-        return <DeliveryPanel projectId={projectId} ensureProjectId={ensureProjectId} />;
+        return <DevelopmentPanel featureName="视频预览" />;
       default:
         return (
           <div className="generic-step">

@@ -9,8 +9,10 @@ import com.aiscript.modules.script.dto.TemplateSaveDTO;
 import com.aiscript.modules.script.dto.TemplateStateDTO;
 import com.aiscript.modules.script.vo.PolishScriptVO;
 import com.aiscript.modules.script.vo.ScriptListVO;
+import com.aiscript.modules.script.vo.ScriptPolishMessageVO;
 import com.aiscript.modules.script.vo.ScriptTemplateVO;
 import com.aiscript.modules.script.vo.ScriptVO;
+import com.aiscript.modules.script.vo.ScriptVersionVO;
 import java.util.List;
 
 public interface ScriptService {
@@ -29,6 +31,12 @@ public interface ScriptService {
     ScriptVO generate(GenerateScriptDTO dto);
 
     PolishScriptVO polish(Integer id, PolishScriptDTO dto);
+
+    List<ScriptPolishMessageVO> polishMessages(Integer id);
+
+    List<ScriptVersionVO> versions(Integer id);
+
+    ScriptVO restoreVersion(Integer id, Integer versionId);
 
     ScriptVO update(Integer id, ScriptSaveDTO dto);
 

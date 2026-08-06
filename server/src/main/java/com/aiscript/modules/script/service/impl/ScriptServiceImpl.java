@@ -18,13 +18,18 @@ import com.aiscript.modules.script.dto.PolishScriptDTO;
 import com.aiscript.modules.script.dto.ScriptSaveDTO;
 import com.aiscript.modules.script.dto.TemplateSaveDTO;
 import com.aiscript.modules.script.dto.TemplateStateDTO;
+import com.aiscript.modules.script.entity.AiScriptPolishMessage;
 import com.aiscript.modules.script.entity.AiScriptTemplate;
+import com.aiscript.modules.script.mapper.AiScriptPolishMessageMapper;
 import com.aiscript.modules.script.mapper.AiScriptTemplateMapper;
+import com.aiscript.modules.script.service.ScriptPolishMessagePersistenceService;
 import com.aiscript.modules.script.service.ScriptService;
 import com.aiscript.modules.script.vo.PolishScriptVO;
 import com.aiscript.modules.script.vo.ScriptListVO;
+import com.aiscript.modules.script.vo.ScriptPolishMessageVO;
 import com.aiscript.modules.script.vo.ScriptTemplateVO;
 import com.aiscript.modules.script.vo.ScriptVO;
+import com.aiscript.modules.script.vo.ScriptVersionVO;
 import com.aiscript.modules.storyboard.entity.AiStoryboardScript;
 import com.aiscript.modules.storyboard.entity.AiStoryboardShot;
 import com.aiscript.modules.storyboard.entity.AiScriptVersion;
@@ -44,11 +49,14 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -65,6 +73,7 @@ public class ScriptServiceImpl implements ScriptService {
     private final AiStoryboardScriptMapper scriptMapper;
     private final AiScriptTemplateMapper templateMapper;
     private final AiScriptVersionMapper versionMapper;
+    private final AiScriptPolishMessageMapper polishMessageMapper;
     private final AiStoryboardShotMapper shotMapper;
     private final AiGenerationTaskMapper generationTaskMapper;
     private final AiBriefMapper briefMapper;
@@ -73,11 +82,13 @@ public class ScriptServiceImpl implements ScriptService {
     private final LlmClient llmClient;
     private final PromptRenderService promptRenderService;
     private final MembershipEntitlementService entitlementService;
+    private final ScriptPolishMessagePersistenceService polishMessagePersistenceService;
 
     public ScriptServiceImpl(
         AiStoryboardScriptMapper scriptMapper,
         AiScriptTemplateMapper templateMapper,
         AiScriptVersionMapper versionMapper,
+        AiScriptPolishMessageMapper polishMessageMapper,
         AiStoryboardShotMapper shotMapper,
         AiGenerationTaskMapper generationTaskMapper,
         AiBriefMapper briefMapper,
@@ -85,11 +96,13 @@ public class ScriptServiceImpl implements ScriptService {
         SysScriptFormatConfigMapper scriptFormatMapper,
         LlmClient llmClient,
         PromptRenderService promptRenderService
-        , MembershipEntitlementService entitlementService
+        , MembershipEntitlementService entitlementService,
+        ScriptPolishMessagePersistenceService polishMessagePersistenceService
     ) {
         this.scriptMapper = scriptMapper;
         this.templateMapper = templateMapper;
         this.versionMapper = versionMapper;
+        this.polishMessageMapper = polishMessageMapper;
         this.shotMapper = shotMapper;
         this.generationTaskMapper = generationTaskMapper;
         this.briefMapper = briefMapper;
@@ -98,6 +111,7 @@ public class ScriptServiceImpl implements ScriptService {
         this.llmClient = llmClient;
         this.promptRenderService = promptRenderService;
         this.entitlementService = entitlementService;
+        this.polishMessagePersistenceService = polishMessagePersistenceService;
     }
 
     @Override
@@ -187,20 +201,22 @@ public class ScriptServiceImpl implements ScriptService {
         script.setBriefSnapshot(buildProductInfo(generationBrief));
         script.setScriptName(defaultScriptName(dto));
         script.setScriptType(StringUtils.hasText(dto.getType()) ? dto.getType() : "original");
+        ScriptFormatInfo generatedFormat = scriptFormatInfo(dto);
+        script.setGenerationDuration(dto.getDuration());
+        script.setGenerationFormat(dto.getFormat());
+        script.setGenerationFormatName(generatedFormat.name());
         script.setStatus("draft");
         script.setAuditStatus("not_submitted");
         script.setContentText(generatedContent);
         script.setCreateBy(currentUserId());
         scriptMapper.insert(script);
 
-        AiScriptVersion version = new AiScriptVersion();
-        version.setTenantId(script.getTenantId());
-        version.setScriptId(script.getId());
-        version.setVersionNo(1);
-        version.setVersionTitle(script.getScriptName());
-        version.setContentSnapshot(JsonUtils.toJson(Map.of("content", script.getContentText())));
-        version.setChangeNote("AI generate");
-        versionMapper.insert(version);
+        AiScriptVersion version = createVersion(
+            script,
+            script.getContentText(),
+            "AI 生成原稿",
+            Map.of("source", "generate", "summary", "首次生成脚本")
+        );
 
         AiStoryboardShot shot = new AiStoryboardShot();
         shot.setTenantId(script.getTenantId());
@@ -228,6 +244,7 @@ public class ScriptServiceImpl implements ScriptService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public PolishScriptVO polish(Integer id, PolishScriptDTO dto) {
         AiStoryboardScript script = ownedScript(id);
         hydrateProductFrame(dto);
@@ -274,47 +291,172 @@ public class ScriptServiceImpl implements ScriptService {
                 ? "【画面文件说明】图片已上传，但未识别到可用文字。不要臆测图片中的物体、场景或卖点。"
                 : ""
         ).stream().filter(StringUtils::hasText).reduce((a, b) -> a + "\n\n" + b).orElse("");
+        List<AiScriptPolishMessage> previousMessages = polishMessageMapper.selectList(
+            new LambdaQueryWrapper<AiScriptPolishMessage>()
+                .eq(AiScriptPolishMessage::getTenantId, currentTenantId())
+                .eq(AiScriptPolishMessage::getScriptId, script.getId())
+                .eq(AiScriptPolishMessage::getStatus, "success")
+                .orderByAsc(AiScriptPolishMessage::getId)
+        );
+        String conversationHistory = previousMessages.stream()
+            .map(message -> ("assistant".equals(message.getRole()) ? "AI" : "用户") + "：" + nullToEmpty(message.getContent()))
+            .filter(StringUtils::hasText)
+            .reduce((a, b) -> a + "\n" + b)
+            .orElse("");
+        String contextSnapshot = JsonUtils.toJson(Map.ofEntries(
+            Map.entry("sourceContent", sourceContent),
+            Map.entry("briefContext", briefContext),
+            Map.entry("referenceContext", referenceContext),
+            Map.entry("conversationHistory", conversationHistory),
+            Map.entry("productFrameFileName", nullToEmpty(dto.getProductFrameFileName())),
+            Map.entry("productFrameContent", nullToEmpty(dto.getProductFrameContent()))
+        ));
+        Integer polishMessageId = polishMessagePersistenceService.createUserMessage(
+            currentTenantId(), currentUserId(), script.getId(), instruction, contextSnapshot
+        );
         Map<String, String> variables = new HashMap<>();
         variables.put("instruction", StringUtils.hasText(referenceContext)
             ? instruction + "\n\n" + referenceContext
             : instruction);
         variables.put("content", sourceContent);
         variables.put("referenceContext", referenceContext);
+        variables.put("conversationHistory", conversationHistory);
         boolean preserveStructure = !requestsStructureChange(instruction);
         String structureRequirement = preserveStructure
             ? "\n\n【不可变结构约束】用户本次没有要求修改脚本配置。必须逐字保留原表头、列顺序、镜头行数、镜号和每一行时长；不得改变脚本格式、总时长或增删/合并/拆分镜头。只修改用户明确指出的内容字段。"
             : "\n\n【结构修改范围】用户明确要求调整时长、镜头或格式时，只修改要求明确涉及的结构项，其余表头、列顺序和配置保持不变。";
-        PromptRenderService.RenderedPrompt renderedPrompt = promptRenderService.render(
-            "script_polish",
-            "你是专业商业短视频脚本编辑。请严格依据用户的修改要求，以及本次重新提供的产品 Brief、画面 OCR 文字或表格解析文字润色原脚本。用户要求重新选择卖点时，只能从 Brief 和已解析文字中的真实信息选择，不能推测图片里未提供的视觉内容。保持原脚本的输出格式和表格列结构，只输出修改后的完整脚本，不要解释修改过程，不要添加 Markdown 代码块。" + structureRequirement,
-            "请按修改要求重写原脚本。\n\n【修改要求】\n{{instruction}}\n\n{{referenceContext}}\n\n【原脚本】\n{{content}}",
-            variables
-        );
-        String polishedContent = llmClient.chat(
-            renderedPrompt.getSystemPrompt() + structureRequirement,
-            renderedPrompt.getUserPrompt()
-        );
-        if (!StringUtils.hasText(polishedContent) || "{}".equals(polishedContent.trim())) {
-            throw new BusinessException("AI 未返回有效的润色内容，请稍后重试");
-        }
-        if (preserveStructure && !hasSameScriptStructure(sourceContent, polishedContent)) {
-            String repairSystemPrompt = "你是脚本格式校正器。保持候选稿已经完成的文案修改，但必须恢复原稿的表头、列顺序、镜头行数、镜号和每一行时长。禁止改变脚本格式、总时长，禁止增删、合并或拆分镜头。只输出校正后的完整脚本。";
-            String repairUserPrompt = "【原稿（结构与时长唯一标准）】\n" + sourceContent
-                + "\n\n【需要校正的候选稿】\n" + polishedContent;
-            polishedContent = llmClient.chat(repairSystemPrompt, repairUserPrompt);
-            if (!StringUtils.hasText(polishedContent) || !hasSameScriptStructure(sourceContent, polishedContent)) {
-                throw new BusinessException("AI 返回内容改变了原脚本的时长、镜头数或表格格式，系统已阻止覆盖，请重试");
+        try {
+            PromptRenderService.RenderedPrompt renderedPrompt = promptRenderService.render(
+                "script_polish",
+                "你是专业商业短视频脚本编辑。请结合此前完整润色对话理解用户的连续修改意图，并严格依据用户的本次修改要求，以及本次重新提供的产品 Brief、画面 OCR 文字或表格解析文字润色原脚本。用户要求重新选择卖点时，只能从 Brief 和已解析文字中的真实信息选择，不能推测图片里未提供的视觉内容。保持原脚本的输出格式和表格列结构，只输出修改后的完整脚本，不要解释修改过程，不要添加 Markdown 代码块。" + structureRequirement,
+                "【此前完整润色对话】\n{{conversationHistory}}\n\n请按修改要求重写原脚本。\n\n【本次修改要求】\n{{instruction}}\n\n{{referenceContext}}\n\n【当前脚本】\n{{content}}",
+                variables
+            );
+            String polishedContent = llmClient.chat(
+                renderedPrompt.getSystemPrompt() + structureRequirement,
+                renderedPrompt.getUserPrompt()
+            );
+            if (!StringUtils.hasText(polishedContent) || "{}".equals(polishedContent.trim())) {
+                throw new BusinessException("AI 未返回有效的润色内容，请稍后重试");
             }
-        }
+            if (preserveStructure && !hasSameScriptStructure(sourceContent, polishedContent)) {
+                String repairSystemPrompt = "你是脚本格式校正器。保持候选稿已经完成的文案修改，但必须恢复原稿的表头、列顺序、镜头行数、镜号和每一行时长。禁止改变脚本格式、总时长，禁止增删、合并或拆分镜头。只输出校正后的完整脚本。";
+                String repairUserPrompt = "【原稿（结构与时长唯一标准）】\n" + sourceContent
+                    + "\n\n【需要校正的候选稿】\n" + polishedContent;
+                polishedContent = llmClient.chat(repairSystemPrompt, repairUserPrompt);
+                if (!StringUtils.hasText(polishedContent) || !hasSameScriptStructure(sourceContent, polishedContent)) {
+                    throw new BusinessException("AI 返回内容改变了原脚本的时长、镜头数或表格格式，系统已阻止覆盖，请重试");
+                }
+            }
 
-        String summaryInstruction = instruction.length() > 60 ? instruction.substring(0, 60) + "…" : instruction;
-        return new PolishScriptVO(polishedContent.trim(), "已根据修改要求完成润色：" + summaryInstruction);
+            String summaryInstruction = instruction.length() > 60 ? instruction.substring(0, 60) + "…" : instruction;
+            String summary = "已根据修改要求完成润色：" + summaryInstruction;
+            String finalContent = polishedContent.trim();
+            AiScriptVersion version = createVersion(
+                script,
+                finalContent,
+                "AI 继续润色",
+                Map.of(
+                    "source", "ai_polish",
+                    "instruction", instruction,
+                    "summary", summary
+                )
+            );
+            script.setContentText(finalContent);
+            script.setCurrentVersionId(version.getId());
+            scriptMapper.updateById(script);
+            polishMessagePersistenceService.complete(polishMessageId);
+            polishMessagePersistenceService.createAssistantMessage(
+                currentTenantId(), currentUserId(), script.getId(), polishMessageId,
+                "success", summary,
+                JsonUtils.toJson(Map.of("scriptContent", finalContent, "scriptVersionId", String.valueOf(version.getId()))),
+                null
+            );
+            return new PolishScriptVO(finalContent, summary);
+        } catch (RuntimeException exception) {
+            String errorMessage = StringUtils.hasText(exception.getMessage()) ? exception.getMessage() : "润色失败，请稍后重试";
+            polishMessagePersistenceService.fail(polishMessageId, errorMessage);
+            polishMessagePersistenceService.createAssistantMessage(
+                currentTenantId(), currentUserId(), script.getId(), polishMessageId,
+                "failed", "润色失败：" + errorMessage, null, errorMessage
+            );
+            throw exception;
+        }
+    }
+
+    @Override
+    public List<ScriptPolishMessageVO> polishMessages(Integer id) {
+        AiStoryboardScript script = ownedScript(id);
+        return polishMessageMapper.selectList(new LambdaQueryWrapper<AiScriptPolishMessage>()
+                .eq(AiScriptPolishMessage::getTenantId, currentTenantId())
+                .eq(AiScriptPolishMessage::getScriptId, script.getId())
+                .orderByAsc(AiScriptPolishMessage::getId))
+            .stream()
+            .map(this::toPolishMessageVO)
+            .toList();
+    }
+
+    private ScriptPolishMessageVO toPolishMessageVO(AiScriptPolishMessage message) {
+        ScriptPolishMessageVO vo = new ScriptPolishMessageVO();
+        vo.setId(String.valueOf(message.getId()));
+        vo.setReplyToId(message.getReplyToId() == null ? null : String.valueOf(message.getReplyToId()));
+        vo.setRole(message.getRole());
+        vo.setStatus(message.getStatus());
+        vo.setContent(message.getContent());
+        vo.setErrorMessage(message.getErrorMessage());
+        vo.setCreatedAt(message.getCreateTime() == null ? null : message.getCreateTime().toString());
+        return vo;
+    }
+
+    @Override
+    public List<ScriptVersionVO> versions(Integer id) {
+        AiStoryboardScript script = ownedScript(id);
+        return versionMapper.selectList(new LambdaQueryWrapper<AiScriptVersion>()
+                .eq(AiScriptVersion::getTenantId, currentTenantId())
+                .eq(AiScriptVersion::getScriptId, script.getId())
+                .orderByAsc(AiScriptVersion::getVersionNo))
+            .stream()
+            .map(version -> toVersionVO(version, script.getCurrentVersionId()))
+            .toList();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ScriptVO restoreVersion(Integer id, Integer versionId) {
+        AiStoryboardScript script = ownedScript(id);
+        AiScriptVersion target = versionMapper.selectOne(new LambdaQueryWrapper<AiScriptVersion>()
+            .eq(AiScriptVersion::getId, versionId)
+            .eq(AiScriptVersion::getTenantId, currentTenantId())
+            .eq(AiScriptVersion::getScriptId, script.getId())
+            .last("LIMIT 1"));
+        if (target == null) {
+            throw new BusinessException("脚本历史版本不存在或无权恢复");
+        }
+        String content = snapshotValue(target, "content");
+        if (!StringUtils.hasText(content)) {
+            throw new BusinessException("该历史版本内容为空，无法恢复");
+        }
+        AiScriptVersion restored = createVersion(
+            script,
+            content,
+            "恢复到版本 V" + target.getVersionNo(),
+            Map.of(
+                "source", "restore",
+                "summary", "已恢复到版本 V" + target.getVersionNo(),
+                "restoredFromVersionNo", target.getVersionNo()
+            )
+        );
+        script.setContentText(content);
+        script.setCurrentVersionId(restored.getId());
+        scriptMapper.updateById(script);
+        return ScriptConvert.toScriptVO(script);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ScriptVO update(Integer id, ScriptSaveDTO dto) {
         AiStoryboardScript script = ownedScript(id);
+        String previousContent = script.getContentText();
         if (StringUtils.hasText(dto.getName())) {
             script.setScriptName(dto.getName());
         }
@@ -331,8 +473,67 @@ public class ScriptServiceImpl implements ScriptService {
         if (dto.getContent() != null) {
             script.setContentText(dto.getContent());
         }
+        if (dto.getContent() != null && !Objects.equals(previousContent, dto.getContent())) {
+            AiScriptVersion version = createVersion(
+                script,
+                dto.getContent(),
+                "人工编辑并保存",
+                Map.of("source", "manual", "summary", "已保存人工编辑内容")
+            );
+            script.setCurrentVersionId(version.getId());
+        }
         scriptMapper.updateById(script);
         return ScriptConvert.toScriptVO(script);
+    }
+
+    private AiScriptVersion createVersion(
+        AiStoryboardScript script,
+        String content,
+        String changeNote,
+        Map<String, Object> metadata
+    ) {
+        AiScriptVersion latest = versionMapper.selectOne(new LambdaQueryWrapper<AiScriptVersion>()
+            .eq(AiScriptVersion::getTenantId, script.getTenantId())
+            .eq(AiScriptVersion::getScriptId, script.getId())
+            .orderByDesc(AiScriptVersion::getVersionNo)
+            .last("LIMIT 1"));
+        Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("content", content == null ? "" : content);
+        snapshot.putAll(metadata);
+        AiScriptVersion version = new AiScriptVersion();
+        version.setTenantId(script.getTenantId());
+        version.setScriptId(script.getId());
+        version.setVersionNo(latest == null ? 1 : latest.getVersionNo() + 1);
+        version.setVersionTitle(script.getScriptName() + " · V" + version.getVersionNo());
+        version.setContentSnapshot(JsonUtils.toJson(snapshot));
+        version.setChangeNote(changeNote);
+        versionMapper.insert(version);
+        return version;
+    }
+
+    private ScriptVersionVO toVersionVO(AiScriptVersion version, Integer currentVersionId) {
+        Map<String, Object> snapshot = JsonUtils.toMap(version.getContentSnapshot());
+        ScriptVersionVO vo = new ScriptVersionVO();
+        vo.setId(String.valueOf(version.getId()));
+        vo.setVersionNo(version.getVersionNo());
+        vo.setTitle(version.getVersionTitle());
+        vo.setContent(String.valueOf(snapshot.getOrDefault("content", "")));
+        vo.setChangeNote(version.getChangeNote());
+        vo.setSource(String.valueOf(snapshot.getOrDefault("source", "legacy")));
+        vo.setInstruction(stringSnapshotValue(snapshot, "instruction"));
+        vo.setSummary(stringSnapshotValue(snapshot, "summary"));
+        vo.setCurrent(Objects.equals(version.getId(), currentVersionId));
+        vo.setCreatedAt(version.getCreateTime() == null ? "" : version.getCreateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
+        return vo;
+    }
+
+    private String snapshotValue(AiScriptVersion version, String key) {
+        return stringSnapshotValue(JsonUtils.toMap(version.getContentSnapshot()), key);
+    }
+
+    private String stringSnapshotValue(Map<String, Object> snapshot, String key) {
+        Object value = snapshot.get(key);
+        return value == null ? "" : String.valueOf(value);
     }
 
     private String normalizeScriptStatus(String status) {
@@ -557,7 +758,7 @@ public class ScriptServiceImpl implements ScriptService {
     private String generateContent(GenerateScriptDTO dto, AiGenerationTask task, AiBrief brief) {
         String userPrompt = StringUtils.hasText(dto.getPrompt()) ? dto.getPrompt() : "";
         String productInfo = buildProductInfo(brief);
-        String templateText = templateInstruction(dto.getTemplateId());
+        String templateText = "template".equals(dto.getType()) ? templateInstruction(dto.getTemplateId()) : "";
         ScriptFormatInfo formatInfo = scriptFormatInfo(dto);
         Map<String, String> variables = new HashMap<>();
         variables.put("prompt", userPrompt);
@@ -588,9 +789,13 @@ public class ScriptServiceImpl implements ScriptService {
             variables
         );
         String contentContext = buildScriptContentContext(dto, productInfo, templateText, userPrompt, formatInfo);
-        String modelUserPrompt = renderedPrompt.getUserPrompt() + "\n\n【本次生成内容信息】\n" + contentContext;
+        String isolationRule = generationIsolationRule(dto.getType());
+        String modelSystemPrompt = renderedPrompt.getSystemPrompt() + "\n\n" + isolationRule;
+        String modelUserPrompt = renderedPrompt.getUserPrompt()
+            + "\n\n【本次生成内容信息】\n" + contentContext
+            + "\n\n" + isolationRule;
         try {
-            String content = llmClient.chat(renderedPrompt.getSystemPrompt(), modelUserPrompt);
+            String content = llmClient.chat(modelSystemPrompt, modelUserPrompt);
             if (StringUtils.hasText(content) && !"{}".equals(content.trim())) {
                 return content;
             }
@@ -674,21 +879,34 @@ public class ScriptServiceImpl implements ScriptService {
                 "用户补充要求：\n" + nullToEmpty(userPrompt)
             ).stream().filter(line -> !line.endsWith("：\n") && !line.endsWith("：")).toList().stream().reduce((a, b) -> a + "\n\n" + b).orElse("");
         }
-        String promptLabel = "original".equals(dto.getType()) ? "用户提示词" : "用户补充要求";
-        return List.of(
-            promptLabel + "：\n" + nullToEmpty(userPrompt),
+        List<String> commonContext = List.of(
+            ("original".equals(dto.getType()) ? "用户提示词" : "用户补充要求") + "：\n" + nullToEmpty(userPrompt),
             "产品 Brief：\n" + nullToEmpty(productInfo),
             "脚本类型：" + nullToEmpty(dto.getType()),
             "脚本格式：" + formatInfo.name(),
             "脚本格式要求：\n" + formatInfo.requirement(),
             "脚本时长：" + nullToEmpty(dto.getDuration()),
             "上传画面文件：" + nullToEmpty(dto.getProductFrameFileName()),
-            "上传画面 OCR / 表格解析文字：\n" + nullToEmpty(dto.getProductFrameContent()),
-            "模板信息：\n" + nullToEmpty(templateText),
-            "参考链接：" + nullToEmpty(dto.getReferenceUrl()),
-            "参考视频文案：\n" + nullToEmpty(dto.getReferenceCopy()),
-            "结构分析：\n" + nullToEmpty(dto.getStructureAnalysis())
-        ).stream().filter(line -> !line.endsWith("：\n") && !line.endsWith("：")).toList().stream().reduce((a, b) -> a + "\n\n" + b).orElse("");
+            "上传画面 OCR / 表格解析文字：\n" + nullToEmpty(dto.getProductFrameContent())
+        );
+        if (!"template".equals(dto.getType())) {
+            return commonContext.stream()
+                .filter(line -> !line.endsWith("：\n") && !line.endsWith("："))
+                .reduce((a, b) -> a + "\n\n" + b)
+                .orElse("");
+        }
+        return Stream.concat(commonContext.stream(), Stream.of("模板信息：\n" + nullToEmpty(templateText)))
+            .filter(line -> !line.endsWith("：\n") && !line.endsWith("："))
+            .reduce((a, b) -> a + "\n\n" + b)
+            .orElse("");
+    }
+
+    private String generationIsolationRule(String type) {
+        return switch (StringUtils.hasText(type) ? type : "original") {
+            case "viral" -> "【生成模式隔离规则】本次是爆款复刻，只能使用本次请求提供的参考文案、结构分析和产品 Brief；不得调用模板库脚本或其他历史脚本。";
+            case "template" -> "【生成模式隔离规则】本次是模板生成，只能使用本次明确选择的模板和产品 Brief；不得调用其他模板或其他历史脚本。";
+            default -> "【原创隔离规则】本次必须从零原创，只能使用用户本次提示词、所选产品 Brief、脚本配置和本次上传画面解析内容。禁止读取、模仿、改写、复述模板库脚本、爆款参考文案或任何历史脚本；即使请求中意外携带模板或参考字段也必须忽略。";
+        };
     }
 
     private String buildProductInfo(AiBrief brief) {

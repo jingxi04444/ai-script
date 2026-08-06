@@ -112,17 +112,6 @@ const emptyBriefRichValues: BriefRichValues = {
   secondaryPoints: '',
 };
 
-const buildStructuredBriefHtml = (brief: Brief) => {
-  const sections = [
-    ['核心卖点', brief.primarySellingPoint],
-    ['目标人群', brief.targetAudience],
-    ['使用场景', brief.targetScene],
-    ['其他要求', brief.otherRequirements],
-  ].filter(([, value]) => Boolean(value?.trim()));
-  if (!sections.length) return '<p>暂无完整 Brief 内容</p>';
-  return sections.map(([label, value]) => `<h3>${label}</h3><p>${escapeHtml(value)}</p>`).join('');
-};
-
 const sanitizeBriefHtml = (html: string) => {
   if (typeof document === 'undefined') return html;
   const template = document.createElement('template');
@@ -141,20 +130,6 @@ const sanitizeBriefHtml = (html: string) => {
     });
   });
   return template.innerHTML;
-};
-
-const getRichBriefContent = (brief: Brief, versionContent?: string) => {
-  const content = brief.briefContent || versionContent || '';
-  if (!content.trim()) return buildStructuredBriefHtml(brief);
-  try {
-    JSON.parse(content);
-    return buildStructuredBriefHtml(brief);
-  } catch {
-    const html = /<\/?[a-z][\s\S]*>/i.test(content)
-      ? content
-      : `<p>${escapeHtml(content)}</p>`;
-    return sanitizeBriefHtml(html);
-  }
 };
 
 const BriefDialog = ({
@@ -468,25 +443,24 @@ const BriefDialog = ({
 
   const handleDownload = () => {
     if (!displayBrief) return;
+    const richValues = richValuesFromBrief(displayBrief);
     const rows = [
-      ['产品名称', displayBrief.productName || displayBrief.name],
-      ['产品型号', displayBrief.productModel],
-      ['价格', displayBrief.price],
-      ['Slogan', displayBrief.slogan],
-      ['核心卖点', displayBrief.primarySellingPoint],
-      ['目标人群', displayBrief.targetAudience],
-      ['使用场景', displayBrief.targetScene],
-      ['其他要求', displayBrief.otherRequirements],
+      ['产品名称', escapeHtml(displayBrief.productName || displayBrief.name)],
+      ['产品型号', escapeHtml(displayBrief.productModel)],
+      ['产品价格', escapeHtml(displayBrief.price)],
+      ['产品 Slogan', escapeHtml(displayBrief.slogan)],
+      ['目标人群', sanitizeBriefHtml(richValues.audience || escapeHtml(displayBrief.targetAudience))],
+      ['产品特色卖点', sanitizeBriefHtml(richValues.features || escapeHtml(displayBrief.targetScene))],
+      ['产品主要卖点', sanitizeBriefHtml(richValues.mainPoints || escapeHtml(displayBrief.primarySellingPoint))],
+      ['产品次要卖点', sanitizeBriefHtml(richValues.secondaryPoints || escapeHtml(displayBrief.otherRequirements))],
     ];
-    const richBriefHtml = getRichBriefContent(displayBrief, currentVersion?.content);
     const html = `<!doctype html><html><head><meta charset="utf-8"><style>
       body{font-family:"Microsoft YaHei",sans-serif;padding:36px;color:#222}h1{font-size:24px}h2{margin-top:28px;font-size:18px}
-      table{width:100%;border-collapse:collapse;margin-top:24px}td{border:1px solid #bbb;padding:10px;vertical-align:top}
+      table{width:100%;border-collapse:collapse;margin-top:24px}td{border:1px solid #bbb;padding:10px;vertical-align:top;line-height:1.7}
       td:first-child{width:120px;font-weight:700;background:#f3f3f3}
     </style></head><body><h1>${escapeHtml(displayBrief.productName || displayBrief.name)}</h1>
-      <p>${escapeHtml(currentVersion?.label || '')} · ${escapeHtml(formatDateTime(displayBrief.updatedAt))}</p>
-      <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${escapeHtml(value)}</td></tr>`).join('')}</table>
-      <h2>完整 Brief</h2><div>${richBriefHtml}</div>
+      <p>${escapeHtml(currentVersion?.label || '')} · ${escapeHtml(formatDateTime(currentVersion?.createdAt || displayBrief.updatedAt))}</p>
+      <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value || '—'}</td></tr>`).join('')}</table>
     </body></html>`;
     const blob = new Blob(['\ufeff', html], { type: 'application/msword;charset=utf-8' });
     const url = URL.createObjectURL(blob);

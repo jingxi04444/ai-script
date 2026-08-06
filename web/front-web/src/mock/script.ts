@@ -1,4 +1,4 @@
-import type { PolishScriptParams, Script, ScriptTemplate } from '../types/script';
+import type { PolishScriptParams, Script, ScriptTemplate, ScriptVersion } from '../types/script';
 import { createSuccessResponse, unwrapApiResponse } from '../types/api';
 
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -37,6 +37,42 @@ const mockTemplates: ScriptTemplate[] = [
   { id: '10', name: '优惠促销型', actor: '女', people: '1人', popularity: '中', difficulty: '中等', locked: true },
 ];
 
+const mockScriptVersions = new Map<string, ScriptVersion[]>();
+
+const ensureMockVersions = (script: Script): ScriptVersion[] => {
+  const existing = mockScriptVersions.get(script.id);
+  if (existing) return existing;
+  const initial: ScriptVersion[] = [{
+    id: `${script.id}-version-1`,
+    versionNo: 1,
+    title: `${script.name} · V1`,
+    content: script.content || '',
+    changeNote: 'AI 生成原稿',
+    source: 'generate',
+    summary: '首次生成脚本',
+    current: true,
+    createdAt: script.createdAt,
+  }];
+  mockScriptVersions.set(script.id, initial);
+  return initial;
+};
+
+const appendMockVersion = (
+  script: Script,
+  data: Pick<ScriptVersion, 'content' | 'changeNote' | 'source' | 'instruction' | 'summary'>,
+) => {
+  const versions = ensureMockVersions(script);
+  versions.forEach((version) => { version.current = false; });
+  versions.push({
+    id: `${script.id}-version-${versions.length + 1}`,
+    versionNo: versions.length + 1,
+    title: `${script.name} · V${versions.length + 1}`,
+    ...data,
+    current: true,
+    createdAt: new Date().toISOString(),
+  });
+};
+
 export const mockScriptApi = {
   getList: async (_projectId: string) => {
     await delay(300);
@@ -72,6 +108,14 @@ export const mockScriptApi = {
     const script = mockScripts.find((s) => s.id === id);
     if (!script) throw new Error('Script not found');
     const nextScript = { ...script, ...data, updatedAt: new Date().toISOString() };
+    if (data.content !== undefined && data.content !== script.content) {
+      appendMockVersion(script, {
+        content: data.content || '',
+        changeNote: '人工编辑并保存',
+        source: 'manual',
+        summary: '已保存人工编辑内容',
+      });
+    }
     Object.assign(script, nextScript);
     return unwrapApiResponse(createSuccessResponse(nextScript));
   },
@@ -81,10 +125,46 @@ export const mockScriptApi = {
     const source = params.content.trim() || '暂无原脚本内容';
     const instruction = params.instruction.trim();
     const revised = `${source}\n\n【AI润色修改版】\n修改要求：${instruction}\n1. 开场更直接指出用户觉得“这个脚本不行”的核心问题，用一句更强的痛点钩子重新抓注意力。\n2. 中段把产品卖点改成更口语、更有画面感的表达，避免空泛描述。\n3. 结尾增加明确行动引导，让观众知道下一步要点击、咨询或下单。`;
+    const script = mockScripts.find((item) => item.id === _id);
+    if (script) {
+      script.content = revised;
+      script.updatedAt = new Date().toISOString();
+      appendMockVersion(script, {
+        content: revised,
+        changeNote: 'AI 继续润色',
+        source: 'ai_polish',
+        instruction,
+        summary: `已按“${instruction}”完成改写，重点优化开场钩子、卖点表达和结尾转化。`,
+      });
+    }
     return unwrapApiResponse(createSuccessResponse({
       content: revised,
       summary: `已按“${instruction}”完成改写，重点优化开场钩子、卖点表达和结尾转化。`,
     }));
+  },
+
+  getVersions: async (id: string) => {
+    await delay(160);
+    const script = mockScripts.find((item) => item.id === id);
+    if (!script) throw new Error('Script not found');
+    return unwrapApiResponse(createSuccessResponse(ensureMockVersions(script).map((item) => ({ ...item }))));
+  },
+
+  restoreVersion: async (id: string, versionId: string) => {
+    await delay(260);
+    const script = mockScripts.find((item) => item.id === id);
+    if (!script) throw new Error('Script not found');
+    const target = ensureMockVersions(script).find((item) => item.id === versionId);
+    if (!target) throw new Error('历史版本不存在');
+    script.content = target.content;
+    script.updatedAt = new Date().toISOString();
+    appendMockVersion(script, {
+      content: target.content,
+      changeNote: `恢复到版本 V${target.versionNo}`,
+      source: 'restore',
+      summary: `已恢复到版本 V${target.versionNo}`,
+    });
+    return unwrapApiResponse(createSuccessResponse({ ...script }));
   },
 
   delete: async (_id: string) => {

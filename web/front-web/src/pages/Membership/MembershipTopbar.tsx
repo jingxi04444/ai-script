@@ -15,9 +15,9 @@ const MembershipTopbar = ({ active, onRefresh, refreshing = false }: MembershipT
   return (
     <header className="membership-topbar">
       <nav className="membership-tabs" aria-label="会员中心导航">
-        <button className={active === 'plans' ? 'active' : ''} type="button" onClick={() => navigate('/membership')}>会员套餐</button>
-        <button className={active === 'orders' ? 'active' : ''} type="button" onClick={() => navigate('/membership/orders')}>订单记录</button>
         <button className={active === 'points' ? 'active' : ''} type="button" onClick={() => navigate('/membership/points')}>购买积分</button>
+        <button className={active === 'orders' ? 'active' : ''} type="button" onClick={() => navigate('/membership/orders')}>订阅管理</button>
+        <button className={active === 'plans' ? 'active' : ''} type="button" onClick={() => navigate('/membership')}>会员套餐</button>
       </nav>
       {onRefresh ? (
         <button className="membership-refresh" type="button" onClick={onRefresh} disabled={refreshing}>

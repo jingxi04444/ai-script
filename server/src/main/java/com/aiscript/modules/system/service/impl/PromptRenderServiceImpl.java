@@ -1,5 +1,6 @@
 package com.aiscript.modules.system.service.impl;
 
+import com.aiscript.framework.tenant.TenantContext;
 import com.aiscript.modules.system.entity.SysPromptTemplate;
 import com.aiscript.modules.system.mapper.SysPromptTemplateMapper;
 import com.aiscript.modules.system.service.PromptRenderService;
@@ -18,9 +19,17 @@ public class PromptRenderServiceImpl implements PromptRenderService {
 
     @Override
     public RenderedPrompt render(String sceneCode, String defaultSystemPrompt, String defaultUserPrompt, Map<String, String> variables) {
-        SysPromptTemplate template = promptTemplateMapper.selectList(new QueryWrapper<SysPromptTemplate>()
-                .eq("scene_code", sceneCode)
-                .eq("status", 1)
+        Integer tenantId = TenantContext.getTenantId();
+        QueryWrapper<SysPromptTemplate> query = new QueryWrapper<SysPromptTemplate>()
+            .eq("scene_code", sceneCode)
+            .eq("status", 1);
+        if (tenantId == null) {
+            query.isNull("tenant_id");
+        } else {
+            query.and(scope -> scope.eq("tenant_id", tenantId).or().isNull("tenant_id"));
+        }
+        SysPromptTemplate template = promptTemplateMapper.selectList(query
+                .orderByDesc("tenant_id")
                 .orderByDesc("update_time")
                 .orderByDesc("id")
                 .last("limit 1"))

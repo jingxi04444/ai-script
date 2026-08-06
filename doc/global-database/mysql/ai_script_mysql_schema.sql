@@ -755,6 +755,9 @@ CREATE TABLE ai_storyboard_script (
   brief_snapshot LONGTEXT DEFAULT NULL COMMENT '生成脚本时固化的Brief内容快照',
   script_name VARCHAR(220) NOT NULL COMMENT '脚本名称',
   script_type VARCHAR(40) NOT NULL DEFAULT 'viral' COMMENT '类型：viral/template/original',
+  generation_duration VARCHAR(40) DEFAULT NULL COMMENT '生成时选择的脚本时长',
+  generation_format VARCHAR(80) DEFAULT NULL COMMENT '生成时选择的脚本格式编码',
+  generation_format_name VARCHAR(120) DEFAULT NULL COMMENT '生成时脚本格式名称快照',
   status VARCHAR(32) NOT NULL DEFAULT 'draft' COMMENT '状态：draft/pending_review/changes_requested/revised_pending_review/approved',
   audit_status VARCHAR(32) NOT NULL DEFAULT 'not_submitted' COMMENT '审核状态',
   current_version_id INT DEFAULT NULL COMMENT '当前版本ID',
@@ -792,6 +795,29 @@ CREATE TABLE ai_script_version (
   UNIQUE KEY uk_ai_script_version (script_id, version_no),
   KEY idx_ai_script_version_tenant (tenant_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='脚本版本表';
+
+DROP TABLE IF EXISTS ai_script_polish_message;
+CREATE TABLE ai_script_polish_message (
+  id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  script_id INT NOT NULL COMMENT '脚本ID',
+  user_id INT NOT NULL COMMENT '发起润色的用户ID',
+  reply_to_id INT DEFAULT NULL COMMENT '回复的用户消息ID',
+  role VARCHAR(20) NOT NULL COMMENT '消息角色：user/assistant',
+  status VARCHAR(20) NOT NULL DEFAULT 'success' COMMENT '状态：pending/success/failed',
+  content LONGTEXT NOT NULL COMMENT '消息正文',
+  context_snapshot JSON DEFAULT NULL COMMENT '本次润色完整上下文快照',
+  error_message TEXT DEFAULT NULL COMMENT '失败原因',
+  create_by INT DEFAULT NULL COMMENT '创建人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  KEY idx_ai_script_polish_message_script (tenant_id, script_id, id),
+  KEY idx_ai_script_polish_message_user (tenant_id, user_id, create_time),
+  KEY idx_ai_script_polish_message_reply (reply_to_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='脚本AI润色聊天消息';
 
 DROP TABLE IF EXISTS ai_storyboard_shot;
 CREATE TABLE ai_storyboard_shot (

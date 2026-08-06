@@ -16,6 +16,9 @@ public final class ScriptConvert {
         vo.setProjectId(String.valueOf(script.getProjectId()));
         vo.setBriefId(script.getBriefId() == null ? null : String.valueOf(script.getBriefId()));
         vo.setType(script.getScriptType());
+        vo.setDuration(script.getGenerationDuration());
+        vo.setFormat(script.getGenerationFormat());
+        vo.setFormatName(script.getGenerationFormatName());
         vo.setStatus(normalizeStatus(script.getStatus()));
         vo.setContent(script.getContentText());
         vo.setCreatedAt(script.getCreateTime() == null ? null : script.getCreateTime().toString());

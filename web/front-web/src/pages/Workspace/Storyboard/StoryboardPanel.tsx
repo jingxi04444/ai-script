@@ -5,6 +5,7 @@ import {
   LeftOutlined,
   RightOutlined,
   MoreOutlined,
+  DeleteOutlined,
   CopyOutlined,
   EditOutlined,
   EyeOutlined,
@@ -14,7 +15,7 @@ import {
   AppstoreOutlined,
   UnorderedListOutlined,
 } from '@ant-design/icons';
-import { message, Select } from 'antd';
+import { Dropdown, message, Modal, Select } from 'antd';
 import { scriptApi } from '../../../api/script';
 import { getScriptStatusLabel, normalizeScriptStatus, scriptStatusOptions } from '../../../types/script';
 import type { Script } from '../../../types/script';
@@ -52,6 +53,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
   const [preview, setPreview] = useState<Script | null>(null);
   const [renamingScriptId, setRenamingScriptId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
   const pageSize = viewMode === 'card' ? 6 : 10;
 
   const categoryTypeTones = getCategoryTypeTones(activeCategory);
@@ -89,7 +91,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
       disposed = true;
       window.clearTimeout(timer);
     };
-  }, [activeCategory, currentPage, pageSize, projectId, requestedType, searchText, statusFilter]);
+  }, [activeCategory, currentPage, pageSize, projectId, refreshKey, requestedType, searchText, statusFilter]);
 
   const apiItems = scripts.map((script) => {
     const typeTone = script.type as string;
@@ -139,7 +141,6 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
     const item = allItems.find((script) => script.id === id);
     if (!item) return message.error('脚本不存在');
     onPolishScript?.(item.typeTone as ScriptType, id);
-    message.success('已返回脚本生成器，可继续编辑润色');
   };
 
   const copyScript = async (id: string) => {
@@ -151,6 +152,47 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
       message.error('脚本内容加载失败');
     }
   };
+
+  const deleteScript = (id: string, name: string) => {
+    Modal.confirm({
+      title: '确认删除这篇脚本？',
+      content: `“${name}”删除后将无法恢复，请确认是否继续。`,
+      okText: '确认删除',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      centered: true,
+      onOk: async () => {
+        try {
+          await scriptApi.delete(id);
+          if (preview?.id === id) setPreview(null);
+          if (renamingScriptId === id) setRenamingScriptId(null);
+          if (scripts.length === 1 && currentPage > 1) {
+            setCurrentPage((page) => page - 1);
+          } else {
+            setRefreshKey((key) => key + 1);
+          }
+          message.success('脚本已删除');
+        } catch (error) {
+          message.error(error instanceof Error ? error.message : '脚本删除失败');
+          throw error;
+        }
+      },
+    });
+  };
+
+  const scriptMoreMenu = (id: string, name: string) => ({
+    items: [
+      {
+        key: 'delete',
+        danger: true,
+        icon: <DeleteOutlined />,
+        label: '删除脚本',
+      },
+    ],
+    onClick: ({ key }: { key: string }) => {
+      if (key === 'delete') deleteScript(id, name);
+    },
+  });
 
   const startRenameScript = (id: string, name: string) => {
     setRenamingScriptId(id);
@@ -340,7 +382,9 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
                   <button onClick={() => previewScript(item.id)}><EyeOutlined />预览</button>
                   <button onClick={() => polishScript(item.id)}><EditOutlined />继续润色</button>
                   <button onClick={() => copyScript(item.id)}><CopyOutlined />复制</button>
-                  <button onClick={() => message.info(`更多操作：${item.name}`)}><MoreOutlined />更多</button>
+                  <Dropdown menu={scriptMoreMenu(item.id, item.name)} trigger={['click']} placement="bottomRight">
+                    <button><MoreOutlined />更多</button>
+                  </Dropdown>
                 </div>
                 </article>
               </Fragment>
@@ -373,7 +417,9 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
                   <button onClick={() => previewScript(item.id)}><EyeOutlined />预览</button>
                   <button onClick={() => polishScript(item.id)}><EditOutlined />继续润色</button>
                   <button onClick={() => copyScript(item.id)}><CopyOutlined />复制</button>
-                  <button onClick={() => message.info(`更多操作：${item.name}`)}><MoreOutlined />更多</button>
+                  <Dropdown menu={scriptMoreMenu(item.id, item.name)} trigger={['click']} placement="bottomRight">
+                    <button><MoreOutlined />更多</button>
+                  </Dropdown>
                 </div>
                 </article>
               </Fragment>

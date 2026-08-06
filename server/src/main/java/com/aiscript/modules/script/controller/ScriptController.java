@@ -10,8 +10,10 @@ import com.aiscript.modules.script.dto.TemplateSaveDTO;
 import com.aiscript.modules.script.service.ScriptService;
 import com.aiscript.modules.script.vo.PolishScriptVO;
 import com.aiscript.modules.script.vo.ScriptListVO;
+import com.aiscript.modules.script.vo.ScriptPolishMessageVO;
 import com.aiscript.modules.script.vo.ScriptTemplateVO;
 import com.aiscript.modules.script.vo.ScriptVO;
+import com.aiscript.modules.script.vo.ScriptVersionVO;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -69,6 +71,21 @@ public class ScriptController {
     @PostMapping("/{id}/polish")
     public R<PolishScriptVO> polish(@PathVariable Integer id, @Valid @RequestBody PolishScriptDTO payload) {
         return R.ok(scriptService.polish(id, payload));
+    }
+
+    @GetMapping("/{id}/polish-messages")
+    public R<List<ScriptPolishMessageVO>> polishMessages(@PathVariable Integer id) {
+        return R.ok(scriptService.polishMessages(id));
+    }
+
+    @GetMapping("/{id}/versions")
+    public R<List<ScriptVersionVO>> versions(@PathVariable Integer id) {
+        return R.ok(scriptService.versions(id));
+    }
+
+    @PostMapping("/{id}/versions/{versionId}/restore")
+    public R<ScriptVO> restoreVersion(@PathVariable Integer id, @PathVariable Integer versionId) {
+        return R.ok(scriptService.restoreVersion(id, versionId));
     }
 
     @PutMapping("/{id}")

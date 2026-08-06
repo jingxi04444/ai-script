@@ -2,6 +2,17 @@
   color: #eaf2f3;
 }
 
+.script-generator-workspace.is-dialog-only {
+  min-height: 0;
+  height: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.script-generator-workspace.is-dialog-only > :not(.script-output-backdrop) {
+  display: none !important;
+}
+
 .script-generation-wait {
   position: fixed;
   inset: 0;
@@ -2044,6 +2055,290 @@
   color: #89ef6e;
 }
 
+.storyboard-cell-display {
+  position: relative;
+  min-height: 100%;
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.storyboard-cell-display.is-annotating {
+  min-height: inherit;
+}
+
+.storyboard-cell-comment-trigger,
+.storyboard-cell-annotation {
+  border: 1px solid rgba(116, 255, 120, 0.25);
+  color: #baf8ad;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.storyboard-cell-comment-trigger {
+  position: absolute;
+  right: 5px;
+  top: 5px;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0;
+  border-radius: 6px;
+  background: rgba(15, 25, 19, 0.92);
+  opacity: 0.36;
+}
+
+.storyboard-cell-display:hover .storyboard-cell-comment-trigger,
+.storyboard-cell-comment-trigger:focus-visible,
+.storyboard-cell-comment-trigger:hover {
+  opacity: 1;
+  background: rgba(116, 255, 120, 0.14);
+}
+
+.storyboard-cell-annotation {
+  position: absolute;
+  right: 5px;
+  top: 5px;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  background: rgba(47, 122, 55, 0.95);
+  box-shadow: 0 0 0 2px rgba(116, 255, 120, 0.12);
+}
+
+.polish-annotation-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(116, 255, 120, 0.22);
+  border-radius: 9px;
+  background: rgba(116, 255, 120, 0.08);
+  color: #c9f8c0;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.polish-annotation-summary span {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.polish-annotation-summary button {
+  flex: 0 0 auto;
+  padding: 3px 8px;
+  border: 0;
+  background: transparent;
+  color: #93a09f;
+  font-size: 11px;
+}
+
+.script-annotation-modal .ant-modal-content,
+.script-version-modal .ant-modal-content {
+  border: 1px solid rgba(116, 255, 120, 0.2);
+  border-radius: 18px;
+  background: #151a19;
+  color: #edf4f1;
+}
+
+.script-annotation-modal .ant-modal-header,
+.script-version-modal .ant-modal-header {
+  background: transparent;
+}
+
+.script-annotation-modal .ant-modal-title,
+.script-version-modal .ant-modal-title,
+.script-annotation-modal .ant-modal-close,
+.script-version-modal .ant-modal-close {
+  color: #f4f8f6;
+}
+
+.script-annotation-modal .ant-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.script-annotation-delete {
+  margin-right: auto;
+  min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 103, 103, 0.28);
+  border-radius: 7px;
+  background: rgba(255, 103, 103, 0.08);
+  color: #ff9292;
+}
+
+.script-annotation-target,
+.script-annotation-editor {
+  display: grid;
+  gap: 7px;
+}
+
+.script-annotation-target {
+  margin-bottom: 16px;
+}
+
+.script-annotation-target > span,
+.script-annotation-editor > span {
+  color: #9ba8a5;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.script-annotation-target p {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.045);
+  color: #dbe4e0;
+  line-height: 1.6;
+}
+
+.script-annotation-editor textarea {
+  min-height: 120px;
+  resize: vertical;
+  padding: 11px 12px;
+  border: 1px solid rgba(116, 255, 120, 0.22);
+  border-radius: 10px;
+  outline: none;
+  background: #0d1211;
+  color: #f2f6f4;
+  line-height: 1.6;
+}
+
+.script-annotation-editor textarea:focus {
+  border-color: rgba(116, 255, 120, 0.65);
+  box-shadow: 0 0 0 3px rgba(116, 255, 120, 0.08);
+}
+
+.script-version-tip {
+  margin: 0 0 14px;
+  color: #93a19d;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.script-version-list {
+  max-height: 60vh;
+  display: grid;
+  gap: 10px;
+  overflow: auto;
+}
+
+.script-version-list article {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.script-version-list article.is-current {
+  border-color: rgba(116, 255, 120, 0.35);
+  background: rgba(116, 255, 120, 0.06);
+}
+
+.script-version-index {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(116, 255, 120, 0.12);
+  color: #81ee71;
+  font-size: 13px;
+  font-weight: 950;
+}
+
+.script-version-detail {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.script-version-detail header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.script-version-detail strong {
+  color: #eef4f1;
+  font-size: 13px;
+}
+
+.script-version-detail em {
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: rgba(116, 255, 120, 0.12);
+  color: #81ee71;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 850;
+}
+
+.script-version-detail time,
+.script-version-detail small {
+  color: #83908d;
+  font-size: 11px;
+}
+
+.script-version-detail p {
+  margin: 0;
+  overflow: hidden;
+  color: #bac5c1;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.script-version-detail p span {
+  color: #80e974;
+}
+
+.script-version-list article > button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid rgba(116, 255, 120, 0.25);
+  border-radius: 8px;
+  background: rgba(116, 255, 120, 0.08);
+  color: #bdf9b2;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.script-version-list article > button:disabled {
+  border-color: rgba(255, 255, 255, 0.06);
+  color: #6f7a77;
+  cursor: not-allowed;
+}
+
+.script-version-empty {
+  padding: 40px;
+  color: #7f8c88;
+  text-align: center;
+}
+
 .polish-chat-messages,
 .polish-preview-scroll {
   min-height: 0;
@@ -2108,6 +2403,18 @@
 
 .polish-message.thinking p {
   color: #a8b3b8;
+}
+
+.polish-message.failed p {
+  border-color: rgba(255, 91, 91, 0.55);
+  background: rgba(94, 25, 25, 0.34);
+}
+
+.polish-message.failed p small {
+  display: block;
+  margin-top: 6px;
+  color: #ff8d8d;
+  font-size: 12px;
 }
 
 .polish-quick-prompts {

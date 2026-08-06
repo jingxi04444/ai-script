@@ -1,7 +1,7 @@
 import { config } from '../config';
 import { mockScriptApi } from '../mock/script';
 import api from './request';
-import type { Script, ScriptFormatOption, ScriptTemplate, GenerateScriptParams, PolishScriptParams, PolishScriptResult } from '../types/script';
+import type { Script, ScriptFormatOption, ScriptPolishMessage, ScriptTemplate, ScriptVersion, GenerateScriptParams, PolishScriptParams, PolishScriptResult } from '../types/script';
 import type { PaginatedResponse } from '../types/api';
 
 export interface ScriptPageParams {
@@ -72,6 +72,21 @@ export const scriptApi = {
   polish: (id: string, params: PolishScriptParams): Promise<PolishScriptResult> => {
     if (config.useMock) return mockScriptApi.polish(id, params);
     return api.post(`/scripts/${id}/polish`, params, { timeout: 180000 });
+  },
+
+  getPolishMessages: (id: string): Promise<ScriptPolishMessage[]> => {
+    if (config.useMock) return Promise.resolve([]);
+    return api.get(`/scripts/${id}/polish-messages`);
+  },
+
+  getVersions: (id: string): Promise<ScriptVersion[]> => {
+    if (config.useMock) return mockScriptApi.getVersions(id);
+    return api.get(`/scripts/${id}/versions`);
+  },
+
+  restoreVersion: (id: string, versionId: string): Promise<Script> => {
+    if (config.useMock) return mockScriptApi.restoreVersion(id, versionId);
+    return api.post(`/scripts/${id}/versions/${versionId}/restore`);
   },
 
   delete: (id: string): Promise<void> => {

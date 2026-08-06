@@ -1,0 +1,97 @@
+.development-panel {
+  position: relative;
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  padding: 48px;
+  border: 1px solid rgba(88, 102, 96, 0.44);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 50% 36%, rgba(84, 231, 103, 0.09), transparent 34%),
+    linear-gradient(145deg, rgba(24, 29, 27, 0.98), rgba(15, 18, 17, 0.98));
+}
+
+.development-panel-glow {
+  position: absolute;
+  width: 360px;
+  height: 360px;
+  border-radius: 50%;
+  background: rgba(83, 235, 105, 0.08);
+  filter: blur(80px);
+  pointer-events: none;
+}
+
+.development-panel-content {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 560px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.development-panel-icon {
+  width: 76px;
+  height: 76px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 20px;
+  border: 1px solid rgba(92, 241, 111, 0.44);
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(58, 139, 66, 0.3), rgba(28, 62, 34, 0.2));
+  color: #62ef75;
+  box-shadow: 0 18px 50px rgba(34, 121, 47, 0.18);
+  font-size: 34px;
+}
+
+.development-panel-badge {
+  padding: 5px 13px;
+  border: 1px solid rgba(96, 239, 115, 0.28);
+  border-radius: 999px;
+  background: rgba(62, 143, 72, 0.15);
+  color: #77ed83;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.development-panel h2 {
+  margin: 16px 0 10px;
+  color: #f4f8f5;
+  font-size: clamp(30px, 3vw, 42px);
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.development-panel p {
+  margin: 0;
+  color: #9da9a3;
+  font-size: 16px;
+  line-height: 1.8;
+}
+
+.development-panel-date {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 28px;
+  padding: 12px 20px;
+  border: 1px solid rgba(97, 112, 104, 0.52);
+  border-radius: 12px;
+  background: rgba(28, 33, 31, 0.84);
+  color: #dce5df;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.development-panel-date .anticon {
+  color: #61e873;
+}
+
+@media (max-width: 1440px) {
+  .development-panel {
+    padding: 32px;
+  }
+}

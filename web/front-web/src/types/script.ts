@@ -26,6 +26,9 @@ export interface Script {
   briefId?: string;
   briefName?: string;
   type: ScriptType;
+  duration?: string;
+  format?: string;
+  formatName?: string;
   status: ScriptStatus;
   content?: string;
   createdAt: string;
@@ -87,8 +90,11 @@ export type ScriptPolishRole = 'user' | 'assistant';
 
 export interface ScriptPolishMessage {
   id: string;
+  replyToId?: string;
   role: ScriptPolishRole;
+  status?: 'pending' | 'success' | 'failed';
   content: string;
+  errorMessage?: string;
   createdAt: string;
 }
 
@@ -105,4 +111,17 @@ export interface PolishScriptParams {
 export interface PolishScriptResult {
   content: string;
   summary: string;
+}
+
+export interface ScriptVersion {
+  id: string;
+  versionNo: number;
+  title?: string;
+  content: string;
+  changeNote?: string;
+  source?: 'generate' | 'ai_polish' | 'manual' | 'restore' | 'legacy';
+  instruction?: string;
+  summary?: string;
+  current: boolean;
+  createdAt: string;
 }
