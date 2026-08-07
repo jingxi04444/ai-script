@@ -621,7 +621,6 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
         setPolishMessages([defaultPolishMessage()]);
       });
       setResultDialogOpen(true);
-      clearEditScriptParam();
     }).catch(() => message.warning('脚本内容加载失败'));
   }, [editScriptId]);
 

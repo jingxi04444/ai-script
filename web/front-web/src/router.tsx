@@ -14,6 +14,7 @@ const PaymentOrdersPage = lazy(() => import('./pages/PaymentOrders/PaymentOrders
 const MembershipPage = lazy(() => import('./pages/Membership/MembershipPage'));
 const MembershipOrdersPage = lazy(() => import('./pages/Membership/MembershipOrdersPage'));
 const MembershipPointsPage = lazy(() => import('./pages/Membership/MembershipPointsPage'));
+const MembershipExchangePage = lazy(() => import('./pages/Membership/MembershipExchangePage'));
 const NotificationsPage = lazy(() => import('./pages/Notifications/NotificationsPage'));
 const PaymentResultPage = lazy(() => import('./pages/PaymentResult/PaymentResultPage'));
 
@@ -75,6 +76,10 @@ export const router: RouteObject[] = [
   {
     path: '/membership/points',
     element: <RequireAuth><LazyLoad><MembershipPointsPage /></LazyLoad></RequireAuth>,
+  },
+  {
+    path: '/membership/exchange',
+    element: <RequireAuth><LazyLoad><MembershipExchangePage /></LazyLoad></RequireAuth>,
   },
   {
     path: '/membership/auto-renew',

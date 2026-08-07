@@ -446,7 +446,6 @@ const BriefDialog = ({
     const richValues = richValuesFromBrief(displayBrief);
     const rows = [
       ['产品名称', escapeHtml(displayBrief.productName || displayBrief.name)],
-      ['产品型号', escapeHtml(displayBrief.productModel)],
       ['产品价格', escapeHtml(displayBrief.price)],
       ['产品 Slogan', escapeHtml(displayBrief.slogan)],
       ['目标人群', sanitizeBriefHtml(richValues.audience || escapeHtml(displayBrief.targetAudience))],

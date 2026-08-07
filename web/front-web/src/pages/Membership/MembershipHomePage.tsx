@@ -8,14 +8,14 @@ import {
   UserOutlined,
 } from '@ant-design/icons';
 import { QRCode, Select, Spin, message, Modal } from 'antd';
-import HomeRail from '../../components/Layout/HomeRail';
 import { membershipApi } from '../../api/membership';
 import { paymentApi } from '../../api/payment';
-import type { MembershipBenefit, MembershipPlan, MembershipPlanSku, MembershipPurchaseMode, PointAccount, TemplateCustomRequest, UserMembership } from '../../types/membership';
+import { siteApi, type HomeBanner } from '../../api/site';
+import type { MembershipBenefit, MembershipPlan, MembershipPlanSku, MembershipPurchaseMode, PointAccount, UserMembership } from '../../types/membership';
 import type { PaymentOrder } from '../../types/payment';
-import MembershipTopbar from './MembershipTopbar';
 import { formatDate } from '../../utils/format';
 import { useAuthStore } from '../../stores/authStore';
+import { useNavigate } from 'react-router-dom';
 import './membership-page.css';
 
 type PurchaseMode = MembershipPurchaseMode['value'];
@@ -25,6 +25,35 @@ const purchaseModeFallbacks: MembershipPurchaseMode[] = [
   { value: 'once_quarter', label: '季卡', hint: '购买一个季度', enabled: true, displayOrder: 20 },
   { value: 'once_year', label: '年卡', hint: '购买一年', badge: '限时优惠', enabled: true, displayOrder: 30 },
 ];
+
+const purchaseModeVisualOrder: Record<PurchaseMode, number> = {
+  once_year: 10,
+  once_quarter: 20,
+  once_month: 30,
+};
+
+const sortPurchaseModesForDisplay = (modes: MembershipPurchaseMode[]) => (
+  [...modes].sort((left, right) => (
+    purchaseModeVisualOrder[left.value] - purchaseModeVisualOrder[right.value]
+    || left.displayOrder - right.displayOrder
+  ))
+);
+
+const resolveFirstPurchaseMode = (
+  planList: MembershipPlan[],
+  modeList: MembershipPurchaseMode[],
+): PurchaseMode => {
+  const enabledModes = new Set<PurchaseMode>();
+  const purchasablePlans = planList.some((plan) => !plan.free)
+    ? planList.filter((plan) => !plan.free)
+    : planList;
+  purchasablePlans.forEach((plan) => (plan.skus || []).forEach((sku) => {
+    enabledModes.add(purchaseModeOf(sku));
+  }));
+  return sortPurchaseModesForDisplay(
+    modeList.filter((option) => option.enabled && enabledModes.has(option.value)),
+  )[0]?.value || 'once_month';
+};
 
 const matchesPurchaseMode = (sku: MembershipPlanSku, mode: PurchaseMode) => {
   if (sku.billingMode !== 'one_time') return false;
@@ -93,6 +122,7 @@ const benefitCategoryLabel = (category: string) => benefitCategoryMeta[category]
 const benefitCategoryOrder = (category: string) => benefitCategoryMeta[category]?.order ?? 999;
 
 const MembershipHomePage = () => {
+  const navigate = useNavigate();
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [purchaseModeConfig, setPurchaseModeConfig] = useState<MembershipPurchaseMode[]>(purchaseModeFallbacks);
   const [current, setCurrent] = useState<UserMembership | null>(null);
@@ -104,11 +134,7 @@ const MembershipHomePage = () => {
   const [pointsAccount, setPointsAccount] = useState<PointAccount | null>(null);
   const [submittingSku, setSubmittingSku] = useState<string | null>(null);
   const [order, setOrder] = useState<PaymentOrder | null>(null);
-  const [customRequestOpen, setCustomRequestOpen] = useState(false);
-  const [customRequests, setCustomRequests] = useState<TemplateCustomRequest[]>([]);
-  const [customRequestForm, setCustomRequestForm] = useState({ title: '', requirements: '', contact: '' });
-  const [customRequestSubmitting, setCustomRequestSubmitting] = useState(false);
-  const [comparisonOpen, setComparisonOpen] = useState(false);
+  const [membershipBanner, setMembershipBanner] = useState<HomeBanner | null>(null);
   const user = useAuthStore((state) => state.user);
 
   const load = async () => {
@@ -125,8 +151,7 @@ const MembershipHomePage = () => {
       setCurrent(membership);
       setPointsAccount(pointAccount);
       const currentPlan = planList.find((plan) => plan.id === membership?.planId);
-      const currentSku = currentPlan?.skus?.find((sku) => sku.id === membership?.skuId);
-      const initialMode = currentSku ? purchaseModeOf(currentSku) : 'once_month';
+      const initialMode = resolveFirstPurchaseMode(planList, modeList);
       setPurchaseMode(initialMode);
       setSelectedSkuIds(buildSkuSelectionMap(planList, initialMode));
       const firstPurchasable = planList.find((plan) => !plan.free) || planList[0];
@@ -139,6 +164,12 @@ const MembershipHomePage = () => {
   };
 
   useEffect(() => { void load(); }, []);
+
+  useEffect(() => {
+    siteApi.getHomeBanners()
+      .then((items) => setMembershipBanner(items.find((item) => item.imageUrl) || items[0] || null))
+      .catch(() => setMembershipBanner(null));
+  }, []);
 
   useEffect(() => {
     if (!plans.length) return;
@@ -158,10 +189,14 @@ const MembershipHomePage = () => {
       .sort((left, right) => left.displayOrder - right.displayOrder);
   }, [plans, purchaseModeConfig]);
 
+  const displayedPurchaseModeOptions = useMemo(() => {
+    return sortPurchaseModesForDisplay(purchaseModeOptions);
+  }, [purchaseModeOptions]);
+
   useEffect(() => {
     if (!purchaseModeOptions.length || purchaseModeOptions.some((option) => option.value === purchaseMode)) return;
-    setPurchaseMode(purchaseModeOptions[0].value);
-  }, [purchaseMode, purchaseModeOptions]);
+    setPurchaseMode(displayedPurchaseModeOptions[0].value);
+  }, [displayedPurchaseModeOptions, purchaseMode, purchaseModeOptions]);
 
   const comparisonRows = useMemo(() => {
     const rows = new Map<string, {
@@ -220,72 +255,6 @@ const MembershipHomePage = () => {
   const qrContent = order?.qrContent || order?.payParams?.qrCode || order?.payParams?.payUrl || '';
   const rewardPoints = pointsAccount?.availablePoints ?? 0;
   const membershipExpiry = current?.currentPeriodEnd || current?.expireTime;
-  const currentPlan = plans.find((plan) => plan.id === current?.planId);
-  const canRequestExclusiveTemplate = Boolean(currentPlan?.benefits?.some((benefit) => (
-    benefit.code === 'EXCLUSIVE_TEMPLATE_REQUEST' && benefit.enabled && benefit.value === 'true'
-  )));
-
-  const showUnavailableBenefitReason = (benefit: MembershipBenefit, planName: string) => {
-    Modal.confirm({
-      title: `${benefit.name}暂未开通`,
-      content: `${planName}不包含“${benefit.name}”权益，因此当前无法使用。你可以查看权益对比，选择包含该功能的会员套餐。`,
-      okText: '查看权益对比',
-      cancelText: '知道了',
-      centered: true,
-      onOk: () => setComparisonOpen(true),
-    });
-  };
-
-  const handleExclusiveTemplateClick = () => {
-    if (canRequestExclusiveTemplate) {
-      void openCustomRequest();
-      return;
-    }
-    const benefit = currentPlan?.benefits?.find((item) => item.code === 'EXCLUSIVE_TEMPLATE_REQUEST');
-    showUnavailableBenefitReason(benefit || {
-      code: 'EXCLUSIVE_TEMPLATE_REQUEST',
-      name: '独家模板定制',
-      category: '模板权益',
-      value: 'false',
-      valueType: 'boolean',
-      enabled: true,
-      resetType: 'none',
-      previewOnly: false,
-    }, currentPlan?.name || '当前套餐');
-  };
-
-  const openCustomRequest = async () => {
-    setCustomRequestOpen(true);
-    try {
-      const result = await membershipApi.templateCustomRequests({ page: 1, pageSize: 10 });
-      setCustomRequests(result.list || []);
-    } catch (error) {
-      message.error((error as { message?: string })?.message || '定制模板工单加载失败');
-    }
-  };
-
-  const submitCustomRequest = async () => {
-    if (!customRequestForm.title.trim() || !customRequestForm.requirements.trim()) {
-      message.warning('请填写模板标题和详细需求');
-      return;
-    }
-    setCustomRequestSubmitting(true);
-    try {
-      const created = await membershipApi.createTemplateCustomRequest({
-        title: customRequestForm.title.trim(),
-        requirements: customRequestForm.requirements.trim(),
-        contact: customRequestForm.contact.trim() || undefined,
-      });
-      setCustomRequests((previous) => [created, ...previous]);
-      setCustomRequestForm({ title: '', requirements: '', contact: '' });
-      message.success('独家定制模板工单已提交');
-    } catch (error) {
-      message.error((error as { message?: string })?.message || '定制模板工单提交失败');
-    } finally {
-      setCustomRequestSubmitting(false);
-    }
-  };
-
   const submitFormHtml = (formHtml: string) => {
     const host = document.createElement('div');
     host.style.display = 'none';
@@ -394,17 +363,9 @@ const MembershipHomePage = () => {
   };
 
   return (
-    <div className="membership-shell">
-      <HomeRail
-        activeLabel="会员中心"
-        membershipName={current?.planName || (loading ? '' : '未开通会员')}
-        pointBalance={pointsAccount?.availablePoints}
-      />
-
-      <main className="membership-page">
-        <MembershipTopbar active="plans" onRefresh={() => void load()} refreshing={loading} />
-
-        <section className="membership-profile-strip" aria-label="会员账户信息">
+    <div className="membership-shell membership-shell-redesign">
+      <main className="membership-page membership-page-redesign">
+        <header className="membership-design-header" aria-label="会员账户信息">
           <div className="membership-profile-identity">
             <span className="membership-profile-avatar">
               {user?.avatar ? <img src={user.avatar} alt="会员头像" /> : <UserOutlined />}
@@ -415,42 +376,26 @@ const MembershipHomePage = () => {
             </div>
           </div>
           <div className="membership-profile-meta">
-            <span>会员有效期</span>
+            <span>套餐到期</span>
             <strong>{membershipExpiry ? formatDate(membershipExpiry, 'YYYY.MM.DD HH:mm') : '尚未开通'}</strong>
           </div>
           <div className="membership-profile-meta membership-profile-points">
             <span>积分详情</span>
             <strong>{rewardPoints}</strong>
           </div>
-          <div className="membership-profile-actions">
-            <button
-              className={`membership-exclusive-button${canRequestExclusiveTemplate ? '' : ' is-locked'}`}
-              type="button"
-              onClick={handleExclusiveTemplateClick}
-            >
-              独家模板定制
-            </button>
-            <button
-              className="membership-renew-button"
-              type="button"
-              onClick={() => document.querySelector('.membership-commerce')?.scrollIntoView({ behavior: 'smooth' })}
-            >
-              立即续费
-            </button>
-          </div>
-        </section>
+          <nav className="membership-design-nav" aria-label="会员中心导航">
+            <button type="button" onClick={() => navigate('/membership/points')}>购买积分</button>
+            <button type="button" onClick={() => navigate('/membership/orders')}>订阅管理</button>
+            <button type="button" onClick={() => navigate('/membership/exchange')}>会员兑换</button>
+          </nav>
+        </header>
 
         {loading ? <div className="membership-loading"><Spin size="large" /></div> : (
+          <Fragment>
           <section className="membership-commerce">
             <div className="membership-catalog">
-              <div className="membership-catalog-heading">
-                <div>
-                  <span className="membership-eyebrow"><CrownOutlined /> 会员订阅</span>
-                  <h1>选择适合你的会员套餐</h1>
-                </div>
-              </div>
               <div className={`membership-cycle-switch mode-count-${Math.max(1, purchaseModeOptions.length)}`} role="group" aria-label="购买方式">
-                {purchaseModeOptions.map((option) => (
+                {displayedPurchaseModeOptions.map((option) => (
                   <button
                     key={option.value}
                     className={purchaseMode === option.value ? 'active' : ''}
@@ -476,13 +421,9 @@ const MembershipHomePage = () => {
                     const originalPrice = Number(sku?.originalPrice || sku?.price || 0);
                     const price = Number(sku?.price || 0);
                     const availableBenefits = (plan.benefits || []).filter(isAvailableBenefit);
-                    const benefitGroups = Array.from(availableBenefits.reduce((groups, benefit) => {
-                      const category = benefit.category || '其他权益';
-                      groups.set(category, [...(groups.get(category) || []), benefit]);
-                      return groups;
-                    }, new Map<string, MembershipBenefit[]>()).entries())
-                      .map(([category, benefits]) => ({ category, label: benefitCategoryLabel(category), benefits }))
-                      .sort((left, right) => benefitCategoryOrder(left.category) - benefitCategoryOrder(right.category));
+                    const cardBenefits = availableBenefits.slice(0, 6);
+                    const highlightBenefits = cardBenefits.slice(0, 2);
+                    const standardBenefits = cardBenefits.slice(2);
                     return (
                       <article
                         key={plan.id}
@@ -514,22 +455,25 @@ const MembershipHomePage = () => {
                           </div>
                         </div>
                         <div className="membership-plan-benefits">
-                          <div className="membership-plan-benefit-groups">
-                            {benefitGroups.map((group) => (
-                              <section className="membership-plan-benefit-group" key={group.category}>
-                                <h3>{group.label}</h3>
-                                <ul>
-                                  {group.benefits.map((benefit) => (
-                                    <li key={benefit.code}>
-                                      <CheckOutlined />
-                                      <span>{benefit.name}</span>
-                                      <b>{benefitLabel(benefit.value, benefit.unit)}</b>
-                                    </li>
-                                  ))}
-                                </ul>
-                              </section>
+                          <ul className="membership-card-highlight-list">
+                            {highlightBenefits.map((benefit) => (
+                              <li key={benefit.code}>
+                                <CheckOutlined />
+                                <span>{benefit.name}</span>
+                                <b>{benefitLabel(benefit.value, benefit.unit)}</b>
+                              </li>
                             ))}
-                          </div>
+                          </ul>
+                          {standardBenefits.length ? <div className="membership-card-benefit-divider" /> : null}
+                          <ul className="membership-card-standard-list">
+                            {standardBenefits.map((benefit) => (
+                              <li key={benefit.code}>
+                                <CheckOutlined />
+                                <span>{benefit.name}</span>
+                                <b>{benefitLabel(benefit.value, benefit.unit)}</b>
+                              </li>
+                            ))}
+                          </ul>
                           {!availableBenefits.length ? <p className="membership-plan-empty-benefit">暂无已开放权益</p> : null}
                         </div>
                         <button className="membership-card-select" type="button" disabled={!sku}>
@@ -542,9 +486,41 @@ const MembershipHomePage = () => {
               ) : (
                 <div className="membership-empty">暂无可订阅套餐，请先在管理端启用会员套餐。</div>
               )}
+
+              <section className="membership-inline-comparison">
+                <div className="membership-inline-comparison-heading">
+                  <h2>会员订阅，哪个更适合你？</h2>
+                  <button
+                    type="button"
+                    className="membership-comparison-toggle"
+                    aria-controls="membership-benefit-comparison"
+                    onClick={() => document.getElementById('membership-benefit-comparison')?.scrollIntoView({
+                      behavior: 'smooth',
+                      block: 'start',
+                    })}
+                  >
+                    查看会员对比
+                  </button>
+                </div>
+              </section>
             </div>
 
             <aside className="membership-checkout">
+              {membershipBanner ? (
+                <button
+                  className="membership-promo-banner"
+                  type="button"
+                  onClick={() => {
+                    if (!membershipBanner.linkUrl) return;
+                    if (membershipBanner.linkUrl.startsWith('/')) navigate(membershipBanner.linkUrl);
+                    else window.open(membershipBanner.linkUrl, '_blank', 'noopener,noreferrer');
+                  }}
+                >
+                  {membershipBanner.imageUrl ? <img src={membershipBanner.imageUrl} alt={membershipBanner.title || '会员活动'} /> : null}
+                  <span><strong>{membershipBanner.title}</strong><small>{membershipBanner.subtitle}</small></span>
+                </button>
+              ) : null}
+              <div className="membership-checkout-panel">
               <h2>{order ? '扫码支付' : '订单详情'}</h2>
               {order ? (
                 <>
@@ -621,110 +597,72 @@ const MembershipHomePage = () => {
                 </button>
               )}
               <p className="membership-agreement">购买前请阅读并同意《会员服务协议》</p>
+              </div>
             </aside>
           </section>
-        )}
 
-        <section className="membership-inline-comparison">
-          <div className="membership-inline-comparison-heading">
-            <h2>会员订阅，哪个更适合你？</h2>
-            <button
-              type="button"
-              className="membership-comparison-toggle"
-              onClick={() => setComparisonOpen(true)}
-            >
-              会员权益对比
-            </button>
-          </div>
-        </section>
-
-        <Modal
-          open={comparisonOpen}
-          title="会员权益对比"
-          footer={null}
-          onCancel={() => setComparisonOpen(false)}
-          centered
-          width={1500}
-          destroyOnHidden
-          className="membership-compare-modal-wrapper"
-        >
-          <div className="membership-compare-modal">
-          {comparisonGroups.length ? (
-            <div className="membership-comparison-scroll" role="region" aria-label="会员权益对比表格" tabIndex={0}>
-              <table className="membership-comparison-table membership-comparison-table-inline">
-                <thead>
-                  <tr>
-                    <th scope="col" className="sticky-col">权益项目</th>
-                    {plans.map((plan) => (
-                      <th scope="col" key={plan.id}>
-                        <div className="membership-comparison-plan">
-                          <div className="membership-comparison-plan-head">
-                            <strong>{plan.name}</strong>
-                            {plan.id === current?.planId ? <span className="membership-plan-current">当前</span> : null}
-                          </div>
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {comparisonGroups.map((group) => (
-                    <Fragment key={group.category}>
-                      <tr className="membership-comparison-category-row" key={`${group.category}-heading`}>
-                        <th colSpan={plans.length + 1}>{group.label}</th>
-                      </tr>
-                      {group.rows.map((row) => (
-                        <tr key={row.code}>
-                          <th scope="row" className="sticky-col">
-                            <div className="membership-comparison-label">
-                              <span>{row.name}</span>
-                              {row.previewOnly ? <em>预告</em> : null}
-                              {row.description ? <small>{row.description}</small> : null}
+          <section
+            id="membership-benefit-comparison"
+            className="membership-comparison-page"
+            aria-label="会员权益对比"
+          >
+              {comparisonGroups.length ? (
+                <div className="membership-comparison-page-scroll" role="region" aria-label="会员权益对比表格" tabIndex={0}>
+                  <table className="membership-comparison-table membership-comparison-table-page">
+                    <thead>
+                      <tr>
+                        <th scope="col" className="sticky-col"><span className="membership-visually-hidden">权益项目</span></th>
+                        {plans.map((plan) => (
+                          <th scope="col" key={plan.id}>
+                            <div className="membership-comparison-plan">
+                              <div className="membership-comparison-plan-head">
+                                <strong>{plan.name}</strong>
+                                {plan.id === current?.planId ? <span className="membership-plan-current">当前</span> : null}
+                              </div>
                             </div>
                           </th>
-                          {plans.map((plan) => {
-                            const cell = comparisonCell(plan.id, row);
-                            return (
-                              <td key={`${row.code}-${plan.id}`} className={cell.enabled ? 'is-enabled' : 'is-disabled'}>
-                                <span className="membership-comparison-value">
-                                  {cell.enabled ? <CheckOutlined /> : <span className="membership-comparison-dash">—</span>}
-                                  <span>{cell.label}</span>
-                                </span>
-                              </td>
-                            );
-                          })}
-                        </tr>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {comparisonGroups.map((group) => (
+                        <Fragment key={group.category}>
+                          <tr className="membership-comparison-category-row" key={`${group.category}-heading`}>
+                            <th colSpan={plans.length + 1}>{group.label}</th>
+                          </tr>
+                          {group.rows.map((row) => (
+                            <tr key={row.code}>
+                              <th scope="row" className="sticky-col">
+                                <div className="membership-comparison-label">
+                                  <span>{row.name}</span>
+                                  {row.previewOnly ? <em>预告</em> : null}
+                                  {row.description ? <small>{row.description}</small> : null}
+                                </div>
+                              </th>
+                              {plans.map((plan) => {
+                                const cell = comparisonCell(plan.id, row);
+                                return (
+                                  <td key={`${row.code}-${plan.id}`} className={cell.enabled ? 'is-enabled' : 'is-disabled'}>
+                                    <span className="membership-comparison-value">
+                                      {cell.enabled ? <CheckOutlined /> : <span className="membership-comparison-dash">—</span>}
+                                      <span>{cell.label}</span>
+                                    </span>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ))}
+                        </Fragment>
                       ))}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="membership-empty membership-comparison-empty">暂无对比数据，请先在后台配置会员权益。</div>
-          )}
-          </div>
-        </Modal>
-
-        <Modal
-          open={customRequestOpen}
-          title="至尊版独家模板定制"
-          okText="提交工单"
-          cancelText="关闭"
-          confirmLoading={customRequestSubmitting}
-          onOk={() => void submitCustomRequest()}
-          onCancel={() => setCustomRequestOpen(false)}
-          centered
-          width={680}
-          className="membership-custom-request-modal-wrapper"
-        >
-          <div className="membership-custom-request-form">
-            <label><span>模板标题</span><input maxLength={120} value={customRequestForm.title} onChange={(event) => setCustomRequestForm({ ...customRequestForm, title: event.target.value })} placeholder="例如：美妆新品种草脚本模板" /></label>
-            <label><span>详细需求</span><textarea maxLength={4000} rows={5} value={customRequestForm.requirements} onChange={(event) => setCustomRequestForm({ ...customRequestForm, requirements: event.target.value })} placeholder="请描述行业、目标平台、脚本结构和交付要求" /></label>
-            <label><span>联系方式（选填）</span><input maxLength={200} value={customRequestForm.contact} onChange={(event) => setCustomRequestForm({ ...customRequestForm, contact: event.target.value })} placeholder="手机号、邮箱或微信" /></label>
-            {customRequests.length ? <div className="membership-custom-request-history"><strong>已有工单</strong>{customRequests.map((item) => <div key={item.id}><span>{item.title}</span><b>{item.status}</b><small>{item.adminRemark || item.createdAt || ''}</small></div>)}</div> : null}
-          </div>
-        </Modal>
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="membership-empty membership-comparison-empty">暂无对比数据，请先在后台配置会员权益。</div>
+              )}
+          </section>
+          </Fragment>
+        )}
 
       </main>
     </div>
