@@ -295,10 +295,22 @@ const HomePage = () => {
                   {work.coverUrl || work.imageUrl
                     ? <img src={work.coverUrl || work.imageUrl} alt={`${work.label}封面`} />
                     : work.videoUrl
-                      ? <video src={work.videoUrl} muted playsInline preload="metadata" aria-label={`${work.label}视频封面`} onLoadedMetadata={(event) => {
-                        const duration = Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0;
-                        event.currentTarget.currentTime = Math.min(work.frameTime ?? Math.min(1, duration / 4), duration || 0);
-                      }} />
+                      ? <video
+                        src={work.videoUrl}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        controlsList="nodownload noremoteplayback"
+                        disablePictureInPicture
+                        draggable={false}
+                        aria-label={`${work.label}视频封面`}
+                        onContextMenu={(event) => event.preventDefault()}
+                        onDragStart={(event) => event.preventDefault()}
+                        onLoadedMetadata={(event) => {
+                          const duration = Number.isFinite(event.currentTarget.duration) ? event.currentTarget.duration : 0;
+                          event.currentTarget.currentTime = Math.min(work.frameTime ?? Math.min(1, duration / 4), duration || 0);
+                        }}
+                      />
                       : null}
                 </div>
                 <strong>{work.label}</strong>
@@ -334,8 +346,11 @@ const HomePage = () => {
               controls
               controlsList="nodownload noremoteplayback"
               disablePictureInPicture
+              draggable={false}
               autoPlay
               playsInline
+              onContextMenu={(event) => event.preventDefault()}
+              onDragStart={(event) => event.preventDefault()}
             />
           </section>
         </div>

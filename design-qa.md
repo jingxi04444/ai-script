@@ -85,3 +85,41 @@ At widths up to 680 px, the purchase-period selector keeps three horizontal colu
 - Ant Design logs one deprecation warning for `Modal.destroyOnClose` from an existing shared authentication dialog; it does not affect the membership page layout or interaction.
 
 final result: passed
+---
+
+# Storyboard list-only design QA
+
+## Source of truth
+
+- Source visual: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-0bddd19c-2610-4011-8786-d7a148dd6b04.png` (3348 × 1848).
+- Implementation: `/private/tmp/storyboard-list-only.png` (1280 × 720).
+- Combined comparison: `/private/tmp/storyboard-list-comparison.png`.
+- Browser viewport: 1280 × 720 CSS px; DPR 2; screenshot normalized to 1280 × 720.
+- State: light theme, empty unnamed project, step 3, 我的脚本.
+
+## Verification
+
+- Removed the list/card view switch.
+- Removed the card rendering branch.
+- Every script category remains on the list layout.
+- Fixed page size at 10 rows.
+- Search, type/status filters, reset, pagination, preview, polish, copy and delete behavior remain wired.
+- Production build: passed.
+- Browser check: switching to AI 原创脚本 still shows the list header; both view-toggle button counts are zero.
+- Existing console warnings for `Modal.destroyOnClose` and empty-project loading were present and are unrelated to this change.
+
+## Fidelity surfaces
+
+- Typography: existing Workspace list typography preserved.
+- Spacing/layout: total count remains right-aligned; filter grid and table columns are unchanged.
+- Colors/tokens: no new colors; existing theme styles remain in control.
+- Images/assets: card-only decorative art is no longer rendered; no new asset is needed.
+- Copy/content: only the “列表 / 卡片” view labels were removed; list and action copy is preserved.
+
+## Comparison history
+
+1. Before: card layout and the list/card switch were visible.
+2. Fix: removed view state, switch controls and card JSX; fixed `pageSize = 10`.
+3. After: only the list header, list empty/data state and pagination remain.
+
+final result: passed

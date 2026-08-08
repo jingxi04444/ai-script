@@ -10,10 +10,7 @@ import {
   EditOutlined,
   EyeOutlined,
   FileTextOutlined,
-  ClockCircleOutlined,
   ReloadOutlined,
-  AppstoreOutlined,
-  UnorderedListOutlined,
 } from '@ant-design/icons';
 import { Dropdown, message, Modal, Select } from 'antd';
 import { scriptApi } from '../../../api/script';
@@ -43,7 +40,6 @@ interface StoryboardPanelProps {
 
 const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) => {
   const [activeCategory, setActiveCategory] = useState(scriptCategories[0]);
-  const [viewMode, setViewMode] = useState<'list' | 'card'>('list');
   const [currentPage, setCurrentPage] = useState(1);
   const [scripts, setScripts] = useState<Script[]>([]);
   const [totalScripts, setTotalScripts] = useState(0);
@@ -54,7 +50,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
   const [renamingScriptId, setRenamingScriptId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
-  const pageSize = viewMode === 'card' ? 6 : 10;
+  const pageSize = 10;
 
   const categoryTypeTones = getCategoryTypeTones(activeCategory);
   const requestedType = typeFilter !== 'all'
@@ -294,14 +290,6 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
         </div>
         <div className="storyboard-summary-actions">
           <span>{totalScripts} 篇脚本</span>
-          <div className="storyboard-view-toggle">
-            <button className={viewMode === 'list' ? 'active' : ''} onClick={() => { setViewMode('list'); setCurrentPage(1); }}>
-              <UnorderedListOutlined />列表
-            </button>
-            <button className={viewMode === 'card' ? 'active' : ''} onClick={() => { setViewMode('card'); setCurrentPage(1); }}>
-              <AppstoreOutlined />卡片
-            </button>
-          </div>
         </div>
       </section>
 
@@ -331,9 +319,8 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
         <button className="storyboard-reset-button" onClick={() => { setSearchText(''); setTypeFilter('all'); setStatusFilter('all'); setCurrentPage(1); }}><ReloadOutlined />重置</button>
       </section>
 
-      <section className={viewMode === 'list' ? 'storyboard-library-panel list' : 'storyboard-library-panel card'}>
-        {viewMode === 'list' ? (
-          <div className={`storyboard-table-view ${activeCategory === '以产品维度的脚本' ? 'is-brief-grouped' : ''}`}>
+      <section className="storyboard-library-panel list">
+        <div className={`storyboard-table-view ${activeCategory === '以产品维度的脚本' ? 'is-brief-grouped' : ''}`}>
             <div className="storyboard-table-head">
               <span>脚本名称</span>
               <span>脚本类型</span>
@@ -395,43 +382,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
                 <span>当前项目还没有生成脚本，请先在脚本生成器中创建。</span>
               </div>
             )}
-          </div>
-        ) : (
-          <div className="storyboard-card-view">
-            {paginatedItems.length ? paginatedItems.map((item, index) => (
-              <Fragment key={item.id}>
-                {activeCategory === '以产品维度的脚本'
-                  && (index === 0 || paginatedItems[index - 1].productGroupKey !== item.productGroupKey)
-                  && (
-                    <div className="storyboard-product-group card-group">
-                      <span>{item.productGroup}</span>
-                    </div>
-                  )}
-                <article className={`storyboard-script-card ${item.typeTone}`}>
-                <em className={`script-type ${item.typeTone}`}>{item.type}</em>
-                <div className="storyboard-card-art"><span /><b /><i /></div>
-                <h3>{item.name}</h3>
-                <time><ClockCircleOutlined />更新时间：{formatDateTime(item.updatedAt)}</time>
-                <i className={`script-status ${item.statusTone}`}>{item.status}</i>
-                <div className="storyboard-card-actions">
-                  <button onClick={() => previewScript(item.id)}><EyeOutlined />预览</button>
-                  <button onClick={() => polishScript(item.id)}><EditOutlined />继续润色</button>
-                  <button onClick={() => copyScript(item.id)}><CopyOutlined />复制</button>
-                  <Dropdown menu={scriptMoreMenu(item.id, item.name)} trigger={['click']} placement="bottomRight">
-                    <button><MoreOutlined />更多</button>
-                  </Dropdown>
-                </div>
-                </article>
-              </Fragment>
-            )) : (
-              <div className="storyboard-empty-state card-empty">
-                <FileTextOutlined />
-                <strong>暂无脚本</strong>
-                <span>当前项目还没有生成脚本，请先在脚本生成器中创建。</span>
-              </div>
-            )}
-          </div>
-        )}
+        </div>
 
         <footer className="storyboard-pagination">
           <span>共 {totalScripts} 条</span>
