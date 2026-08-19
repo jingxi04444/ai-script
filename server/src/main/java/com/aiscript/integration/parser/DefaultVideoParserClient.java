@@ -322,11 +322,17 @@ public class DefaultVideoParserClient implements VideoParserClient {
         String pageUrl = redirectResponse.headers().firstValue("location").orElse(url);
         pageUrl = absolutize(pageUrl, "https://v.kuaishou.com/").replace("/fw/long-video/", "/fw/photo/");
         String html = getText(pageUrl, "https://v.kuaishou.com/", cookie);
+        String targetVideoId = firstNonBlank(extractKuaishouVideoId(pageUrl), extractKuaishouVideoId(url));
         Map<String, Object> result = fallback(url);
         result.put("platform", "kuaishou");
         result.put("status", "parsed");
         result.put("resolvedUrl", pageUrl);
-        Optional<Map<String, Object>> initStateResult = parseKuaishouInitState(url, pageUrl, html);
+        if (StringUtils.hasText(targetVideoId)) {
+            result.put("videoId", targetVideoId);
+        }
+        Optional<Map<String, Object>> initStateResult = parseKuaishouPageState(
+            url, pageUrl, targetVideoId, html
+        );
         if (initStateResult.isPresent()) {
             return initStateResult.get();
         }
@@ -340,7 +346,7 @@ public class DefaultVideoParserClient implements VideoParserClient {
             result.put("authorName", cleanJsonText(userName));
         }
         String videoUrl = firstRegex(html, "\\\"url\\\"\\s*:\\s*\\\"(https?:\\\\/\\\\/[^\\\"]*?\\.mp4[^\\\"]*)\\\"");
-        if (StringUtils.hasText(videoUrl)) {
+        if (StringUtils.hasText(videoUrl) && !StringUtils.hasText(targetVideoId)) {
             result.put("videoUrl", cleanJsonText(videoUrl));
             result.put("parseMode", "real_video");
         }
@@ -351,16 +357,35 @@ public class DefaultVideoParserClient implements VideoParserClient {
         return result;
     }
 
-    private Optional<Map<String, Object>> parseKuaishouInitState(String sourceUrl, String pageUrl, String html) {
-        String initJson = firstRegex(html, "window\\.INIT_STATE\\s*=\\s*(\\{.*?\\})\\s*</script>");
-        if (!StringUtils.hasText(initJson)) {
+    private Optional<Map<String, Object>> parseKuaishouPageState(
+        String sourceUrl,
+        String pageUrl,
+        String targetVideoId,
+        String html
+    ) {
+        Map<String, Object> photo = Map.of();
+        String initJson = firstRegex(html, "window\\.INIT_STATE\\s*=\\s*(\\{.*?\\})\\s*;?\\s*</script>");
+        if (StringUtils.hasText(initJson)) {
+            photo = findExactKuaishouPhoto(JsonUtils.toMap(initJson), targetVideoId).orElse(Map.of());
+        }
+        if (photo.isEmpty()) {
+            String apolloJson = firstRegex(
+                html,
+                "window\\.__APOLLO_STATE__\\s*=\\s*(\\{.*?\\})\\s*;?\\s*</script>"
+            );
+            if (StringUtils.hasText(apolloJson)) {
+                Map<String, Object> apolloState = JsonUtils.toMap(apolloJson);
+                Object defaultClient = apolloState.get("defaultClient");
+                photo = findExactKuaishouPhoto(
+                    defaultClient == null ? apolloState : defaultClient,
+                    targetVideoId
+                ).orElse(Map.of());
+            }
+        }
+        if (photo.isEmpty()) {
             return Optional.empty();
         }
-        Map<String, Object> initState = JsonUtils.toMap(initJson);
-        if (initState.isEmpty()) {
-            return Optional.empty();
-        }
-        String videoUrl = findFirstUrlInKey(initState, "mainMvUrls").orElse("");
+        String videoUrl = findKuaishouVideoUrl(photo);
         if (!StringUtils.hasText(videoUrl)) {
             return Optional.empty();
         }
@@ -370,14 +395,82 @@ public class DefaultVideoParserClient implements VideoParserClient {
         result.put("resolvedUrl", pageUrl);
         result.put("parseMode", "real_video");
         result.put("videoUrl", cleanJsonText(videoUrl));
-        findStringByKey(initState, "caption").ifPresent(value -> {
+        if (StringUtils.hasText(targetVideoId)) {
+            result.put("videoId", targetVideoId);
+        }
+        Map<String, Object> matchedPhoto = photo;
+        findStringByKey(matchedPhoto, "caption").or(() -> findStringByKey(matchedPhoto, "originCaption")).ifPresent(value -> {
             result.put("title", value);
             result.put("copy", value);
         });
-        findStringByKey(initState, "userName").ifPresent(value -> result.put("authorName", value));
-        findStringByKey(initState, "headUrl").ifPresent(value -> result.put("authorAvatar", value));
-        findFirstUrlInKey(initState, "coverUrls").ifPresent(value -> result.put("coverUrl", value));
+        findStringByKey(matchedPhoto, "userName").or(() -> findStringByKey(matchedPhoto, "name"))
+            .ifPresent(value -> result.put("authorName", value));
+        findStringByKey(matchedPhoto, "headUrl").ifPresent(value -> result.put("authorAvatar", value));
+        findFirstUrlInKey(matchedPhoto, "coverUrls").or(() -> findFirstUrlInKey(matchedPhoto, "coverUrl"))
+            .ifPresent(value -> result.put("coverUrl", value));
         return Optional.of(result);
+    }
+
+    Optional<Map<String, Object>> findExactKuaishouPhoto(Object value, String targetVideoId) {
+        if (!StringUtils.hasText(targetVideoId)) {
+            return Optional.empty();
+        }
+        if (value instanceof Map<?, ?> map) {
+            String id = firstNonBlank(
+                stringValue(map.get("id")),
+                stringValue(map.get("photoId")),
+                stringValue(map.get("photo_id"))
+            );
+            if (targetVideoId.equals(id) && hasKuaishouVideoData(map)) {
+                return Optional.of(asMap(map));
+            }
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                String key = String.valueOf(entry.getKey());
+                if (key.contains(targetVideoId) && entry.getValue() instanceof Map<?, ?> child
+                    && hasKuaishouVideoData(child)) {
+                    return Optional.of(asMap(child));
+                }
+            }
+            for (Object child : map.values()) {
+                Optional<Map<String, Object>> found = findExactKuaishouPhoto(child, targetVideoId);
+                if (found.isPresent()) {
+                    return found;
+                }
+            }
+        }
+        if (value instanceof List<?> list) {
+            for (Object child : list) {
+                Optional<Map<String, Object>> found = findExactKuaishouPhoto(child, targetVideoId);
+                if (found.isPresent()) {
+                    return found;
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    private boolean hasKuaishouVideoData(Map<?, ?> value) {
+        return value.containsKey("photoUrl")
+            || value.containsKey("mainMvUrls")
+            || value.containsKey("videoResource")
+            || value.containsKey("manifest")
+            || value.containsKey("manifestH265");
+    }
+
+    String findKuaishouVideoUrl(Map<String, Object> photo) {
+        return firstNonBlank(
+            httpUrlValue(photo.get("photoUrl")),
+            findFirstUrlInKey(photo, "mainMvUrls").orElse(""),
+            findFirstUrlInKey(photo, "videoResource").orElse(""),
+            findFirstUrlInKey(photo, "manifest").orElse(""),
+            httpUrlValue(photo.get("photoH265Url")),
+            findFirstUrlInKey(photo, "manifestH265").orElse("")
+        );
+    }
+
+    private String httpUrlValue(Object value) {
+        String url = stringValue(value);
+        return url.startsWith("http://") || url.startsWith("https://") ? url : "";
     }
 
     private Map<String, Object> parseBilibili(String url) throws Exception {
@@ -579,6 +672,24 @@ public class DefaultVideoParserClient implements VideoParserClient {
         }
         if (!StringUtils.hasText(id)) {
             id = firstRegex(decoded, "note/(\\d+)");
+        }
+        return id;
+    }
+
+    String extractKuaishouVideoId(String url) {
+        if (!StringUtils.hasText(url)) {
+            return "";
+        }
+        String decoded = URLDecoder.decode(url, java.nio.charset.StandardCharsets.UTF_8);
+        String id = firstRegex(decoded, "/short-video/([a-zA-Z0-9_-]+)");
+        if (!StringUtils.hasText(id)) {
+            id = firstRegex(decoded, "/fw/(?:photo|long-video)/([a-zA-Z0-9_-]+)");
+        }
+        if (!StringUtils.hasText(id)) {
+            id = firstRegex(decoded, "/f/([a-zA-Z0-9_-]+)");
+        }
+        if (!StringUtils.hasText(id)) {
+            id = firstRegex(decoded, "[?&]photoId=([a-zA-Z0-9_-]+)");
         }
         return id;
     }
@@ -792,7 +903,9 @@ public class DefaultVideoParserClient implements VideoParserClient {
         if (lowerUrl.contains("xiaohongshu") || lowerUrl.contains("xhs")) {
             return "xiaohongshu";
         }
-        if (lowerUrl.contains("kuaishou")) {
+        if (lowerUrl.contains("kuaishou")
+            || lowerUrl.contains("gifshow.com")
+            || lowerUrl.contains("ksurl.cn")) {
             return "kuaishou";
         }
         if (lowerUrl.contains("bilibili") || lowerUrl.contains("b23.tv")) {

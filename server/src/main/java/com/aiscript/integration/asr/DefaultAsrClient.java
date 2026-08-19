@@ -174,7 +174,14 @@ public class DefaultAsrClient implements AsrClient {
         if (lower.contains("douyin") || lower.contains("snssdk") || lower.contains("byte")) {
             return "https://www.douyin.com/";
         }
-        if (lower.contains("kuaishou")) {
+        if (lower.contains("kuaishou")
+            || lower.contains("yximgs")
+            || lower.contains("kwaicdn")
+            || lower.contains("kwimgs")
+            || lower.contains("ndcimgs")
+            || lower.contains("kwaivod")
+            || lower.contains("gifshow")
+            || lower.contains("chenzhongtech")) {
             return "https://v.kuaishou.com/";
         }
         if (lower.contains("bilibili") || lower.contains("bilivideo")) {

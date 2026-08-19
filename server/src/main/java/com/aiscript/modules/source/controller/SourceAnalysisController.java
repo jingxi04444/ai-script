@@ -4,8 +4,11 @@ import com.aiscript.common.api.R;
 import com.aiscript.modules.source.dto.CopyAnalyzeDTO;
 import com.aiscript.modules.source.dto.CopyExtractDTO;
 import com.aiscript.modules.source.dto.LinkExtractDTO;
+import com.aiscript.modules.source.dto.KuaishouTranscriptDTO;
 import com.aiscript.modules.source.dto.SourceParseDTO;
+import com.aiscript.modules.source.service.KuaishouTranscriptService;
 import com.aiscript.modules.source.service.SourceAnalysisService;
+import com.aiscript.modules.source.vo.KuaishouTranscriptVO;
 import com.aiscript.modules.source.vo.LinkExtractVO;
 import com.aiscript.modules.source.vo.SourceAnalysisVO;
 import java.util.List;
@@ -21,9 +24,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api")
 public class SourceAnalysisController {
     private final SourceAnalysisService sourceAnalysisService;
+    private final KuaishouTranscriptService kuaishouTranscriptService;
 
-    public SourceAnalysisController(SourceAnalysisService sourceAnalysisService) {
+    public SourceAnalysisController(
+        SourceAnalysisService sourceAnalysisService,
+        KuaishouTranscriptService kuaishouTranscriptService
+    ) {
         this.sourceAnalysisService = sourceAnalysisService;
+        this.kuaishouTranscriptService = kuaishouTranscriptService;
     }
 
     @GetMapping("/source-analysis")
@@ -39,6 +47,13 @@ public class SourceAnalysisController {
     @PostMapping("/video/share-url/extract")
     public R<LinkExtractVO> extractShareUrl(@Valid @RequestBody LinkExtractDTO dto) {
         return R.ok(sourceAnalysisService.extractShareUrl(dto));
+    }
+
+    @PostMapping("/video/kuaishou/transcript")
+    public R<KuaishouTranscriptVO> extractKuaishouTranscript(
+        @Valid @RequestBody KuaishouTranscriptDTO dto
+    ) {
+        return R.ok(kuaishouTranscriptService.extract(dto));
     }
 
     @PostMapping("/video/share-url/parse-tasks")

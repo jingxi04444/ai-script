@@ -842,7 +842,9 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
         if (lowerUrl.contains("xiaohongshu") || lowerUrl.contains("xhs")) {
             return "xiaohongshu";
         }
-        if (lowerUrl.contains("kuaishou")) {
+        if (lowerUrl.contains("kuaishou")
+            || lowerUrl.contains("gifshow.com")
+            || lowerUrl.contains("ksurl.cn")) {
             return "kuaishou";
         }
         if (lowerUrl.contains("bilibili") || lowerUrl.contains("b23.tv")) {
