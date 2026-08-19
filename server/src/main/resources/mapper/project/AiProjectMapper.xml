@@ -10,6 +10,8 @@
             p.id,
             p.owner_id,
             p.project_name,
+            p.avatar_url,
+            p.announcement,
             p.category,
             p.status,
             COALESCE(brief_stats.brief_count, 0) AS brief_count,
@@ -60,7 +62,17 @@
             AND p.tenant_id = #{tenantId}
         </if>
         <if test="ownerId != null">
-            AND p.owner_id = #{ownerId}
+            AND (
+                p.owner_id = #{ownerId}
+                OR EXISTS (
+                    SELECT 1 FROM ai_project_collaborator collaborator
+                    WHERE collaborator.project_id = p.id
+                      AND collaborator.tenant_id = p.tenant_id
+                      AND collaborator.user_id = #{ownerId}
+                      AND collaborator.status = 'active'
+                      AND collaborator.deleted = 0
+                )
+            )
         </if>
         <if test="keyword != null and keyword != ''">
             AND p.project_name LIKE CONCAT('%', #{keyword}, '%')
@@ -78,6 +90,8 @@
             p.id,
             p.owner_id,
             p.project_name,
+            p.avatar_url,
+            p.announcement,
             p.category,
             p.status,
             (
@@ -121,7 +135,17 @@
           AND p.tenant_id = #{tenantId}
           AND p.deleted = 0
         <if test="ownerId != null">
-            AND p.owner_id = #{ownerId}
+            AND (
+                p.owner_id = #{ownerId}
+                OR EXISTS (
+                    SELECT 1 FROM ai_project_collaborator collaborator
+                    WHERE collaborator.project_id = p.id
+                      AND collaborator.tenant_id = p.tenant_id
+                      AND collaborator.user_id = #{ownerId}
+                      AND collaborator.status = 'active'
+                      AND collaborator.deleted = 0
+                )
+            )
         </if>
         LIMIT 1
     </select>

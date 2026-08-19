@@ -54,9 +54,16 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
     @Transactional(rollbackFor = Exception.class)
     public MembershipChangeQuoteVO quote(Integer tenantId, Integer userId, Long skuId) {
         Target target = requireTarget(skuId);
-        AiUserSubscription current = membershipService.ensureActiveSubscription(tenantId, userId);
-        AiMembershipPlan currentPlan = planMapper.selectById(current.getPlanId());
-        AiMembershipPlanSku currentSku = current.getSkuId() == null ? null : skuMapper.selectById(current.getSkuId());
+        AiUserSubscription current = subscriptionMapper.selectActiveByUserForUpdate(userId.longValue());
+        if (current == null) {
+            current = findLatestSubscription(tenantId, userId);
+        }
+        AiMembershipPlan currentPlan = current == null || current.getPlanId() == null
+            ? null
+            : planMapper.selectById(current.getPlanId());
+        AiMembershipPlanSku currentSku = current == null || current.getSkuId() == null
+            ? null
+            : skuMapper.selectById(current.getSkuId());
         return buildQuote(current, currentPlan, currentSku, target.plan(), target.sku(), LocalDateTime.now());
     }
 
@@ -72,12 +79,9 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
         }
 
         boolean automaticRenewal = "renewal".equals(order.getOrderScene()) && order.getSubscriptionId() != null;
-        if (!automaticRenewal) {
-            membershipService.ensureActiveSubscription(order.getTenantId(), order.getUserId());
-        }
         AiUserSubscription subscription = subscriptionMapper.selectActiveByUserForUpdate(order.getUserId().longValue());
         if (subscription == null) {
-            throw new BusinessException("用户有效订阅不存在");
+            subscription = findLatestSubscription(order.getTenantId(), order.getUserId());
         }
         existing = findChangeByOrder(order.getOrderNo());
         if (existing != null && "effective".equals(existing.getStatus())) {
@@ -85,7 +89,15 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
             return subscription;
         }
         Target target = requireTarget(order.getSkuId());
-        AiMembershipPlan currentPlan = planMapper.selectById(subscription.getPlanId());
+        boolean newSubscription = subscription == null;
+        if (newSubscription) {
+            subscription = new AiUserSubscription();
+            subscription.setTenantId(order.getTenantId() == null ? null : order.getTenantId().longValue());
+            subscription.setUserId(order.getUserId().longValue());
+            subscription.setVersion(0);
+            subscription.setDeleted(0);
+        }
+        AiMembershipPlan currentPlan = subscription.getPlanId() == null ? null : planMapper.selectById(subscription.getPlanId());
         AiMembershipPlanSku currentSku = subscription.getSkuId() == null
             ? null
             : skuMapper.selectById(subscription.getSkuId());
@@ -136,7 +148,11 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
         subscription.setGraceEndTime(null);
         subscription.setPlanSnapshotJson(order.getProductSnapshotJson());
         subscription.setSourceOrderNo(order.getOrderNo());
-        subscriptionMapper.updateById(subscription);
+        if (newSubscription) {
+            subscriptionMapper.insert(subscription);
+        } else {
+            subscriptionMapper.updateById(subscription);
+        }
         clearNullableChangeFields(subscription);
 
         order.setSubscriptionId(subscription.getId());
@@ -269,7 +285,12 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
         AiMembershipPlanSku targetSku,
         LocalDateTime now
     ) {
-        int currentLevel = currentPlan == null || currentPlan.getPlanLevel() == null ? 0 : currentPlan.getPlanLevel();
+        boolean currentSubscriptionEffective = subscription != null
+            && !"expired".equalsIgnoreCase(subscription.getStatus())
+            && (subscription.getCurrentPeriodEnd() == null || subscription.getCurrentPeriodEnd().isAfter(now));
+        int currentLevel = !currentSubscriptionEffective || currentPlan == null || currentPlan.getPlanLevel() == null
+            ? 0
+            : currentPlan.getPlanLevel();
         int targetLevel = targetPlan.getPlanLevel() == null ? 0 : targetPlan.getPlanLevel();
         String changeType;
         String effectiveType;
@@ -278,12 +299,13 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
         BigDecimal original = money(targetSku.getPrice());
         BigDecimal payable = original;
 
-        if (targetLevel < currentLevel) {
+        if (currentSubscriptionEffective && targetLevel < currentLevel) {
             changeType = "downgrade";
             effectiveType = "next_period";
             effectiveTime = subscription.getCurrentPeriodEnd();
             payable = BigDecimal.ZERO;
-        } else if (currentPlan == null || currentPlan.getIsFree() != null && currentPlan.getIsFree() == 1) {
+        } else if (!currentSubscriptionEffective || currentPlan == null
+            || currentPlan.getIsFree() != null && currentPlan.getIsFree() == 1) {
             changeType = "first_purchase";
             effectiveType = "immediate";
             effectiveTime = now;
@@ -307,9 +329,9 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
         MembershipChangeQuoteVO quote = new MembershipChangeQuoteVO();
         quote.setChangeType(changeType);
         quote.setEffectiveType(effectiveType);
-        quote.setSubscriptionId(String.valueOf(subscription.getId()));
-        quote.setCurrentPlanId(String.valueOf(subscription.getPlanId()));
-        quote.setCurrentSkuId(subscription.getSkuId() == null ? null : String.valueOf(subscription.getSkuId()));
+        quote.setSubscriptionId(subscription == null || subscription.getId() == null ? null : String.valueOf(subscription.getId()));
+        quote.setCurrentPlanId(subscription == null || subscription.getPlanId() == null ? null : String.valueOf(subscription.getPlanId()));
+        quote.setCurrentSkuId(subscription == null || subscription.getSkuId() == null ? null : String.valueOf(subscription.getSkuId()));
         quote.setTargetPlanId(String.valueOf(targetPlan.getId()));
         quote.setTargetSkuId(String.valueOf(targetSku.getId()));
         quote.setOriginalAmount(original);
@@ -364,6 +386,17 @@ public class MembershipSubscriptionServiceImpl implements MembershipSubscription
             throw new BusinessException("用户有效订阅不存在");
         }
         return subscription;
+    }
+
+    private AiUserSubscription findLatestSubscription(Integer tenantId, Integer userId) {
+        LambdaQueryWrapper<AiUserSubscription> query = new LambdaQueryWrapper<AiUserSubscription>()
+            .eq(AiUserSubscription::getUserId, userId.longValue())
+            .orderByDesc(AiUserSubscription::getId);
+        if (tenantId != null) {
+            query.eq(AiUserSubscription::getTenantId, tenantId.longValue());
+        }
+        query.last("LIMIT 1");
+        return subscriptionMapper.selectOne(query);
     }
 
     private LocalDateTime addPeriod(LocalDateTime start, AiMembershipPlanSku sku) {

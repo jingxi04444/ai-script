@@ -91,6 +91,22 @@ export interface PointAccount {
   updatedAt?: string;
 }
 
+export interface PointOperationCosts {
+  briefDetect: number;
+  viralSimple: number;
+  viralDeep: number;
+  scriptGenerate: number;
+  scriptPolish: number;
+}
+
+export const defaultPointOperationCosts: PointOperationCosts = {
+  briefDetect: Number.NaN,
+  viralSimple: Number.NaN,
+  viralDeep: Number.NaN,
+  scriptGenerate: Number.NaN,
+  scriptPolish: Number.NaN,
+};
+
 export interface PointPackage {
   id: string;
   code: string;

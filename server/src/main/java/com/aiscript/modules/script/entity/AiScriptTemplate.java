@@ -24,6 +24,8 @@ public class AiScriptTemplate extends TenantBaseEntity {
     private String scriptTemplateLibrary;
     private String referenceUrl;
     private String referenceDesc;
+    private String previewVideoUrl;
+    private String fullVideoUrl;
     private Integer sortOrder;
     private Integer locked;
     private Integer status;

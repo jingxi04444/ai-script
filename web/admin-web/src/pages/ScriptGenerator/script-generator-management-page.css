@@ -4,7 +4,7 @@
 
 .script-generator-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 10px;
   padding: 7px;
   border: 1px solid var(--line);
@@ -181,6 +181,31 @@
   border: 1px solid var(--line);
   border-radius: 18px;
   background: var(--panel);
+}
+
+.generator-prompt-heading {
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.generator-prompt-heading span {
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.generator-prompt-heading h2 {
+  margin: 5px 0 6px;
+  color: var(--text);
+  font-size: 22px;
+}
+
+.generator-prompt-heading p {
+  max-width: 850px;
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.7;
 }
 
 @media (max-width: 980px) {

@@ -343,12 +343,41 @@ CREATE TABLE sys_notification (
 -- 3. 项目与工作流
 -- =========================
 
+DROP TABLE IF EXISTS ai_recycle_bin;
+CREATE TABLE ai_recycle_bin (
+  id INT NOT NULL AUTO_INCREMENT COMMENT '回收记录ID',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  resource_type VARCHAR(32) NOT NULL COMMENT '资源类型：project/brief/script',
+  resource_id INT NOT NULL COMMENT '原资源ID',
+  resource_name VARCHAR(255) NOT NULL COMMENT '删除时资源名称快照',
+  parent_id INT DEFAULT NULL COMMENT '所属项目ID等父级资源ID',
+  snapshot_json JSON DEFAULT NULL COMMENT '恢复和展示所需的轻量快照',
+  retention_days INT NOT NULL DEFAULT 7 COMMENT '本次保留天数',
+  recycle_status VARCHAR(20) NOT NULL DEFAULT 'active' COMMENT '状态：active/restored/purged',
+  deleted_by INT NOT NULL COMMENT '执行删除的用户ID',
+  deleted_at DATETIME NOT NULL COMMENT '删除时间',
+  expire_at DATETIME NOT NULL COMMENT '自动清理时间',
+  restore_time DATETIME DEFAULT NULL COMMENT '恢复时间',
+  purge_time DATETIME DEFAULT NULL COMMENT '永久删除时间',
+  create_by INT DEFAULT NULL COMMENT '创建人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  KEY idx_ai_recycle_owner_active (tenant_id, deleted_by, recycle_status, deleted_at),
+  KEY idx_ai_recycle_expire (recycle_status, expire_at),
+  KEY idx_ai_recycle_resource (tenant_id, resource_type, resource_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='用户回收站';
+
 DROP TABLE IF EXISTS ai_project;
 CREATE TABLE ai_project (
   id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   tenant_id INT NOT NULL COMMENT '租户ID',
   owner_id INT NOT NULL COMMENT '项目创建人',
   project_name VARCHAR(180) NOT NULL COMMENT '项目名称',
+  avatar_url VARCHAR(500) DEFAULT NULL COMMENT '项目头像地址',
+  announcement VARCHAR(1000) DEFAULT NULL COMMENT '项目公告',
   category VARCHAR(80) DEFAULT NULL COMMENT '项目分类',
   product_name VARCHAR(180) DEFAULT NULL COMMENT '产品名称',
   platform VARCHAR(60) DEFAULT NULL COMMENT '投放平台',
@@ -370,6 +399,45 @@ CREATE TABLE ai_project (
   KEY idx_ai_project_owner (owner_id),
   KEY idx_ai_project_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目表';
+
+DROP TABLE IF EXISTS ai_project_collaboration_link;
+CREATE TABLE ai_project_collaboration_link (
+  id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  project_id INT NOT NULL COMMENT '项目ID',
+  token_hash CHAR(64) NOT NULL COMMENT '邀请令牌哈希',
+  status VARCHAR(20) NOT NULL DEFAULT 'active' COMMENT '状态：active/revoked',
+  expires_at DATETIME DEFAULT NULL COMMENT '过期时间',
+  max_uses INT DEFAULT NULL COMMENT '最大使用次数',
+  used_count INT NOT NULL DEFAULT 0 COMMENT '已使用次数',
+  create_by INT DEFAULT NULL COMMENT '创建人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_project_collaboration_token (token_hash),
+  KEY idx_project_collaboration_project (tenant_id, project_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目协作邀请链接';
+
+DROP TABLE IF EXISTS ai_project_collaborator;
+CREATE TABLE ai_project_collaborator (
+  id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  project_id INT NOT NULL COMMENT '项目ID',
+  user_id INT NOT NULL COMMENT '协作用户ID',
+  joined_link_id INT DEFAULT NULL COMMENT '加入时使用的邀请链接ID',
+  status VARCHAR(20) NOT NULL DEFAULT 'active' COMMENT '状态：active/removed',
+  joined_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '加入时间',
+  create_by INT DEFAULT NULL COMMENT '创建人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_project_collaborator (tenant_id, project_id, user_id),
+  KEY idx_project_collaborator_user (tenant_id, user_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='项目协作成员关系';
 
 DROP TABLE IF EXISTS ai_project_step;
 CREATE TABLE ai_project_step (
@@ -726,6 +794,8 @@ CREATE TABLE ai_script_template (
   script_template_library TEXT DEFAULT NULL COMMENT '脚本模版库提示词',
   reference_url VARCHAR(500) DEFAULT NULL COMMENT 'URL链接',
   reference_desc TEXT DEFAULT NULL COMMENT 'URL内容描述',
+  preview_video_url VARCHAR(1000) DEFAULT NULL COMMENT '前台展示的5秒预览视频链接',
+  full_video_url VARCHAR(1000) DEFAULT NULL COMMENT '仅后台使用的完整视频链接',
   sort_order INT NOT NULL DEFAULT 0 COMMENT '展示排序序号，越小越靠前',
   locked TINYINT NOT NULL DEFAULT 0 COMMENT '是否锁定',
   status TINYINT NOT NULL DEFAULT 1 COMMENT '兼容状态：0下架 1上架',
@@ -758,6 +828,12 @@ CREATE TABLE ai_storyboard_script (
   generation_duration VARCHAR(40) DEFAULT NULL COMMENT '生成时选择的脚本时长',
   generation_format VARCHAR(80) DEFAULT NULL COMMENT '生成时选择的脚本格式编码',
   generation_format_name VARCHAR(120) DEFAULT NULL COMMENT '生成时脚本格式名称快照',
+  generation_template_id INT DEFAULT NULL COMMENT '平台模板ID快照',
+  generation_template_name VARCHAR(160) DEFAULT NULL COMMENT '平台模板名称快照',
+  generation_original_category_id VARCHAR(80) DEFAULT NULL COMMENT 'AI原创大类编码快照',
+  generation_original_category_name VARCHAR(120) DEFAULT NULL COMMENT 'AI原创大类名称快照',
+  generation_original_scenario_id VARCHAR(80) DEFAULT NULL COMMENT 'AI原创子类编码快照',
+  generation_original_scenario_name VARCHAR(120) DEFAULT NULL COMMENT 'AI原创子类名称快照',
   status VARCHAR(32) NOT NULL DEFAULT 'draft' COMMENT '状态：draft/pending_review/changes_requested/revised_pending_review/approved',
   audit_status VARCHAR(32) NOT NULL DEFAULT 'not_submitted' COMMENT '审核状态',
   current_version_id INT DEFAULT NULL COMMENT '当前版本ID',
@@ -772,6 +848,7 @@ CREATE TABLE ai_storyboard_script (
   UNIQUE KEY uk_ai_storyboard_script_share (share_token),
   KEY idx_ai_storyboard_script_project (project_id),
   KEY idx_ai_storyboard_script_brief (brief_id),
+  KEY idx_ai_storyboard_script_template (generation_template_id),
   KEY idx_ai_storyboard_script_tenant_status (tenant_id, status),
   KEY idx_ai_storyboard_script_creator (tenant_id, create_by, update_time),
   KEY idx_ai_storyboard_script_project_creator_updated (tenant_id, create_by, project_id, update_time)
@@ -818,6 +895,89 @@ CREATE TABLE ai_script_polish_message (
   KEY idx_ai_script_polish_message_user (tenant_id, user_id, create_time),
   KEY idx_ai_script_polish_message_reply (reply_to_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='脚本AI润色聊天消息';
+
+DROP TABLE IF EXISTS ai_script_review_link;
+CREATE TABLE ai_script_review_link (
+  id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  script_id INT NOT NULL COMMENT '脚本ID',
+  token_hash CHAR(64) NOT NULL COMMENT '评审令牌哈希',
+  version_scope VARCHAR(20) NOT NULL DEFAULT 'all' COMMENT '版本范围：all/current',
+  fixed_version_id INT DEFAULT NULL COMMENT '固定版本ID',
+  status VARCHAR(20) NOT NULL DEFAULT 'active' COMMENT '状态：active/revoked',
+  expires_at DATETIME DEFAULT NULL COMMENT '过期时间',
+  max_uses INT DEFAULT NULL COMMENT '最大使用次数',
+  used_count INT NOT NULL DEFAULT 0 COMMENT '已使用次数',
+  create_by INT DEFAULT NULL COMMENT '创建人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_script_review_token (token_hash),
+  KEY idx_script_review_script (tenant_id, script_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='单脚本评审分享链接';
+
+DROP TABLE IF EXISTS ai_script_review_access;
+CREATE TABLE ai_script_review_access (
+  id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  review_link_id INT NOT NULL COMMENT '评审链接ID',
+  script_id INT NOT NULL COMMENT '脚本ID',
+  user_id INT NOT NULL COMMENT '访问用户ID',
+  status VARCHAR(20) NOT NULL DEFAULT 'active' COMMENT '状态：active/revoked',
+  last_access_time DATETIME DEFAULT NULL COMMENT '最近访问时间',
+  create_by INT DEFAULT NULL COMMENT '创建人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_script_review_access (review_link_id, user_id),
+  KEY idx_script_review_access_user (tenant_id, user_id, script_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='脚本评审访问绑定';
+
+DROP TABLE IF EXISTS ai_script_review_comment;
+CREATE TABLE ai_script_review_comment (
+  id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  script_id INT NOT NULL COMMENT '脚本ID',
+  review_link_id INT DEFAULT NULL COMMENT '评审链接ID',
+  version_id INT DEFAULT NULL COMMENT '脚本版本ID',
+  user_id INT NOT NULL COMMENT '评论用户ID',
+  parent_id INT DEFAULT NULL COMMENT '父评论ID',
+  row_index INT DEFAULT NULL COMMENT '表格行索引',
+  column_key VARCHAR(64) DEFAULT NULL COMMENT '表格列标识',
+  content TEXT NOT NULL COMMENT '评论内容',
+  comment_status VARCHAR(20) NOT NULL DEFAULT 'open' COMMENT '状态：open/resolved',
+  create_by INT DEFAULT NULL COMMENT '创建人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  KEY idx_script_review_comment (tenant_id, script_id, version_id, create_time),
+  KEY idx_script_review_comment_parent (parent_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='脚本评审批注与回复';
+
+DROP TABLE IF EXISTS ai_script_review_record;
+CREATE TABLE ai_script_review_record (
+  id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  script_id INT NOT NULL COMMENT '脚本ID',
+  review_link_id INT DEFAULT NULL COMMENT '评审链接ID',
+  version_id INT DEFAULT NULL COMMENT '脚本版本ID',
+  user_id INT NOT NULL COMMENT '审核用户ID',
+  decision VARCHAR(32) NOT NULL COMMENT '结论：approved/changes_requested',
+  opinion TEXT DEFAULT NULL COMMENT '审核意见',
+  create_by INT DEFAULT NULL COMMENT '创建人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  KEY idx_script_review_record (tenant_id, script_id, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='脚本评审结论记录';
 
 DROP TABLE IF EXISTS ai_storyboard_shot;
 CREATE TABLE ai_storyboard_shot (
@@ -1038,6 +1198,48 @@ CREATE TABLE ai_generation_task (
   KEY idx_ai_generation_task_project (project_id, create_time),
   KEY idx_ai_generation_task_status (status, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI异步任务表';
+
+DROP TABLE IF EXISTS ai_script_generation_queue_item;
+CREATE TABLE ai_script_generation_queue_item (
+  id BIGINT NOT NULL COMMENT '主键ID',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  project_id INT NOT NULL COMMENT '项目ID',
+  batch_no VARCHAR(64) NOT NULL COMMENT '连续入队批次号',
+  request_no VARCHAR(80) NOT NULL COMMENT '前端幂等请求号',
+  script_type VARCHAR(32) NOT NULL COMMENT '脚本类型',
+  task_label VARCHAR(120) NOT NULL COMMENT '队列展示名称',
+  status VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT 'pending/running/success/failed/canceled',
+  request_payload JSON NOT NULL COMMENT '脚本生成请求快照',
+  script_id INT DEFAULT NULL COMMENT '成功生成的脚本ID',
+  error_message TEXT DEFAULT NULL COMMENT '失败原因',
+  start_time DATETIME DEFAULT NULL COMMENT '开始执行时间',
+  finish_time DATETIME DEFAULT NULL COMMENT '结束时间',
+  create_by INT NOT NULL COMMENT '创建人',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_script_queue_request (tenant_id, create_by, request_no),
+  KEY idx_script_queue_dispatch (status, tenant_id, create_by, id),
+  KEY idx_script_queue_batch (batch_no, status),
+  KEY idx_script_queue_project (project_id, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='脚本后台生成队列';
+
+DROP TABLE IF EXISTS ai_script_queue_setting;
+CREATE TABLE ai_script_queue_setting (
+  id BIGINT NOT NULL COMMENT '主键ID',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  user_id INT NOT NULL COMMENT '用户ID',
+  concurrency_limit INT NOT NULL DEFAULT 1 COMMENT '用户选择的脚本生成并发数',
+  create_by INT DEFAULT NULL,
+  update_by INT DEFAULT NULL,
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted TINYINT NOT NULL DEFAULT 0,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_script_queue_setting_user (tenant_id, user_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='脚本生成队列个人设置';
 
 DROP TABLE IF EXISTS ai_video_segment;
 CREATE TABLE ai_video_segment (

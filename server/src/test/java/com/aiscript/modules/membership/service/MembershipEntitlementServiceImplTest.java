@@ -86,6 +86,17 @@ class MembershipEntitlementServiceImplTest {
     }
 
     @Test
+    void shouldResolveScriptOperationPointCosts() {
+        MembershipEntitlementRow generate = entitlement("SCRIPT_GENERATE_POINT_COST", "25", "none");
+        MembershipEntitlementRow polish = entitlement("SCRIPT_POLISH_POINT_COST", "12", "none");
+        when(membershipService.ensureActiveSubscription(1, 2)).thenReturn(subscription);
+        when(planBenefitMapper.selectActiveEntitlements(7L)).thenReturn(List.of(generate, polish));
+
+        assertThat(entitlementService.getPointCost(1, 2, "script_generate")).isEqualTo(25L);
+        assertThat(entitlementService.getPointCost(1, 2, "script_polish")).isEqualTo(12L);
+    }
+
+    @Test
     void repeatedReservationRequestMustReturnOriginalTransaction() {
         AiBenefitUsageTransaction transaction = new AiBenefitUsageTransaction();
         transaction.setUserId(2L);

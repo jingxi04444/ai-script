@@ -1304,110 +1304,6 @@ html[data-color-mode='light'] .membership-account-actions button {
   color: var(--text);
 }
 
-@media (min-width: 1381px) and (min-height: 760px) {
-  .membership-page {
-    height: 100vh;
-    min-height: 0;
-    display: grid;
-    grid-template-rows: 58px 140px minmax(0, 1fr);
-    overflow: hidden;
-  }
-
-  .membership-summary {
-    min-height: 0;
-    padding-block: 10px;
-  }
-
-  .membership-summary-intro {
-    padding-block: 10px;
-  }
-
-  .membership-summary h1 {
-    margin-block: 3px;
-    font-size: 20px;
-  }
-
-  .membership-summary-actions {
-    margin-top: 4px;
-  }
-
-  .membership-compare-trigger-inline {
-    padding-block: 6px;
-  }
-
-  .membership-account,
-  .membership-reward-card {
-    min-height: 0;
-  }
-
-  .membership-account {
-    padding-block: 9px;
-  }
-
-  .membership-reward-card {
-    gap: 4px;
-    padding: 9px 12px;
-  }
-
-  .membership-reward-card h2 {
-    margin-top: 0;
-  }
-
-  .membership-reward-body {
-    gap: 1px;
-  }
-
-  .membership-reward-body p {
-    line-height: 1.3;
-  }
-
-  .membership-reward-button {
-    min-height: 28px;
-  }
-
-  .membership-commerce {
-    min-height: 0;
-    align-items: stretch;
-    padding-bottom: 10px;
-  }
-
-  .membership-catalog {
-    min-height: 0;
-    height: 100%;
-  }
-
-  .membership-plan-grid {
-    flex: 1;
-    min-height: 0;
-  }
-
-  .membership-plan-card {
-    min-height: 0;
-    height: 100%;
-    overflow: hidden;
-  }
-
-  .membership-plan-card ul {
-    flex: 1 1 auto;
-    min-height: 0;
-    align-content: stretch;
-    grid-auto-rows: minmax(22px, 1fr);
-    gap: 3px;
-    overflow: hidden;
-  }
-
-  .membership-card-select {
-    flex: none;
-    margin-top: 8px;
-  }
-
-  .membership-checkout {
-    align-self: stretch;
-    height: 100%;
-    overflow: hidden;
-  }
-}
-
 @media (max-width: 1380px) {
   .membership-summary {
     grid-template-columns: minmax(380px, 1.2fr) minmax(240px, 0.72fr) minmax(240px, 0.8fr);
@@ -2128,6 +2024,20 @@ html[data-color-mode='light'] .membership-account-actions button {
   background: #030404;
 }
 
+/* Desktop is authored on one stable 1920px canvas. High-DPI system scaling,
+   browser zoom and a docked DevTools panel reduce the CSS viewport width; the
+   whole canvas must scale together instead of squeezing individual cards. */
+.membership-shell-redesign.is-scaled-desktop {
+  width: var(--membership-desktop-canvas-width);
+  max-width: none;
+  zoom: var(--membership-desktop-scale);
+}
+
+.membership-shell-redesign.is-scaled-desktop .membership-page-redesign {
+  width: var(--membership-desktop-canvas-width);
+  max-width: none;
+}
+
 .membership-page-redesign {
   width: 100%;
   max-width: 100%;
@@ -2142,18 +2052,129 @@ html[data-color-mode='light'] .membership-account-actions button {
   background: #030404;
 }
 
+/* Browser normalization for the full-screen membership workspace.
+   Chrome/Edge, Safari and Firefox otherwise use different control metrics,
+   font synthesis and scrollbar widths, which changes the approved layout. */
+.membership-shell-redesign,
+.membership-shell-redesign button,
+.membership-shell-redesign input,
+.membership-shell-redesign select,
+.membership-shell-redesign textarea,
+.membership-shell-redesign .ant-select,
+.membership-shell-redesign .ant-select-selection-item {
+  font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", Arial, sans-serif;
+  font-synthesis: none;
+  font-kerning: normal;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.membership-shell-redesign button,
+.membership-shell-redesign input,
+.membership-shell-redesign select,
+.membership-shell-redesign textarea {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.membership-shell-redesign input[type='checkbox'],
+.membership-shell-redesign input[type='radio'] {
+  -webkit-appearance: auto;
+  appearance: auto;
+}
+
+.membership-shell-redesign button,
+.membership-shell-redesign [role='button'] {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+.membership-shell-redesign img,
+.membership-shell-redesign svg {
+  max-width: 100%;
+}
+
+.membership-page-redesign {
+  scrollbar-gutter: stable;
+  overscroll-behavior-y: auto;
+}
+
+.membership-page-redesign::-webkit-scrollbar,
+.membership-checkout-panel::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.membership-page-redesign::-webkit-scrollbar-thumb,
+.membership-checkout-panel::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(var(--theme-accent-rgb, 98, 230, 112), 0.38);
+  background-clip: padding-box;
+}
+
+/* The approved membership workspace is intentionally a black full-screen canvas,
+   independent from the generic light panel tokens used by the rest of the app. */
+html[data-color-mode='light'] .membership-shell-redesign .membership-cycle-switch,
+html[data-color-mode='light'] .membership-shell-redesign .membership-plan-card,
+html[data-color-mode='light'] .membership-shell-redesign .membership-plan-card.is-featured {
+  border-color: #8d9290;
+  color: #f4f6f4;
+  background: #030404;
+}
+
+html[data-color-mode='light'] .membership-shell-redesign .membership-cycle-switch button,
+html[data-color-mode='light'] .membership-shell-redesign .membership-cycle-switch button.active {
+  color: #f3f4f3;
+}
+
+html[data-color-mode='light'] .membership-shell-redesign .membership-cycle-switch button.active {
+  background: var(--membership-design-green-active);
+}
+
 .membership-design-header {
-  width: 100%;
+  position: relative;
+  width: min(100%, 2048px);
+  max-width: 2048px;
   min-width: 0;
   height: 116px;
   display: grid;
-  grid-template-columns: minmax(250px, 1fr) minmax(260px, auto) minmax(170px, auto) auto;
+  grid-template-columns: minmax(0, 1fr) max-content;
   align-items: center;
-  column-gap: clamp(28px, 4vw, 76px);
+  column-gap: clamp(34px, 3.2vw, 64px);
   box-sizing: border-box;
+  margin-inline: auto;
   border-bottom: 1px solid #303536;
-  padding: 14px clamp(28px, 4vw, 72px);
+  padding: 14px clamp(84px, 6vw, 112px) 14px clamp(28px, 4vw, 72px);
   background: #030404;
+}
+
+.membership-page-close {
+  position: absolute;
+  top: 18px;
+  right: clamp(22px, 2vw, 38px);
+  z-index: 5;
+  width: 42px;
+  height: 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #424848;
+  border-radius: 12px;
+  padding: 0;
+  color: #f4f6f4;
+  background: #161919;
+  font-size: 20px;
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+}
+
+.membership-page-close:hover,
+.membership-page-close:focus-visible {
+  border-color: var(--theme-accent, #62e670);
+  color: var(--theme-accent, #62e670);
+  background: rgba(var(--theme-accent-rgb, 98, 230, 112), 0.1);
+  outline: none;
 }
 
 .membership-design-header .membership-profile-identity {
@@ -2174,35 +2195,47 @@ html[data-color-mode='light'] .membership-account-actions button {
   gap: 8px;
 }
 
+.membership-profile-status-row {
+  min-width: 0;
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(34px, 3.2vw, 64px);
+  white-space: nowrap;
+}
+
 #root .membership-design-header .membership-profile-identity strong {
-  font-size: clamp(26px, 1.45vw, 29px);
+  color: #f7f8f7;
+  font-size: 20px;
   font-weight: 650;
 }
 
 #root .membership-design-header .membership-profile-identity span,
 #root .membership-design-header .membership-profile-meta span {
   color: #a6aaa8;
-  font-size: clamp(18px, 1vw, 20px);
+  font-size: 18px;
+  line-height: 24px;
 }
 
 .membership-design-header .membership-profile-meta {
   min-height: auto;
   display: flex;
-  align-items: baseline;
+  align-items: flex-end;
   gap: 16px;
   border: 0;
   padding: 0;
+  transform: none;
 }
 
 #root .membership-design-header .membership-profile-meta strong {
   color: #aeb2b0;
-  font-size: clamp(18px, 1.1vw, 22px);
+  font-size: 18px;
   font-weight: 650;
+  line-height: 24px;
 }
 
 #root .membership-design-header .membership-profile-points strong {
   color: #aeb2b0;
-  font-size: clamp(18px, 1.2vw, 24px);
+  font-size: 18px;
 }
 
 .membership-design-nav {
@@ -2212,6 +2245,8 @@ html[data-color-mode='light'] .membership-account-actions button {
   justify-content: flex-end;
   gap: clamp(16px, 1.5vw, 28px);
   white-space: nowrap;
+  justify-self: end;
+  transform: translate(-24px, -16px);
 }
 
 #root .membership-page-redesign .membership-design-nav button {
@@ -2220,7 +2255,7 @@ html[data-color-mode='light'] .membership-account-actions button {
   color: #f6f7f6;
   background: transparent;
   font: inherit;
-  font-size: clamp(22px, 1.25vw, 25px);
+  font-size: 20px;
   font-weight: 600;
   cursor: pointer;
 }
@@ -2235,15 +2270,20 @@ html[data-color-mode='light'] .membership-account-actions button {
 }
 
 .membership-page-redesign .membership-commerce {
-  width: 100%;
-  max-width: none;
+  --membership-checkout-width: clamp(310px, 19vw, 380px);
+  --membership-commerce-gap: clamp(16px, 1.3vw, 26px);
+  --membership-workspace-height: min(calc(100vh - 160px), 820px);
+  width: min(100%, 2048px);
+  max-width: 2048px;
   height: calc(100vh - 116px);
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(310px, 19vw, 380px);
-  gap: clamp(16px, 1.3vw, 26px);
+  grid-template-columns: minmax(0, 1fr) var(--membership-checkout-width);
+  grid-template-rows: minmax(0, calc(var(--membership-workspace-height) - 68px - var(--membership-commerce-gap))) 68px;
+  gap: var(--membership-commerce-gap);
+  align-items: start;
   box-sizing: border-box;
-  margin: 0;
+  margin: 0 auto;
   padding: 24px clamp(24px, 3.5vw, 68px) 10px;
   overflow: visible;
   background: #030404;
@@ -2258,11 +2298,14 @@ html[data-color-mode='light'] .membership-account-actions button {
 }
 
 .membership-page-redesign .membership-catalog {
+  grid-column: 1;
+  grid-row: 1;
+  width: 100%;
   height: 100% !important;
   min-height: 0;
   display: grid;
-  grid-template-rows: 66px minmax(0, 1fr) 68px;
-  gap: 16px;
+  grid-template-rows: 56px minmax(0, 1fr);
+  gap: 44px;
   box-sizing: border-box;
   overflow: visible;
   border: 0;
@@ -2272,8 +2315,8 @@ html[data-color-mode='light'] .membership-account-actions button {
 }
 
 .membership-page-redesign .membership-cycle-switch {
-  width: min(700px, 62%);
-  height: 66px;
+  width: min(900px, 88%);
+  height: 56px;
   align-self: start;
   justify-self: center;
   margin: 0;
@@ -2284,11 +2327,23 @@ html[data-color-mode='light'] .membership-account-actions button {
 }
 
 #root .membership-page-redesign .membership-cycle-switch button {
-  min-height: 62px;
+  min-height: 52px;
   border-radius: 8px;
   color: #f3f4f3;
-  font-size: clamp(28px, 1.65vw, 33px);
+  font-size: 24px;
   font-weight: 500;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 0.8vw, 16px);
+}
+
+#root .membership-page-redesign .membership-cycle-switch button > span {
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
 }
 
 .membership-page-redesign .membership-cycle-switch button.active {
@@ -2298,21 +2353,20 @@ html[data-color-mode='light'] .membership-account-actions button {
 }
 
 #root .membership-page-redesign .membership-cycle-switch small {
-  display: inline;
-  margin-left: 10px;
-  color: inherit;
-  font-size: clamp(16px, 0.85vw, 18px);
+  display: none;
 }
 
 #root .membership-page-redesign .membership-cycle-switch em {
-  top: -14px;
-  right: 8px;
+  position: static;
   transform: none;
-  border-radius: 6px;
-  padding: 3px 7px;
-  color: #07120b;
-  background: var(--theme-accent, #62e670);
-  font-size: 12px;
+  border-radius: 0;
+  padding: 0;
+  color: #f3f4f3;
+  background: transparent;
+  font-size: clamp(15px, 0.82vw, 17px);
+  font-style: normal;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .membership-page-redesign .membership-plan-grid {
@@ -2348,31 +2402,61 @@ html[data-color-mode='light'] .membership-account-actions button {
 }
 
 .membership-page-redesign .membership-plan-hero {
-  min-height: clamp(205px, 27vh, 272px);
+  height: clamp(240px, 27vh, 272px);
+  min-height: clamp(240px, 27vh, 272px);
+  box-sizing: border-box;
+  overflow: hidden;
   border-radius: 51px;
   padding: clamp(22px, 2vw, 34px) clamp(20px, 2vw, 34px);
   background: var(--membership-design-green);
+  display: flex;
+  flex-direction: column;
 }
 
 .membership-page-redesign .membership-plan-card.is-selected .membership-plan-hero {
   background: var(--membership-design-green-active);
 }
 
+.membership-page-redesign .membership-plan-hero header {
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+
 #root .membership-page-redesign .membership-plan-hero h2 {
-  font-size: clamp(24px, 1.25vw, 26px);
+  min-width: 0;
+  font-size: 24px;
   font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .membership-page-redesign .membership-plan-hero > p {
+  min-width: 0;
   min-height: 48px;
   margin: 8px 0 12px;
   color: #bcc5bb;
   font-size: clamp(13px, 0.95vw, 19px);
   line-height: 1.45;
+  overflow-wrap: anywhere;
 }
 
 .membership-page-redesign .membership-plan-hero .membership-price-row {
+  min-width: 0;
   min-height: 50px;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.membership-page-redesign .membership-plan-point-summary {
+  min-height: 52px;
+  display: grid;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: 12px;
+  color: #bdc8bb;
+  font-size: clamp(16px, 0.95vw, 19px);
+  line-height: 1.35;
 }
 
 #root .membership-page-redesign .membership-plan-hero .membership-price-row strong {
@@ -2385,10 +2469,19 @@ html[data-color-mode='light'] .membership-account-actions button {
   font-size: clamp(13px, 0.9vw, 18px);
 }
 
-.membership-page-redesign .membership-status-badge {
+#root .membership-page-redesign .membership-status-badge {
+  flex: none;
   border-color: rgba(255, 255, 255, 0.5);
   color: #f5fff5;
   background: rgba(0, 0, 0, 0.16);
+  min-height: 42px;
+  padding: 7px 15px;
+  gap: 8px;
+  font-size: clamp(17px, 0.95vw, 20px) !important;
+}
+
+#root .membership-page-redesign .membership-status-badge .anticon {
+  font-size: 18px;
 }
 
 .membership-page-redesign .membership-plan-benefits {
@@ -2403,12 +2496,33 @@ html[data-color-mode='light'] .membership-account-actions button {
 }
 
 #root .membership-page-redesign .membership-plan-benefits li {
+  min-width: 0;
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr);
   gap: 3px 9px;
   align-items: start;
   font-size: clamp(18px, 0.95vw, 20px);
   line-height: 1.35;
+}
+
+#root .membership-page-redesign .membership-plan-benefits .membership-benefit-check {
+  color: #20df42;
+  font-size: 18px;
+  filter: drop-shadow(0 0 3px rgba(32, 223, 66, 0.48));
+}
+
+#root .membership-page-redesign .membership-plan-benefits li > span:not(.anticon) {
+  min-width: 0;
+  color: #f4f6f4;
+  font-size: clamp(18px, 0.95vw, 20px) !important;
+  overflow-wrap: anywhere;
+}
+
+#root .membership-page-redesign .membership-card-benefit-highlights li > span:not(.anticon) {
+  white-space: nowrap;
+  letter-spacing: -0.02em;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 #root .membership-page-redesign .membership-plan-benefits li b {
@@ -2421,7 +2535,7 @@ html[data-color-mode='light'] .membership-account-actions button {
 .membership-card-benefit-divider {
   height: 1px;
   margin: clamp(18px, 2.4vh, 28px) 0;
-  background: #8b908e;
+  background: rgba(196, 203, 199, 0.72);
 }
 
 .membership-page-redesign .membership-card-select {
@@ -2429,37 +2543,50 @@ html[data-color-mode='light'] .membership-account-actions button {
 }
 
 .membership-page-redesign .membership-inline-comparison {
+  grid-column: 1;
+  grid-row: 2;
   width: 100%;
   max-width: none;
   align-self: center;
+  justify-self: center;
   margin: 0;
+  text-align: center;
+  transform: none;
 }
 
 .membership-page-redesign .membership-inline-comparison-heading {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   margin: 0;
+  text-align: center;
 }
 
-.membership-page-redesign .membership-inline-comparison-heading h2 {
-  margin-bottom: 3px;
-  font-size: clamp(19px, 1.45vw, 29px);
-  font-weight: 500;
+#root .membership-page-redesign .membership-inline-comparison-heading h2 {
+  margin-bottom: 2px;
+  color: #fff;
+  font-size: 24px !important;
+  font-weight: 650;
 }
 
-.membership-page-redesign .membership-comparison-toggle {
-  border: 1px solid rgba(var(--theme-accent-rgb, 98, 230, 112), 0.78);
-  border-radius: 999px;
-  padding: 7px 22px;
-  color: #dffff0;
-  background: rgba(var(--theme-accent-rgb, 98, 230, 112), 0.18);
-  font-size: clamp(13px, 0.95vw, 19px);
-  font-weight: 700;
-  box-shadow: 0 0 24px rgba(var(--theme-accent-rgb, 98, 230, 112), 0.08);
+#root .membership-page-redesign .membership-comparison-toggle {
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  color: #fff;
+  background: transparent;
+  font-size: 24px !important;
+  font-weight: 650;
+  line-height: 1.25;
+  box-shadow: none;
 }
 
 .membership-page-redesign .membership-comparison-toggle:hover,
 .membership-page-redesign .membership-comparison-toggle:focus-visible {
-  color: #07120b;
-  background: var(--theme-accent, #62e670);
+  color: var(--theme-accent, #62e670);
+  background: transparent;
 }
 
 .membership-visually-hidden {
@@ -2573,12 +2700,14 @@ html[data-color-mode='light'] .membership-account-actions button {
 }
 
 .membership-page-redesign .membership-checkout {
+  grid-column: 2;
+  grid-row: 1;
   position: static;
   width: 100%;
   height: 100% !important;
   min-height: 0;
   display: grid;
-  grid-template-rows: 66px minmax(0, 1fr) 68px;
+  grid-template-rows: 66px minmax(0, 1fr);
   gap: 16px;
   overflow: hidden !important;
   border: 0;
@@ -2673,19 +2802,199 @@ html[data-color-mode='light'] .membership-account-actions button {
   margin-left: 18px;
 }
 
+#root .membership-page-redesign .membership-checkout-panel h2,
+#root .membership-page-redesign .membership-sku-picker > span,
+#root .membership-page-redesign .membership-order-detail dt,
+#root .membership-page-redesign .membership-order-detail dd,
+#root .membership-page-redesign .membership-total span,
+#root .membership-page-redesign .membership-total strong,
+#root .membership-page-redesign .membership-agreement {
+  color: #f4f6f4;
+}
+
+#root .membership-page-redesign .membership-order-detail dt,
+#root .membership-page-redesign .membership-agreement {
+  color: #aeb5b0;
+}
+
+#root .membership-page-redesign .membership-order-detail dt,
+#root .membership-page-redesign .membership-order-detail dd {
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+#root .membership-page-redesign .membership-total span {
+  font-size: 18px;
+}
+
+#root .membership-page-redesign .membership-total strong {
+  font-size: 22px;
+}
+
+#root .membership-page-redesign .membership-agreement {
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+#root .membership-page-redesign .membership-agreement {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+}
+
+#root .membership-page-redesign .membership-agreement input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: 0 0 16px;
+  accent-color: var(--theme-accent, #62e670);
+  cursor: pointer;
+}
+
+#root .membership-page-redesign .membership-agreement span {
+  min-width: 0;
+}
+
+#root .membership-page-redesign .membership-agreement button {
+  padding: 0;
+  border: 0;
+  color: var(--theme-accent, #62e670);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+#root .membership-page-redesign .membership-agreement button:hover {
+  text-decoration: underline;
+}
+
+.membership-service-agreement-modal-root .ant-modal-mask {
+  background: rgba(0, 0, 0, 0.72) !important;
+  backdrop-filter: blur(5px);
+}
+
+.membership-service-agreement-modal .ant-modal-content {
+  border: 1px solid rgba(var(--theme-accent-rgb, 98, 230, 112), 0.42);
+  border-radius: 20px;
+  color: #eef3ef !important;
+  background: #151919 !important;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.56), 0 0 30px rgba(var(--theme-accent-rgb, 98, 230, 112), 0.08);
+}
+
+.membership-service-agreement-modal .ant-modal-header {
+  background: transparent !important;
+}
+
+.membership-service-agreement-modal .ant-modal-title,
+.membership-service-agreement-modal .ant-modal-close {
+  color: #f4f7f4;
+  background: transparent;
+}
+
+.membership-service-agreement-modal .ant-modal-title {
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.membership-service-agreement-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 22px;
+  padding: 4px 0 14px;
+  border-bottom: 1px solid #313737;
+  color: #919b95;
+  font-size: 13px;
+}
+
+.membership-service-agreement-content {
+  min-height: 220px;
+  max-height: min(54vh, 520px);
+  margin-top: 16px;
+  padding: 18px;
+  overflow-y: auto;
+  border: 1px solid #303636;
+  border-radius: 14px;
+  color: #dce3de;
+  background: #0f1212;
+  font-size: 15px;
+  line-height: 1.85;
+  white-space: pre-wrap;
+}
+
+.membership-service-agreement-confirm {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 18px;
+  border: 0;
+  border-radius: 12px;
+  color: #071108;
+  background: var(--theme-accent, #62e670);
+  font-size: 16px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+html[data-color-mode='light'] .membership-service-agreement-modal .ant-modal-content {
+  border-color: rgba(31, 41, 47, 0.16) !important;
+  color: #1f262a !important;
+  background: #ffffff !important;
+  box-shadow: 0 24px 70px rgba(28, 38, 44, 0.2) !important;
+}
+
+html[data-color-mode='light'] .membership-service-agreement-modal .ant-modal-title {
+  color: #1f262a !important;
+}
+
+html[data-color-mode='light'] .membership-service-agreement-modal .ant-modal-close {
+  color: #4e595f !important;
+  background: #eef2f4 !important;
+}
+
+html[data-color-mode='light'] .membership-service-agreement-meta {
+  border-bottom-color: #d9dfe2;
+  color: #667178;
+}
+
+html[data-color-mode='light'] .membership-service-agreement-content {
+  border-color: #dce2e5;
+  color: #273035;
+  background: #f7f9fa;
+}
+
+html[data-color-mode='light'] .membership-service-agreement-confirm {
+  color: #071108;
+  background: var(--theme-accent, #62e670);
+}
+
+#root .membership-page-redesign .membership-pay-methods button {
+  border-color: rgba(var(--theme-accent-rgb, 98, 230, 112), 0.78);
+  color: var(--theme-accent, #62e670);
+  background: rgba(var(--theme-accent-rgb, 98, 230, 112), 0.08);
+}
+
+#root .membership-page-redesign .membership-sku-picker .ant-select-selector {
+  border-color: #3b4241 !important;
+  color: #f4f6f4 !important;
+  background: #161a1a !important;
+}
+
+#root .membership-page-redesign .membership-sku-picker .ant-select-selection-item,
+#root .membership-page-redesign .membership-sku-picker .ant-select-arrow {
+  color: #f4f6f4 !important;
+}
+
 @media (max-width: 1500px) {
   .membership-design-header {
-    grid-template-columns: minmax(230px, 1fr) auto auto;
-    column-gap: 24px;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    column-gap: 18px;
     padding-inline: 28px;
   }
 
-  .membership-design-header .membership-profile-points {
-    display: none;
-  }
-
   .membership-page-redesign .membership-commerce {
-    grid-template-columns: minmax(0, 1fr) 300px;
+    --membership-checkout-width: 300px;
+    grid-template-columns: minmax(0, 1fr) var(--membership-checkout-width);
     padding-inline: 24px;
   }
 
@@ -2705,7 +3014,133 @@ html[data-color-mode='light'] .membership-account-actions button {
   }
 }
 
-@media (max-width: 1180px) {
+/* Keep the approved four-plan + checkout composition on ordinary desktop and
+   small laptop windows.  The previous 1180px breakpoint changed the page into
+   a two-column catalogue, so resizing the browser made it look like a
+   different page instead of the same responsive workspace. */
+@media (min-width: 901px) and (max-width: 1180px) {
+  .membership-design-header {
+    height: 96px;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    column-gap: 14px;
+    padding: 10px 62px 10px 18px;
+  }
+
+  .membership-design-header .membership-profile-identity {
+    gap: 14px;
+  }
+
+  .membership-design-header .membership-profile-avatar {
+    width: 62px;
+    height: 62px;
+    flex-basis: 62px;
+  }
+
+  .membership-profile-status-row {
+    gap: clamp(14px, 2vw, 24px);
+  }
+
+  .membership-design-nav {
+    gap: 12px;
+    transform: none;
+  }
+
+  #root .membership-page-redesign .membership-design-nav button,
+  #root .membership-design-header .membership-profile-identity strong {
+    font-size: 18px;
+  }
+
+  #root .membership-design-header .membership-profile-identity span,
+  #root .membership-design-header .membership-profile-meta span,
+  #root .membership-design-header .membership-profile-meta strong,
+  #root .membership-design-header .membership-profile-points strong {
+    font-size: 15px;
+  }
+
+  .membership-page-redesign .membership-commerce {
+    --membership-checkout-width: clamp(226px, 23vw, 270px);
+    --membership-commerce-gap: 12px;
+    height: calc(100vh - 96px);
+    grid-template-columns: minmax(0, 1fr) var(--membership-checkout-width);
+    padding: 14px 12px 8px;
+  }
+
+  .membership-page-redesign .membership-catalog {
+    grid-template-rows: 50px minmax(0, 1fr);
+    gap: 24px;
+  }
+
+  .membership-page-redesign .membership-cycle-switch {
+    width: min(760px, 94%);
+    height: 50px;
+  }
+
+  #root .membership-page-redesign .membership-cycle-switch button {
+    min-height: 46px;
+    font-size: 20px;
+  }
+
+  .membership-page-redesign .membership-plan-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px;
+    overflow: hidden;
+  }
+
+  .membership-page-redesign .membership-plan-card,
+  .membership-page-redesign .membership-plan-card.is-featured {
+    min-height: 0;
+    border-radius: 30px;
+  }
+
+  .membership-page-redesign .membership-plan-hero {
+    height: clamp(205px, 27vh, 232px);
+    min-height: clamp(205px, 27vh, 232px);
+    border-radius: 27px;
+    padding: 16px 14px;
+  }
+
+  #root .membership-page-redesign .membership-plan-hero h2 {
+    font-size: clamp(18px, 2vw, 22px);
+  }
+
+  .membership-page-redesign .membership-plan-hero > p {
+    min-height: 34px;
+    font-size: clamp(11px, 1.25vw, 14px);
+  }
+
+  #root .membership-page-redesign .membership-plan-hero .membership-price-row strong {
+    font-size: clamp(28px, 3vw, 34px);
+  }
+
+  .membership-page-redesign .membership-plan-point-summary {
+    min-height: 38px;
+    font-size: clamp(11px, 1.25vw, 14px);
+  }
+
+  .membership-page-redesign .membership-plan-benefits {
+    padding: 15px 12px 10px;
+  }
+
+  #root .membership-page-redesign .membership-plan-benefits li,
+  #root .membership-page-redesign .membership-plan-benefits li > span:not(.anticon) {
+    font-size: clamp(11px, 1.35vw, 16px) !important;
+  }
+
+  #root .membership-page-redesign .membership-card-benefit-highlights li {
+    grid-template-columns: 15px minmax(0, 1fr);
+    gap: 6px;
+  }
+
+  #root .membership-page-redesign .membership-plan-benefits .membership-benefit-check {
+    font-size: 15px;
+  }
+
+  .membership-card-benefit-divider {
+    margin: 12px 0;
+  }
+}
+
+@media (max-width: 900px) {
   .membership-shell-redesign,
   .membership-page-redesign {
     height: auto !important;
@@ -2724,16 +3159,26 @@ html[data-color-mode='light'] .membership-account-actions button {
   }
 
   .membership-page-redesign .membership-commerce {
+    --membership-workspace-height: auto;
     height: auto;
     grid-template-columns: 1fr;
+    grid-template-rows: auto;
     gap: 24px;
     padding: 20px;
     overflow: visible;
   }
 
+  .membership-page-redesign .membership-inline-comparison {
+    width: 100%;
+    transform: none;
+  }
+
   .membership-page-redesign .membership-catalog {
+    grid-column: 1;
+    grid-row: auto;
     height: auto !important;
-    grid-template-rows: auto auto auto;
+    grid-template-rows: auto auto;
+    gap: 24px;
     overflow: visible;
   }
 
@@ -2749,10 +3194,18 @@ html[data-color-mode='light'] .membership-account-actions button {
   }
 
   .membership-page-redesign .membership-checkout {
+    grid-column: 1;
+    grid-row: auto;
+    height: auto !important;
     grid-template-columns: minmax(220px, 300px) minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr);
     align-items: stretch;
     max-width: none;
+  }
+
+  .membership-page-redesign .membership-inline-comparison {
+    grid-column: 1;
+    grid-row: auto;
   }
 
   .membership-page-redesign .membership-checkout .membership-promo-banner {
@@ -2778,17 +3231,23 @@ html[data-color-mode='light'] .membership-account-actions button {
   .membership-design-header {
     grid-template-columns: 1fr;
     gap: 14px;
-    padding: 18px 20px;
+    padding: 64px 20px 18px;
+  }
+
+  .membership-page-close {
+    top: 14px;
+    right: 14px;
   }
 
   .membership-design-nav {
     justify-content: flex-start;
     flex-wrap: wrap;
     gap: 6px 18px;
+    transform: none;
   }
 
   #root .membership-page-redesign .membership-design-nav button {
-    font-size: clamp(17px, 5.2vw, 21px);
+    font-size: 20px;
   }
 
   .membership-page-redesign .membership-commerce {
@@ -2798,26 +3257,23 @@ html[data-color-mode='light'] .membership-account-actions button {
 
   .membership-page-redesign .membership-cycle-switch {
     width: 100%;
-    height: 74px;
+    height: 56px;
     grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
   }
 
   #root .membership-page-redesign .membership-cycle-switch button {
-    min-height: 70px;
+    min-height: 52px;
     padding: 6px 8px;
-    font-size: 26px;
+    font-size: 24px;
     line-height: 1.15;
   }
 
   #root .membership-page-redesign .membership-cycle-switch small {
-    display: block;
-    margin: 4px 0 0;
-    font-size: 15px;
+    display: none;
   }
 
   #root .membership-page-redesign .membership-cycle-switch em {
-    top: -16px;
-    right: 8px;
+    position: static;
     transform: none;
     font-size: 12px;
   }
@@ -2827,6 +3283,14 @@ html[data-color-mode='light'] .membership-account-actions button {
     gap: 16px;
   }
 
+  #root .membership-page-redesign .membership-card-benefit-highlights li > span:not(.anticon) {
+    white-space: normal;
+    letter-spacing: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+
   .membership-page-redesign .membership-plan-card,
   .membership-page-redesign .membership-plan-card.is-featured {
     min-height: 590px;
@@ -2834,7 +3298,8 @@ html[data-color-mode='light'] .membership-account-actions button {
   }
 
   .membership-page-redesign .membership-plan-hero {
-    min-height: 220px;
+    height: 240px;
+    min-height: 240px;
     border-radius: 33px;
   }
 
@@ -2863,7 +3328,7 @@ html[data-color-mode='light'] .membership-account-actions button {
 
 @media (max-width: 420px) {
   .membership-design-header {
-    padding: 16px 14px;
+    padding: 62px 14px 16px;
   }
 
   .membership-design-header .membership-profile-identity {
@@ -2878,12 +3343,12 @@ html[data-color-mode='light'] .membership-account-actions button {
   }
 
   #root .membership-design-header .membership-profile-identity strong {
-    font-size: 24px;
+    font-size: 20px;
   }
 
   #root .membership-page-redesign .membership-cycle-switch button {
     padding-inline: 4px;
-    font-size: 22px;
+    font-size: 24px;
   }
 
   #root .membership-page-redesign .membership-cycle-switch small {
@@ -2893,4 +3358,484 @@ html[data-color-mode='light'] .membership-account-actions button {
   .membership-page-redesign .membership-plan-benefits {
     padding-inline: 18px;
   }
+}
+
+/* Desktop geometry must not depend on viewport height. Docking DevTools at the
+   bottom only reduces vh/dvh; it must not resize the approved plan cards. The
+   card row is content-driven and the page scrolls only when it no longer fits. */
+@media (min-width: 901px) {
+  .membership-shell-redesign,
+  .membership-page-redesign {
+    height: auto !important;
+    min-height: 100vh !important;
+  }
+
+  .membership-shell-redesign {
+    overflow-x: clip;
+    overflow-y: visible;
+    overscroll-behavior: auto;
+  }
+
+  .membership-page-redesign {
+    overflow-x: clip !important;
+    overflow-y: visible !important;
+    overscroll-behavior: auto;
+    scrollbar-gutter: auto;
+  }
+
+  .membership-page-redesign .membership-commerce {
+    --membership-workspace-height: auto;
+    height: auto !important;
+    min-height: 0;
+    grid-template-rows: auto 68px;
+  }
+
+  .membership-page-redesign .membership-plan-hero {
+    height: clamp(240px, 15vw, 272px);
+    min-height: clamp(240px, 15vw, 272px);
+  }
+
+  .membership-page-redesign .membership-catalog {
+    height: auto !important;
+    grid-template-rows: 56px auto;
+  }
+
+  .membership-page-redesign .membership-plan-grid {
+    height: auto;
+    align-items: stretch;
+  }
+
+  .membership-page-redesign .membership-plan-card,
+  .membership-page-redesign .membership-plan-card.is-featured {
+    height: auto !important;
+    min-height: 620px;
+  }
+
+  .membership-page-redesign .membership-checkout {
+    height: auto !important;
+    min-height: 620px;
+    align-self: stretch;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1180px) {
+  .membership-page-redesign .membership-plan-card,
+  .membership-page-redesign .membership-plan-card.is-featured,
+  .membership-page-redesign .membership-checkout {
+    min-height: 560px;
+  }
+}
+
+@media (min-width: 1181px) {
+  .membership-design-header {
+    height: 116px;
+    padding-top: 14px;
+    padding-bottom: 14px;
+  }
+
+  .membership-page-redesign .membership-commerce {
+    padding-top: 24px;
+    padding-bottom: 10px;
+  }
+
+  .membership-page-redesign .membership-catalog {
+    grid-template-rows: 56px auto;
+    gap: 44px;
+  }
+
+  .membership-page-redesign .membership-cycle-switch {
+    height: 56px;
+  }
+
+  #root .membership-page-redesign .membership-cycle-switch button {
+    min-height: 52px;
+  }
+
+  .membership-page-redesign .membership-checkout {
+    grid-template-rows: 66px minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .membership-promo-banner,
+  .membership-promo-banner img {
+    min-height: 70px;
+  }
+}
+
+/* Restore the approved desktop measurements after width-based media queries.
+   Those queries still see the reduced CSS viewport at 125%/150%/200% zoom;
+   this class keeps every part of the page on the same logical canvas. */
+@media (min-width: 901px) {
+  .membership-shell-redesign.is-scaled-desktop .membership-design-header {
+    height: 116px;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    column-gap: clamp(34px, 3.2vw, 64px);
+    padding: 14px 112px 14px 72px;
+  }
+
+  .membership-shell-redesign.is-scaled-desktop .membership-design-header .membership-profile-identity {
+    gap: 22px;
+  }
+
+  .membership-shell-redesign.is-scaled-desktop .membership-design-header .membership-profile-avatar {
+    width: 76px;
+    height: 76px;
+    flex-basis: 76px;
+  }
+
+  .membership-shell-redesign.is-scaled-desktop .membership-profile-status-row {
+    gap: 60px;
+  }
+
+  .membership-shell-redesign.is-scaled-desktop .membership-design-nav {
+    gap: 24px;
+    transform: translate(-24px, -16px);
+  }
+
+  #root .membership-shell-redesign.is-scaled-desktop .membership-design-nav button,
+  #root .membership-shell-redesign.is-scaled-desktop .membership-design-header .membership-profile-identity strong {
+    font-size: 20px;
+  }
+
+  #root .membership-shell-redesign.is-scaled-desktop .membership-design-header .membership-profile-identity span,
+  #root .membership-shell-redesign.is-scaled-desktop .membership-design-header .membership-profile-meta span,
+  #root .membership-shell-redesign.is-scaled-desktop .membership-design-header .membership-profile-meta strong,
+  #root .membership-shell-redesign.is-scaled-desktop .membership-design-header .membership-profile-points strong {
+    font-size: 18px;
+  }
+
+  .membership-shell-redesign.is-scaled-desktop .membership-commerce {
+    --membership-checkout-width: 360px;
+    --membership-commerce-gap: 24px;
+    grid-template-columns: minmax(0, 1fr) var(--membership-checkout-width);
+    padding: 24px 60px 10px;
+  }
+
+  .membership-shell-redesign.is-scaled-desktop .membership-catalog {
+    grid-template-rows: 56px auto;
+    gap: 44px;
+  }
+
+  .membership-shell-redesign.is-scaled-desktop .membership-cycle-switch {
+    width: 900px;
+    height: 56px;
+  }
+
+  #root .membership-shell-redesign.is-scaled-desktop .membership-cycle-switch button {
+    min-height: 52px;
+    font-size: 24px;
+  }
+
+  .membership-shell-redesign.is-scaled-desktop .membership-plan-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 24px;
+    overflow: hidden;
+  }
+
+  .membership-shell-redesign.is-scaled-desktop .membership-plan-card,
+  .membership-shell-redesign.is-scaled-desktop .membership-plan-card.is-featured {
+    min-height: 620px;
+    border-radius: 54px;
+  }
+
+  .membership-shell-redesign.is-scaled-desktop .membership-plan-hero {
+    height: 272px;
+    min-height: 272px;
+    border-radius: 51px;
+    padding: 30px 32px;
+  }
+
+  #root .membership-shell-redesign.is-scaled-desktop .membership-plan-hero h2 {
+    font-size: 26px;
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .membership-shell-redesign.is-scaled-desktop .membership-plan-hero > p,
+  .membership-shell-redesign.is-scaled-desktop .membership-plan-point-summary {
+    font-size: 17px;
+  }
+
+  #root .membership-shell-redesign.is-scaled-desktop .membership-plan-hero .membership-price-row strong {
+    font-size: 40px;
+  }
+
+  .membership-shell-redesign.is-scaled-desktop .membership-plan-benefits {
+    padding: 28px 28px 18px;
+  }
+
+  #root .membership-shell-redesign.is-scaled-desktop .membership-plan-benefits li,
+  #root .membership-shell-redesign.is-scaled-desktop .membership-plan-benefits li > span:not(.anticon) {
+    font-size: 18px !important;
+  }
+
+  #root .membership-shell-redesign.is-scaled-desktop .membership-card-benefit-highlights li > span:not(.anticon) {
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  #root .membership-shell-redesign.is-scaled-desktop .membership-plan-benefits .membership-benefit-check {
+    font-size: 18px;
+  }
+
+  .membership-shell-redesign.is-scaled-desktop .membership-card-benefit-divider {
+    margin: 22px 0;
+  }
+
+  .membership-shell-redesign.is-scaled-desktop .membership-checkout {
+    min-height: 620px;
+    grid-template-rows: 66px minmax(0, 1fr);
+    gap: 16px;
+  }
+}
+
+/* The membership workspace follows the global light theme.  Keep the same
+   layout, spacing and four-plan composition while replacing the old forced
+   black canvas with readable light surfaces. */
+html[data-color-mode='light'] .membership-shell-redesign {
+  --membership-design-green: #e8f4e9;
+  --membership-design-green-active: #d8edda;
+  --membership-catalog-bg: #f4f6f8;
+  --membership-card-bg: #ffffff;
+  --membership-control-bg: #f5f7f8;
+  --membership-topbar-bg: #ffffff;
+  background: #f4f6f8 !important;
+  color: #1f292e !important;
+}
+
+html[data-color-mode='light'] .membership-page-redesign,
+html[data-color-mode='light'] .membership-page-redesign .membership-commerce,
+html[data-color-mode='light'] .membership-page-redesign .membership-catalog,
+html[data-color-mode='light'] .membership-comparison-page,
+html[data-color-mode='light'] .membership-comparison-table-page {
+  background: #f4f6f8 !important;
+  color: #1f292e !important;
+}
+
+html[data-color-mode='light'] .membership-design-header {
+  border-bottom-color: #d9e0e3 !important;
+  background: rgba(255, 255, 255, 0.97) !important;
+  box-shadow: 0 5px 18px rgba(38, 48, 54, 0.06);
+}
+
+html[data-color-mode='light'] .membership-page-close {
+  border-color: #d1d9dd !important;
+  background: #f3f6f7 !important;
+  color: #3b484f !important;
+  -webkit-text-fill-color: #3b484f !important;
+}
+
+html[data-color-mode='light'] .membership-page-close:hover,
+html[data-color-mode='light'] .membership-page-close:focus-visible {
+  border-color: #83bc89 !important;
+  background: #eaf7ec !important;
+  color: #246f2d !important;
+  -webkit-text-fill-color: #246f2d !important;
+}
+
+html[data-color-mode='light'] .membership-design-header .membership-profile-avatar {
+  border-color: #91b9dc !important;
+  background: #eef5fb !important;
+  color: #235d91 !important;
+}
+
+html[data-color-mode='light'] #root .membership-design-header .membership-profile-identity strong,
+html[data-color-mode='light'] #root .membership-design-header .membership-profile-meta strong,
+html[data-color-mode='light'] #root .membership-design-header .membership-profile-points strong,
+html[data-color-mode='light'] #root .membership-page-redesign .membership-design-nav button {
+  color: #1f292e !important;
+  -webkit-text-fill-color: #1f292e !important;
+}
+
+html[data-color-mode='light'] #root .membership-design-header .membership-profile-identity span,
+html[data-color-mode='light'] #root .membership-design-header .membership-profile-meta span {
+  color: #59666d !important;
+  -webkit-text-fill-color: #59666d !important;
+}
+
+html[data-color-mode='light'] #root .membership-page-redesign .membership-design-nav button:hover,
+html[data-color-mode='light'] #root .membership-page-redesign .membership-design-nav button:focus-visible {
+  color: #246f2d !important;
+  -webkit-text-fill-color: #246f2d !important;
+}
+
+html[data-color-mode='light'] .membership-page-redesign .membership-cycle-switch {
+  border-color: #c8d2d6 !important;
+  background: #ffffff !important;
+  box-shadow: 0 6px 18px rgba(38, 48, 54, 0.06);
+}
+
+html[data-color-mode='light'] #root .membership-page-redesign .membership-cycle-switch button,
+html[data-color-mode='light'] #root .membership-page-redesign .membership-cycle-switch button > span,
+html[data-color-mode='light'] #root .membership-page-redesign .membership-cycle-switch em {
+  color: #425058 !important;
+  -webkit-text-fill-color: #425058 !important;
+}
+
+html[data-color-mode='light'] #root .membership-page-redesign .membership-cycle-switch button.active {
+  background: #d8edda !important;
+  color: #1f6828 !important;
+  -webkit-text-fill-color: #1f6828 !important;
+  box-shadow: inset 0 0 0 1px #84bd8a !important;
+}
+
+html[data-color-mode='light'] #root .membership-page-redesign .membership-cycle-switch button.active > span,
+html[data-color-mode='light'] #root .membership-page-redesign .membership-cycle-switch button.active em {
+  color: #1f6828 !important;
+  -webkit-text-fill-color: #1f6828 !important;
+}
+
+html[data-color-mode='light'] .membership-page-redesign .membership-plan-card,
+html[data-color-mode='light'] .membership-page-redesign .membership-plan-card.is-featured {
+  border-color: #cbd5d9 !important;
+  background: #ffffff !important;
+  color: #1f292e !important;
+  box-shadow: 0 12px 30px rgba(38, 48, 54, 0.08) !important;
+}
+
+html[data-color-mode='light'] .membership-page-redesign .membership-plan-card:hover {
+  border-color: #8fc695 !important;
+  box-shadow: 0 16px 34px rgba(38, 48, 54, 0.12) !important;
+}
+
+html[data-color-mode='light'] .membership-page-redesign .membership-plan-card.is-selected,
+html[data-color-mode='light'] .membership-page-redesign .membership-plan-card.is-featured.is-selected {
+  border-color: #4fa85a !important;
+  box-shadow: 0 0 0 2px rgba(79, 168, 90, 0.14), 0 16px 34px rgba(38, 48, 54, 0.1) !important;
+}
+
+html[data-color-mode='light'] .membership-page-redesign .membership-plan-hero {
+  background: #e8f4e9 !important;
+}
+
+html[data-color-mode='light'] .membership-page-redesign .membership-plan-card.is-selected .membership-plan-hero {
+  background: #d8edda !important;
+}
+
+html[data-color-mode='light'] #root .membership-page-redesign .membership-plan-hero h2,
+html[data-color-mode='light'] #root .membership-page-redesign .membership-plan-hero .membership-price-row :where(small, strong, span),
+html[data-color-mode='light'] #root .membership-page-redesign .membership-plan-benefits li > span:not(.anticon),
+html[data-color-mode='light'] #root .membership-page-redesign .membership-inline-comparison-heading h2,
+html[data-color-mode='light'] #root .membership-page-redesign .membership-comparison-toggle {
+  color: #1f292e !important;
+  -webkit-text-fill-color: #1f292e !important;
+}
+
+html[data-color-mode='light'] .membership-page-redesign .membership-plan-hero > p,
+html[data-color-mode='light'] .membership-page-redesign .membership-plan-point-summary,
+html[data-color-mode='light'] #root .membership-page-redesign .membership-plan-benefits li b {
+  color: #536159 !important;
+  -webkit-text-fill-color: #536159 !important;
+}
+
+html[data-color-mode='light'] #root .membership-page-redesign .membership-plan-benefits .membership-benefit-check {
+  color: #288237 !important;
+  filter: none !important;
+}
+
+html[data-color-mode='light'] .membership-card-benefit-divider {
+  background: #d9e1dc !important;
+}
+
+html[data-color-mode='light'] #root .membership-page-redesign .membership-status-badge.is-subscribed {
+  border-color: #83bc89 !important;
+  background: #f3faf4 !important;
+  color: #246f2d !important;
+  -webkit-text-fill-color: #246f2d !important;
+}
+
+html[data-color-mode='light'] #root .membership-page-redesign .membership-status-badge.is-recommended {
+  border-color: #dfb391 !important;
+  background: #fff7ef !important;
+  color: #914d1e !important;
+  -webkit-text-fill-color: #914d1e !important;
+}
+
+html[data-color-mode='light'] .membership-page-redesign .membership-comparison-toggle:hover,
+html[data-color-mode='light'] .membership-page-redesign .membership-comparison-toggle:focus-visible {
+  color: #246f2d !important;
+  -webkit-text-fill-color: #246f2d !important;
+}
+
+html[data-color-mode='light'] .membership-page-redesign .membership-checkout-panel {
+  border-color: #cbd5d9 !important;
+  background: #ffffff !important;
+  box-shadow: 0 12px 30px rgba(38, 48, 54, 0.08);
+}
+
+html[data-color-mode='light'] #root .membership-page-redesign :where(
+  .membership-checkout-panel h2,
+  .membership-sku-picker > span,
+  .membership-order-detail dt,
+  .membership-order-detail dd,
+  .membership-total span,
+  .membership-total strong,
+  .membership-agreement
+) {
+  color: #28343a !important;
+  -webkit-text-fill-color: #28343a !important;
+}
+
+html[data-color-mode='light'] #root .membership-page-redesign :where(
+  .membership-order-detail dt,
+  .membership-agreement
+) {
+  color: #5f6c72 !important;
+  -webkit-text-fill-color: #5f6c72 !important;
+}
+
+html[data-color-mode='light'] #root .membership-page-redesign .membership-pay-methods button {
+  border-color: #80bb87 !important;
+  background: #edf8ee !important;
+  color: #246f2d !important;
+  -webkit-text-fill-color: #246f2d !important;
+}
+
+html[data-color-mode='light'] #root .membership-page-redesign .membership-sku-picker .ant-select-selector {
+  border-color: #cbd5d9 !important;
+  background: #f7f9fa !important;
+  color: #1f292e !important;
+}
+
+html[data-color-mode='light'] #root .membership-page-redesign .membership-sku-picker :where(
+  .ant-select-selection-item,
+  .ant-select-arrow
+) {
+  color: #1f292e !important;
+  -webkit-text-fill-color: #1f292e !important;
+}
+
+html[data-color-mode='light'] #root .membership-page-redesign .membership-agreement button {
+  color: #246f2d !important;
+  -webkit-text-fill-color: #246f2d !important;
+}
+
+html[data-color-mode='light'] .membership-comparison-table-page th,
+html[data-color-mode='light'] .membership-comparison-table-page td,
+html[data-color-mode='light'] .membership-comparison-table-page thead th,
+html[data-color-mode='light'] .membership-comparison-table-page thead th.sticky-col,
+html[data-color-mode='light'] .membership-comparison-table-page tbody th.sticky-col {
+  border-bottom: 1px solid #e0e6e8 !important;
+  background: #ffffff !important;
+  color: #1f292e !important;
+}
+
+html[data-color-mode='light'] .membership-comparison-table-page .membership-comparison-plan strong,
+html[data-color-mode='light'] .membership-comparison-table-page .membership-comparison-label span,
+html[data-color-mode='light'] .membership-comparison-table-page .membership-comparison-value {
+  color: #27343a !important;
+  -webkit-text-fill-color: #27343a !important;
+}
+
+html[data-color-mode='light'] .membership-comparison-table-page .membership-comparison-label small,
+html[data-color-mode='light'] .membership-comparison-table-page td.is-disabled .membership-comparison-value {
+  color: #66737a !important;
+  -webkit-text-fill-color: #66737a !important;
+}
+
+html[data-color-mode='light'] .membership-comparison-table-page .membership-comparison-category-row th {
+  border-color: #87c08d !important;
+  background: #dff2e1 !important;
+  color: #1f6828 !important;
+  -webkit-text-fill-color: #1f6828 !important;
 }

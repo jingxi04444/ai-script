@@ -1,125 +1,84 @@
-# Membership center design QA
+# Script Version Compare Design QA
 
-## Source of truth
+- Source visual truth: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-d1a6302e-81cd-469e-89f7-e63867ae329f.jpg`
+- Browser-rendered implementation: `/private/tmp/ai-script-version-compare-final.png`
+- Combined comparison evidence: `/private/tmp/ai-script-version-compare-qa.png`
+- Browser viewport: 1280 × 720 CSS pixels, device density 1x
+- Source pixels: 2048 × 1092
+- Implementation pixels: 1280 × 720
+- Normalization: both artifacts were scaled into equal 1024-pixel comparison panels without changing aspect ratio.
+- State: logged-in script polish workbench, history modal open, full-screen V1 versus V2 compare open.
 
-- Reference: user-provided full-screen membership-center layout (2704 × 1450).
-- Desktop acceptance target: one-screen purchasing workspace without the application left rail.
-- Implementation route: `http://localhost:4002/membership`.
-- Authenticated test account: `demo@ai-script.local`.
+## Full-view comparison evidence
 
-## Implemented structure
+The implementation follows the useful layout principles in the source: a dedicated full-screen comparison workspace, equal left/right version panes, version selectors above each pane, and a narrow central synchronization rail. The content medium intentionally differs: the source compares video frames and timelines; this implementation compares two complete script tables.
 
-- Full-width account header with profile, expiry information, points entry and membership navigation.
-- Year / quarter / month purchase-period selector backed by the configured SKU data.
-- Four plan cards backed by membership plan and entitlement APIs.
-- Right-side promotion and synchronized order-detail panel.
-- Categorized membership comparison is an on-demand inline section below the purchasing workspace, so it never covers or hides the main screen.
-- Membership redemption now has a dedicated full-screen themed “正在开发中” page.
-- Desktop layout has no document-level horizontal or vertical scroll.
+## Focused region comparison evidence
 
-## Typography verification
+The dense table region was checked separately in the in-app browser. Both versions expose the same eight columns, use fixed equal row heights, keep headers visible, clamp long cell content, expose full cell content through the native title tooltip, highlight old/new differences with distinct amber/green states, and preserve aligned rows while scrolling.
 
-The global `#root` typography reset previously overrode the membership-page rules. The page now uses scoped selectors with sufficient specificity.
+## Findings and iteration history
 
-| Element | Required range | Browser measured at 1280 px | Computed at 2048 px |
-| --- | ---: | ---: | ---: |
-| Plan name | 24–26 px | 24 px | 25.6 px |
-| Price | 34–40 px | 34 px | 38.9 px |
-| Benefit label | 18–20 px | 18 px | 19.46 px |
-| Benefit value | supporting size | 16 px | 17.4 px |
+1. P1 — the first implementation was rendered under the Ant Design modal mask, so the full-screen workspace looked dim and was not visually independent.
+   - Fix: render the full-screen comparison into `document.body` through a portal with its own layer.
+   - Post-fix evidence: the final implementation screenshot shows an unobstructed full-screen workspace.
+2. P1 — fixed pixel column widths hid the final three fields in each pane at a 1280-pixel viewport.
+   - Fix: replace pixel widths with compact percentage widths so all eight fields remain visible in both panes.
+   - Post-fix evidence: the final screenshot shows 镜号、景别、运镜、画面描述、台词、时长、卖点体现、备注 in both panes.
+3. P2 — variable row content could make the two versions drift vertically.
+   - Fix: lock table rows to 58px, clamp visible text to three lines, and keep full text on hover.
+   - Post-fix evidence: corresponding rows remain aligned across the center axis.
+4. P1 — two pane-level scroll areas made continuous wheel and trackpad movement feel resistant because the panes were repeatedly mirroring each other.
+   - Fix: remove both inner scroll containers and give the entire comparison stage one native vertical scroll track. Both tables now move as a single layout without JavaScript scroll mirroring.
+   - Post-fix evidence: browser interaction testing moved the shared stage directly from `scrollTop 0` to `262.5`; both inner table wrappers report `overflow: visible`, and both sticky table headers remain visible after scrolling.
 
-The account header and purchase-period selector were also verified in the narrow in-app preview:
+## Required fidelity surfaces
 
-| Element | Browser measured at 791 px |
-| --- | ---: |
-| Account name | 26 px |
-| Membership level | 18 px |
-| Header navigation | 22 px |
-| Purchase-period tab | 28 px |
-| Purchase-period hint | 16 px |
+- Fonts and typography: uses the existing application system-font stack, compact 10–12px table typography, stronger hierarchy for screen and version titles, and truncation for long labels.
+- Spacing and layout rhythm: full viewport is used; two equal panes, a 58px center gap, compact toolbars, fixed row rhythm, and contained scroll areas match the source's comparison-workspace density.
+- Colors and visual tokens: retains the product's dark green system, uses amber for the old value and green for the new value, and maintains readable contrast.
+- Image quality and asset fidelity: no image assets are required by the script-table implementation. Existing Ant Design icons are used for back, close, link, and history affordances.
+- Copy and content: labels are product-specific and concise: 改前版本、改后版本、同步、差异、返回版本记录.
 
-At widths up to 680 px, the purchase-period selector keeps three horizontal columns instead of collapsing into a vertical list.
+## Primary interactions tested
 
-## Verification
+- Open history and launch full-screen compare.
+- Close and reopen full-screen compare.
+- Switchable left/right version selectors render.
+- Both tables parse and render all script columns and rows.
+- One native shared scroll track for both tables; wheel and trackpad work from either pane or the center area.
+- Difference count and changed-cell highlighting.
 
-- Authenticated Spring-backed page load: passed.
-- Plans, SKU periods and configured entitlement values: passed.
-- Year-period switch: passed.
-- Year-card “限时优惠” badge is fully visible above the year tab without covering the label: passed.
-- Membership redemption route and return-to-membership action: passed.
-- Plan selection and order-detail synchronization: passed.
-- Order-detail panel top and bottom align exactly with all four plan cards on desktop (`top difference = 0`, `bottom difference = 0`); compact-height content remains accessible through internal scrolling: passed.
-- First available purchase-period tab is selected by default (year / quarter / month display order): passed.
-- Categorized benefit comparison is permanently rendered after the purchasing screen and can be reached by normal page scrolling: passed.
-- “查看会员对比” smoothly scrolls to the existing comparison section instead of mounting, hiding or toggling content: passed.
-- No membership-comparison modal overlay is mounted: passed.
-- “查看会员对比” uses a visible green filled treatment instead of a transparent text action: passed.
-- Document overflow at 1280 × 720: none (`scrollWidth = 1280`, `scrollHeight = 720`).
-- `npm run build`: passed.
-- `git diff --check`: passed.
+## Console check
 
-## Responsive verification
+No implementation-specific runtime errors remained in the final pass. One unrelated existing Ant Design `destroyOnClose` deprecation warning remains elsewhere in the page.
 
-- Desktop (1280 × 720): four plan cards and the order panel remain in one row; no horizontal overflow (`scrollWidth = 1280`).
-- Tablet (≤ 1180 px): plan cards change to a two-column grid and the order area moves below without changing the visual language, colors or typography hierarchy.
-- Mobile (≤ 680 px): purchase-period tabs remain three horizontal columns; plan cards use a single readable column and the order area follows beneath them.
-- Very narrow mobile (≤ 420 px): header navigation wraps, avatar and tab typography scale down, and all primary content remains inside the viewport.
-- Benefit comparison keeps its desktop table proportions inside an independent horizontal scroll container, so it cannot force the full page to overflow.
+## Residual P3 polish
 
-## Evidence
-
-- `membership-implementation-qa-2.png`: authenticated membership page.
-- `membership-comparison-qa.png`: categorized benefit-comparison modal.
-- `membership-default-first-tab-qa.png`: default first purchase-period tab and colored comparison action.
-- `membership-inline-comparison-qa.png`: full-width categorized comparison rendered beneath the main membership screen.
-- `membership-responsive-desktop-qa.png`: responsive desktop layout at 1280 × 720.
-- `membership-responsive-mobile-qa.png`: mobile single-column layout with the original visual styling preserved.
-- `membership-scroll-comparison-qa.png`: the always-present comparison section after the quick-scroll action.
-- `membership-checkout-alignment-qa.png`: payment/order panel aligned to the plan-card row.
-- `membership-typography-qa.png`: enlarged account header and horizontal purchase-period tabs in the in-app preview.
-- `membership-year-promo-qa.png`: visible year-card promotion badge in the desktop layout.
-- `membership-exchange-development-qa.png`: themed membership-redemption development page.
-
-## Non-blocking note
-
-- Ant Design logs one deprecation warning for `Modal.destroyOnClose` from an existing shared authentication dialog; it does not affect the membership page layout or interaction.
+- A future iteration could add click-to-expand cell detail without changing the compact comparison layout.
 
 final result: passed
+
 ---
 
-# Storyboard list-only design QA
+# Script Source Metadata & Restore Comments Design QA
 
-## Source of truth
+- Source visual truth: the five annotated screenshots supplied in this task (`codex-clipboard-cb5e3f1b...png` through `codex-clipboard-24e10d0e...png`).
+- Browser-rendered implementation: `/private/tmp/ai-script-source-list.png`, `/private/tmp/ai-script-template-preview.png`, and `/private/tmp/ai-script-original-preview.png`, captured from the local mock workspace at `http://127.0.0.1:4173/workspace?projectId=project-1&step=storyboard`.
+- Browser viewport: 1280 × 720 CSS pixels.
+- States checked: platform-template list, compact template preview, compact AI-original preview, full template polish dialog, full AI-original polish dialog.
 
-- Source visual: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-0bddd19c-2610-4011-8786-d7a148dd6b04.png` (3348 × 1848).
-- Implementation: `/private/tmp/storyboard-list-only.png` (1280 × 720).
-- Combined comparison: `/private/tmp/storyboard-list-comparison.png`.
-- Browser viewport: 1280 × 720 CSS px; DPR 2; screenshot normalized to 1280 × 720.
-- State: light theme, empty unnamed project, step 3, 我的脚本.
+## Visual and interaction checks
 
-## Verification
+1. The list header and every row use the same six-column grid. “模板名字” is immediately after “脚本类型”; a template row displays “痛点解决型”, while non-template rows display “-”.
+2. At the 1280px QA viewport the table uses a safe horizontal scroll range instead of clipping the action column. Measured header/row columns are identical: `150px 118px 90px 148px 84px 334px`.
+3. Template metadata order is `模板名称 → 时长 → 格式`. The compact preview showed `痛点解决型 → 分镜脚本表`; the full dialog showed `痛点解决型 → 时长未记录 → 分镜脚本表` for an old mock record without a duration snapshot.
+4. AI-original metadata order is `原创大类 → 时长 → 格式 → 原创子类`. The compact preview showed `电商 → 分镜脚本表 → 产品介绍口播`; the full dialog showed `电商 → 时长未记录 → 分镜脚本表 → 产品介绍口播`.
+5. Long source labels are capped, ellipsized, and the metadata row wraps. Old records no longer borrow the current generator dropdown values; missing duration is explicitly labeled “时长未记录”.
+6. Restore-comment behavior is implemented with a persisted `restoredFromVersionId` lineage plus content-equivalent version fallback. Comment markers, historical styling, actionable count, and the “按评论修改” enabled state share the same classifier. AI/manual edits transition `已审需修改` to `已改待审核`.
 
-- Removed the list/card view switch.
-- Removed the card rendering branch.
-- Every script category remains on the list layout.
-- Fixed page size at 10 rows.
-- Search, type/status filters, reset, pagination, preview, polish, copy and delete behavior remain wired.
-- Production build: passed.
-- Browser check: switching to AI 原创脚本 still shows the list header; both view-toggle button counts are zero.
-- Existing console warnings for `Modal.destroyOnClose` and empty-project loading were present and are unrelated to this change.
+## Console check
 
-## Fidelity surfaces
-
-- Typography: existing Workspace list typography preserved.
-- Spacing/layout: total count remains right-aligned; filter grid and table columns are unchanged.
-- Colors/tokens: no new colors; existing theme styles remain in control.
-- Images/assets: card-only decorative art is no longer rendered; no new asset is needed.
-- Copy/content: only the “列表 / 卡片” view labels were removed; list and action copy is preserved.
-
-## Comparison history
-
-1. Before: card layout and the list/card switch were visible.
-2. Fix: removed view state, switch controls and card JSX; fixed `pageSize = 10`.
-3. After: only the list header, list empty/data state and pagination remain.
+No implementation-specific runtime errors were observed. One unrelated existing Ant Design `destroyOnClose` deprecation warning remains.
 
 final result: passed

@@ -4,6 +4,10 @@ import com.aiscript.common.api.PageResult;
 import com.aiscript.common.api.R;
 import com.aiscript.common.pagination.PageQuery;
 import com.aiscript.modules.script.dto.GenerateScriptDTO;
+import com.aiscript.modules.generation.dto.ScriptQueueConcurrencyDTO;
+import com.aiscript.modules.generation.service.ScriptGenerationQueueService;
+import com.aiscript.modules.generation.vo.ScriptQueueItemVO;
+import com.aiscript.modules.generation.vo.ScriptQueueStateVO;
 import com.aiscript.modules.script.dto.PolishScriptDTO;
 import com.aiscript.modules.script.dto.ScriptSaveDTO;
 import com.aiscript.modules.script.dto.TemplateSaveDTO;
@@ -30,9 +34,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/scripts")
 public class ScriptController {
     private final ScriptService scriptService;
+    private final ScriptGenerationQueueService scriptGenerationQueueService;
 
-    public ScriptController(ScriptService scriptService) {
+    public ScriptController(
+        ScriptService scriptService,
+        ScriptGenerationQueueService scriptGenerationQueueService
+    ) {
         this.scriptService = scriptService;
+        this.scriptGenerationQueueService = scriptGenerationQueueService;
     }
 
     @GetMapping
@@ -64,8 +73,31 @@ public class ScriptController {
     }
 
     @PostMapping("/generate")
-    public R<ScriptVO> generate(@RequestBody GenerateScriptDTO payload) {
+    public R<ScriptVO> generate(@Valid @RequestBody GenerateScriptDTO payload) {
         return R.ok(scriptService.generate(payload));
+    }
+
+    @PostMapping("/generation-queue")
+    public R<ScriptQueueItemVO> enqueueGeneration(@Valid @RequestBody GenerateScriptDTO payload) {
+        return R.ok(scriptGenerationQueueService.enqueue(payload));
+    }
+
+    @GetMapping("/generation-queue")
+    public R<ScriptQueueStateVO> generationQueue() {
+        return R.ok(scriptGenerationQueueService.state());
+    }
+
+    @PutMapping("/generation-queue/concurrency")
+    public R<ScriptQueueStateVO> updateGenerationQueueConcurrency(
+        @Valid @RequestBody ScriptQueueConcurrencyDTO payload
+    ) {
+        return R.ok(scriptGenerationQueueService.updateConcurrency(payload.getConcurrency()));
+    }
+
+    @DeleteMapping("/generation-queue/{id}")
+    public R<Void> cancelGenerationQueueItem(@PathVariable Long id) {
+        scriptGenerationQueueService.cancel(id);
+        return R.ok();
     }
 
     @PostMapping("/{id}/polish")

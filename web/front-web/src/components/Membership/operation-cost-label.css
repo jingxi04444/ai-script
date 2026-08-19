@@ -1,0 +1,17 @@
+.operation-cost-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 3px;
+  font-size: 0.78em;
+  font-weight: 750;
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0.82;
+  letter-spacing: 0;
+}
+
+button .operation-cost-label,
+button .operation-cost-label > span {
+  font-size: 11px !important;
+}

@@ -7,6 +7,7 @@ import com.aiscript.modules.project.dto.ProjectQueryDTO;
 import com.aiscript.modules.project.dto.ProjectUpdateDTO;
 import com.aiscript.modules.project.service.ProjectService;
 import com.aiscript.modules.project.vo.ProjectVO;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,7 +37,7 @@ public class ProjectController {
     }
 
     @PostMapping
-    public R<ProjectVO> create(@RequestBody ProjectCreateDTO payload) {
+    public R<ProjectVO> create(@Valid @RequestBody ProjectCreateDTO payload) {
         return R.ok(projectService.create(payload));
     }
 

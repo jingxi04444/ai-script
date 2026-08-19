@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Blocks, Bot, Database, FileSearch, FileText, ListTree, Sparkles } from 'lucide-react';
+import { Blocks, Bot, Database, FileSearch, FileText, Heading1, ListTree, Sparkles } from 'lucide-react';
 import { PageHeader, SectionCard } from '../../components/common/AdminUI';
 import PromptTemplatesPage from '../Materials/PromptTemplatesPage';
 import ScriptFormatsPage from '../System/ScriptFormatsPage';
 import './script-generator-management-page.css';
 
-type GeneratorTab = 'viral' | 'original' | 'template' | 'format';
+type GeneratorTab = 'viral' | 'original' | 'template' | 'title' | 'format';
 
 interface ViralSection {
   key: string;
@@ -25,6 +25,7 @@ const generatorTabs: Array<{
   { key: 'viral', label: '爆款复刻', description: '解析、整理、拆解和生成提示词', icon: Sparkles },
   { key: 'original', label: 'AI原创', description: 'AI 原创脚本生成提示词', icon: Bot },
   { key: 'template', label: '脚本模板', description: '模板库脚本生成提示词', icon: Database },
+  { key: 'title', label: '标题提示词', description: '首次生成与润色规则', icon: Heading1 },
   { key: 'format', label: '脚本格式', description: '输出格式和格式要求', icon: ListTree },
 ];
 
@@ -182,6 +183,27 @@ const ScriptGeneratorManagementPage = () => {
             sceneCode="script_generate_template"
             pageTitle="脚本模板库生成提示词"
             pageDescription="维护选择模板后结合产品 Brief 和脚本配置生成模板脚本时使用的提示词。"
+          />
+        </section>
+      ) : null}
+
+      {activeTab === 'title' ? (
+        <section className="generator-prompt-tab">
+          <div className="generator-prompt-heading">
+            <span>脚本标题规则</span>
+            <h2>标题生成与润色提示词</h2>
+            <p>首次生成规则用于新脚本标题；润色规则用于 AI 润色及“按评论修改”时决定是否保留或改写标题。</p>
+          </div>
+          <PromptTemplatesPage
+            embedded
+            sceneCode="script_title_rules"
+            pageTitle="脚本标题提示词"
+            pageDescription="统一管理脚本标题的首次生成与后续润色规则。"
+            requireSystemPrompt
+            systemPromptLabel="首次生成标题规则（systemPrompt）"
+            userPromptLabel="润色/评论修改标题规则（userPrompt）"
+            systemPromptPlaceholder="例如：最终输出第一行使用“标题：<创意标题>”，标题 10-30 字…"
+            userPromptPlaceholder="例如：用户未要求修改标题时保留原标题；标题评论要求修改时根据评论改写…"
           />
         </section>
       ) : null}

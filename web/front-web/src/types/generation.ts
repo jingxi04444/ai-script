@@ -8,6 +8,32 @@ export interface GenerationTask {
   errorMessage?: string;
 }
 
+export type ScriptQueueStatus = 'pending' | 'running' | 'success' | 'failed' | 'canceled';
+
+export interface ScriptQueueItem {
+  id: string;
+  projectId: string;
+  batchNo: string;
+  scriptType: string;
+  taskLabel: string;
+  status: ScriptQueueStatus;
+  scriptId?: string;
+  errorMessage?: string;
+  createdAt?: string;
+  startTime?: string;
+  finishTime?: string;
+}
+
+export interface ScriptQueueState {
+  items: ScriptQueueItem[];
+  pendingCount: number;
+  runningCount: number;
+  activeCount: number;
+  concurrency: number;
+  maxConcurrency: number;
+  parallelConfigurable: boolean;
+}
+
 export interface VideoSegment {
   id: string;
   projectId: string;

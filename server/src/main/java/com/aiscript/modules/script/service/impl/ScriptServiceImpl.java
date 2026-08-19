@@ -1,17 +1,23 @@
 package com.aiscript.modules.script.service.impl;
 
 import com.aiscript.common.api.PageResult;
+import com.aiscript.common.api.ResultCode;
 import com.aiscript.common.exception.BusinessException;
 import com.aiscript.common.pagination.PageQuery;
 import com.aiscript.common.util.JsonUtils;
 import com.aiscript.framework.tenant.TenantContext;
+import com.aiscript.integration.llm.LlmChatResult;
 import com.aiscript.integration.llm.LlmClient;
 import com.aiscript.modules.asset.entity.AiAsset;
 import com.aiscript.modules.asset.mapper.AiAssetMapper;
 import com.aiscript.modules.brief.entity.AiBrief;
 import com.aiscript.modules.brief.mapper.AiBriefMapper;
-import com.aiscript.modules.generation.entity.AiGenerationTask;
-import com.aiscript.modules.generation.mapper.AiGenerationTaskMapper;
+import com.aiscript.modules.generation.service.PaidOperationClaim;
+import com.aiscript.modules.generation.service.PaidOperationCompletion;
+import com.aiscript.modules.generation.service.PaidOperationCoordinator;
+import com.aiscript.modules.generation.service.PaidOperationFailure;
+import com.aiscript.modules.generation.service.PaidOperationFingerprint;
+import com.aiscript.modules.generation.service.PaidOperationSpec;
 import com.aiscript.modules.script.convert.ScriptConvert;
 import com.aiscript.modules.script.dto.GenerateScriptDTO;
 import com.aiscript.modules.script.dto.PolishScriptDTO;
@@ -23,7 +29,9 @@ import com.aiscript.modules.script.entity.AiScriptTemplate;
 import com.aiscript.modules.script.mapper.AiScriptPolishMessageMapper;
 import com.aiscript.modules.script.mapper.AiScriptTemplateMapper;
 import com.aiscript.modules.script.service.ScriptPolishMessagePersistenceService;
+import com.aiscript.modules.script.service.ScriptReviewService;
 import com.aiscript.modules.script.service.ScriptService;
+import com.aiscript.modules.script.vo.AdminScriptTemplateVO;
 import com.aiscript.modules.script.vo.PolishScriptVO;
 import com.aiscript.modules.script.vo.ScriptListVO;
 import com.aiscript.modules.script.vo.ScriptPolishMessageVO;
@@ -40,6 +48,7 @@ import com.aiscript.modules.system.entity.SysScriptFormatConfig;
 import com.aiscript.modules.system.mapper.SysScriptFormatConfigMapper;
 import com.aiscript.modules.system.service.PromptRenderService;
 import com.aiscript.modules.membership.service.MembershipEntitlementService;
+import com.aiscript.modules.recyclebin.service.RecycleBinService;
 import com.aiscript.security.LoginUser;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
@@ -55,34 +64,53 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 import java.util.stream.Stream;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.util.StringUtils;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 @Service
+@Slf4j
 public class ScriptServiceImpl implements ScriptService {
     private static final Integer DEFAULT_TENANT_ID = 1;
     private static final Set<String> SCRIPT_STATUSES = Set.of(
         "draft", "pending_review", "changes_requested", "revised_pending_review", "approved"
     );
+    private static final String DEFAULT_SCRIPT_TITLE_OUTPUT_RULE = """
+
+        【脚本标题硬性规则】最终输出第一行必须严格使用“标题：<创意标题>”格式，标题应基于本次 Brief 和脚本内容创作，建议 10-30 个字，具体、有吸引力但不得编造产品事实。标题不得使用 Markdown 标题符号、加粗符号或占位符。标题行后空一行，再输出所选格式的完整脚本；若正文为 Markdown 表格，标题必须放在表格外，禁止把标题写成表格数据行。
+        """;
+    private static final String DEFAULT_SCRIPT_TITLE_POLISH_RULE = """
+
+        【脚本标题规则】完整结果必须保留首行“标题：<创意标题>”及其后的空行。用户未明确要求修改标题时必须逐字保留原稿标题；只有用户明确要求改标题时才根据修改后的脚本更新标题。标题不得放入 Markdown 表格。
+        """;
 
     private final AiStoryboardScriptMapper scriptMapper;
     private final AiScriptTemplateMapper templateMapper;
     private final AiScriptVersionMapper versionMapper;
     private final AiScriptPolishMessageMapper polishMessageMapper;
     private final AiStoryboardShotMapper shotMapper;
-    private final AiGenerationTaskMapper generationTaskMapper;
     private final AiBriefMapper briefMapper;
     private final AiAssetMapper assetMapper;
     private final SysScriptFormatConfigMapper scriptFormatMapper;
     private final LlmClient llmClient;
     private final PromptRenderService promptRenderService;
     private final MembershipEntitlementService entitlementService;
+    private final PaidOperationCoordinator paidOperationCoordinator;
+    private final PaidOperationFingerprint paidOperationFingerprint;
     private final ScriptPolishMessagePersistenceService polishMessagePersistenceService;
+    private final ScriptReviewService scriptReviewService;
+    private final RecycleBinService recycleBinService;
+    private final TransactionTemplate transactionTemplate;
 
     public ScriptServiceImpl(
         AiStoryboardScriptMapper scriptMapper,
@@ -90,35 +118,43 @@ public class ScriptServiceImpl implements ScriptService {
         AiScriptVersionMapper versionMapper,
         AiScriptPolishMessageMapper polishMessageMapper,
         AiStoryboardShotMapper shotMapper,
-        AiGenerationTaskMapper generationTaskMapper,
         AiBriefMapper briefMapper,
         AiAssetMapper assetMapper,
         SysScriptFormatConfigMapper scriptFormatMapper,
         LlmClient llmClient,
         PromptRenderService promptRenderService
         , MembershipEntitlementService entitlementService,
-        ScriptPolishMessagePersistenceService polishMessagePersistenceService
+        PaidOperationCoordinator paidOperationCoordinator,
+        PaidOperationFingerprint paidOperationFingerprint,
+        ScriptPolishMessagePersistenceService polishMessagePersistenceService,
+        ScriptReviewService scriptReviewService,
+        RecycleBinService recycleBinService,
+        PlatformTransactionManager transactionManager
     ) {
         this.scriptMapper = scriptMapper;
         this.templateMapper = templateMapper;
         this.versionMapper = versionMapper;
         this.polishMessageMapper = polishMessageMapper;
         this.shotMapper = shotMapper;
-        this.generationTaskMapper = generationTaskMapper;
         this.briefMapper = briefMapper;
         this.assetMapper = assetMapper;
         this.scriptFormatMapper = scriptFormatMapper;
         this.llmClient = llmClient;
         this.promptRenderService = promptRenderService;
         this.entitlementService = entitlementService;
+        this.paidOperationCoordinator = paidOperationCoordinator;
+        this.paidOperationFingerprint = paidOperationFingerprint;
         this.polishMessagePersistenceService = polishMessagePersistenceService;
+        this.scriptReviewService = scriptReviewService;
+        this.recycleBinService = recycleBinService;
+        this.transactionTemplate = new TransactionTemplate(transactionManager);
     }
 
     @Override
     public List<ScriptVO> list(Integer projectId) {
+        scriptReviewService.internalAccessForProject(projectId);
         return scriptMapper.selectList(new LambdaQueryWrapper<AiStoryboardScript>()
                 .eq(AiStoryboardScript::getTenantId, currentTenantId())
-                .eq(AiStoryboardScript::getCreateBy, currentUserId())
                 .eq(AiStoryboardScript::getProjectId, projectId)
                 .orderByDesc(AiStoryboardScript::getUpdateTime))
             .stream()
@@ -128,6 +164,7 @@ public class ScriptServiceImpl implements ScriptService {
 
     @Override
     public PageResult<ScriptListVO> page(PageQuery query, Integer projectId, String type, String status, String sortBy) {
+        scriptReviewService.internalAccessForProject(projectId);
         List<String> scriptTypes = StringUtils.hasText(type)
             ? Arrays.stream(type.split(","))
                 .map(String::trim)
@@ -175,28 +212,161 @@ public class ScriptServiceImpl implements ScriptService {
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
     public ScriptVO generate(GenerateScriptDTO dto) {
-        String operationId = StringUtils.hasText(dto.getRequestNo())
-            ? dto.getRequestNo()
-            : UUID.randomUUID().toString();
-        String monthlyRequestNo = "script_generate:" + currentUserId() + ":" + operationId;
-        String concurrencyRequestNo = "task_concurrency:script:" + currentUserId() + ":" + operationId;
-        entitlementService.reserveQuota(
-            currentTenantId(), currentUserId(), "TASK_CONCURRENCY_LIMIT", 1,
-            concurrencyRequestNo, "script_generate", null
+        long totalStartedAt = System.nanoTime();
+        final Integer targetProjectId;
+        try {
+            targetProjectId = Integer.valueOf(dto.getProjectId());
+        } catch (NumberFormatException ex) {
+            throw new BusinessException("项目参数错误");
+        }
+        // 项目协作关系是生成与 AI 能力的服务端授权边界。评审分享访问不具备该关系，
+        // 即使绕过前端直接调用生成接口，也会在占用额度前被拒绝。
+        scriptReviewService.internalAccessForProject(targetProjectId);
+        Integer tenantId = currentTenantId();
+        Integer userId = currentUserId();
+        String requestNo = requirePaidRequestNo(dto.getRequestNo());
+        long claimStartedAt = System.nanoTime();
+        PaidOperationClaim claim = paidOperationCoordinator.claim(new PaidOperationSpec(
+            tenantId,
+            userId,
+            targetProjectId,
+            "script_generate",
+            "paid_script_generate",
+            "生成脚本",
+            requestNo,
+            paidOperationFingerprint.sha256(generateFingerprint(dto, targetProjectId)),
+            requireExpectedPointCost(dto.getExpectedPointCost())
+        ));
+        if (!claim.newlyClaimed()) {
+            return replayGenerateResult(claim);
+        }
+        log.info(
+            "[SCRIPT_GENERATE_STAGE] stage=claim requestNo={} taskId={} projectId={} elapsedMs={}",
+            requestNo, claim.taskId(), targetProjectId, elapsedMs(claimStartedAt)
         );
-        entitlementService.reserveQuota(
-            currentTenantId(), currentUserId(), "SCRIPT_MONTHLY_LIMIT", 1,
-            monthlyRequestNo, "script_generate", null
-        );
-        hydrateProductFrame(dto);
-        AiBrief generationBrief = findBrief(dto);
-        AiGenerationTask task = createGenerationTask(dto);
-        String generatedContent = generateContent(dto, task, generationBrief);
+        String monthlyRequestNo = "script_generate:" + userId + ":" + requestNo;
+        String concurrencyRequestNo = "task_concurrency:script:" + userId + ":" + requestNo;
+        boolean quotasCommitted = false;
+        try {
+            long prepareStartedAt = System.nanoTime();
+            GenerationPreparation preparation = transactionTemplate.execute(status -> {
+                entitlementService.reserveQuota(
+                    tenantId, userId, "TASK_CONCURRENCY_LIMIT", 1,
+                    concurrencyRequestNo, "script_generate", null
+                );
+                entitlementService.reserveQuota(
+                    tenantId, userId, "SCRIPT_MONTHLY_LIMIT", 1,
+                    monthlyRequestNo, "script_generate", null
+                );
+                hydrateProductFrame(dto, false);
+                return new GenerationPreparation(findBrief(dto), resolveGenerationTemplate(dto));
+            });
+            if (preparation == null) {
+                throw new IllegalStateException("脚本生成准备事务未返回结果");
+            }
+            quotasCommitted = true;
+            long prepareMs = elapsedMs(prepareStartedAt);
+            log.info(
+                "[SCRIPT_GENERATE_STAGE] stage=prepare requestNo={} taskId={} elapsedMs={}",
+                requestNo, claim.taskId(), prepareMs
+            );
+
+            // 此处明确位于两个短事务之间。接口仍同步等待，但模型网络调用不再占用数据库事务/连接。
+            if (TransactionSynchronizationManager.isActualTransactionActive()) {
+                throw new IllegalStateException("模型调用前仍存在活动数据库事务");
+            }
+            GeneratedScriptContent generated = generateContent(
+                dto,
+                preparation.brief(),
+                preparation.template(),
+                requestNo,
+                claim.taskId()
+            );
+
+            long persistStartedAt = System.nanoTime();
+            ScriptVO result = transactionTemplate.execute(status -> persistGeneratedScript(
+                dto,
+                preparation,
+                generated.content(),
+                tenantId,
+                userId,
+                targetProjectId,
+                monthlyRequestNo,
+                concurrencyRequestNo,
+                claim
+            ));
+            if (result == null) {
+                throw new IllegalStateException("脚本生成落库事务未返回结果");
+            }
+            long persistMs = elapsedMs(persistStartedAt);
+            LlmChatResult metrics = generated.metrics();
+            log.info(
+                "[SCRIPT_GENERATE_STAGE] stage=persist requestNo={} taskId={} elapsedMs={}",
+                requestNo, claim.taskId(), persistMs
+            );
+            log.info(
+                "[SCRIPT_GENERATE_TIMING] requestNo={} taskId={} projectId={} prepareMs={} promptBuildMs={} firstTokenMs={} firstContentMs={} modelGenerateMs={} persistMs={} totalMs={} provider={} platform={} model={} streamed={} promptTokens={} completionTokens={} reasoningTokens={} totalTokens={} inputChars={} outputChars={} fallback={}",
+                requestNo,
+                claim.taskId(),
+                targetProjectId,
+                prepareMs,
+                generated.promptBuildMs(),
+                metric(metrics, LlmChatResult::firstTokenLatencyMs),
+                metric(metrics, LlmChatResult::firstContentLatencyMs),
+                metrics == null ? null : metrics.totalLatencyMs(),
+                persistMs,
+                elapsedMs(totalStartedAt),
+                metrics == null ? null : metrics.provider(),
+                metrics == null ? null : metrics.platform(),
+                metrics == null ? null : metrics.model(),
+                metrics != null && metrics.streamed(),
+                metric(metrics, LlmChatResult::promptTokens),
+                metric(metrics, LlmChatResult::completionTokens),
+                metric(metrics, LlmChatResult::reasoningTokens),
+                metric(metrics, LlmChatResult::totalTokens),
+                metrics == null ? null : metrics.inputCharacters(),
+                metrics == null ? null : metrics.outputCharacters(),
+                generated.fallback()
+            );
+            return result;
+        } catch (RuntimeException exception) {
+            cleanupFailedGeneration(
+                claim,
+                tenantId,
+                userId,
+                monthlyRequestNo,
+                concurrencyRequestNo,
+                quotasCommitted,
+                exception
+            );
+            log.error(
+                "[SCRIPT_GENERATE_TIMING] requestNo={} taskId={} projectId={} totalMs={} status=failed errorType={}",
+                requestNo, claim.taskId(), targetProjectId, elapsedMs(totalStartedAt), exception.getClass().getSimpleName()
+            );
+            throw exception;
+        }
+    }
+
+    private ScriptVO persistGeneratedScript(
+        GenerateScriptDTO dto,
+        GenerationPreparation preparation,
+        String generatedContent,
+        Integer tenantId,
+        Integer userId,
+        Integer targetProjectId,
+        String monthlyRequestNo,
+        String concurrencyRequestNo,
+        PaidOperationClaim claim
+    ) {
+        if (StringUtils.hasText(dto.getProductFrameAssetId())) {
+            productFrameReference(dto.getProductFrameAssetId(), true);
+        }
+        AiBrief generationBrief = preparation.brief();
+        AiScriptTemplate generationTemplate = preparation.template();
         AiStoryboardScript script = new AiStoryboardScript();
-        script.setTenantId(TenantContext.getTenantId() == null ? DEFAULT_TENANT_ID : TenantContext.getTenantId());
-        script.setProjectId(Integer.valueOf(dto.getProjectId()));
+        script.setTenantId(tenantId);
+        script.setProjectId(targetProjectId);
         script.setBriefId(generationBrief.getId());
         script.setBriefSnapshot(buildProductInfo(generationBrief));
         script.setScriptName(defaultScriptName(dto));
@@ -205,10 +375,20 @@ public class ScriptServiceImpl implements ScriptService {
         script.setGenerationDuration(dto.getDuration());
         script.setGenerationFormat(dto.getFormat());
         script.setGenerationFormatName(generatedFormat.name());
+        if (generationTemplate != null) {
+            script.setGenerationTemplateId(generationTemplate.getId());
+            script.setGenerationTemplateName(generationTemplate.getTemplateName());
+        }
+        if ("original".equals(script.getScriptType())) {
+            script.setGenerationOriginalCategoryId(trimToNull(dto.getOriginalCategoryId()));
+            script.setGenerationOriginalCategoryName(trimToNull(dto.getOriginalCategoryName()));
+            script.setGenerationOriginalScenarioId(trimToNull(dto.getOriginalScenarioId()));
+            script.setGenerationOriginalScenarioName(trimToNull(dto.getOriginalScenarioName()));
+        }
         script.setStatus("draft");
         script.setAuditStatus("not_submitted");
         script.setContentText(generatedContent);
-        script.setCreateBy(currentUserId());
+        script.setCreateBy(userId);
         scriptMapper.insert(script);
 
         AiScriptVersion version = createVersion(
@@ -233,29 +413,101 @@ public class ScriptServiceImpl implements ScriptService {
 
         script.setCurrentVersionId(version.getId());
         scriptMapper.updateById(script);
-        task.setStatus("success");
-        task.setProgress(100);
-        task.setResultPayload(JsonUtils.toJson(Map.of("scriptId", String.valueOf(script.getId()), "versionId", String.valueOf(version.getId()))));
-        task.setFinishTime(LocalDateTime.now());
-        generationTaskMapper.updateById(task);
         entitlementService.confirmQuota(monthlyRequestNo);
         entitlementService.releaseQuota(concurrencyRequestNo);
-        return ScriptConvert.toScriptVO(script);
+        ScriptVO result = ScriptConvert.toScriptVO(script);
+        paidOperationCoordinator.complete(new PaidOperationCompletion(
+            claim.taskId(), tenantId, userId, JsonUtils.toJson(result)
+        ));
+        return result;
+    }
+
+    private void cleanupFailedGeneration(
+        PaidOperationClaim claim,
+        Integer tenantId,
+        Integer userId,
+        String monthlyRequestNo,
+        String concurrencyRequestNo,
+        boolean quotasCommitted,
+        RuntimeException cause
+    ) {
+        if (quotasCommitted) {
+            releaseFailedGenerationQuota(monthlyRequestNo, "monthly", claim.taskId());
+            releaseFailedGenerationQuota(concurrencyRequestNo, "concurrency", claim.taskId());
+        }
+        String errorMessage = StringUtils.hasText(cause.getMessage())
+            ? cause.getMessage()
+            : "脚本生成失败";
+        try {
+            paidOperationCoordinator.failAndRefund(new PaidOperationFailure(
+                claim.taskId(), tenantId, userId, cause.getClass().getSimpleName(), errorMessage
+            ));
+        } catch (RuntimeException refundFailure) {
+            log.error("脚本生成失败退款异常，taskId={}", claim.taskId(), refundFailure);
+        }
+    }
+
+    private void releaseFailedGenerationQuota(String quotaRequestNo, String quotaType, Integer taskId) {
+        try {
+            entitlementService.releaseQuota(quotaRequestNo);
+        } catch (RuntimeException releaseFailure) {
+            log.error("脚本生成失败释放额度异常，taskId={} quotaType={}", taskId, quotaType, releaseFailure);
+        }
+    }
+
+    private long elapsedMs(long startedAtNanos) {
+        return Math.max(0, (System.nanoTime() - startedAtNanos) / 1_000_000);
+    }
+
+    private <T> T metric(LlmChatResult result, Function<LlmChatResult, T> getter) {
+        return result == null ? null : getter.apply(result);
+    }
+
+    private record GenerationPreparation(AiBrief brief, AiScriptTemplate template) {
+    }
+
+    private record GeneratedScriptContent(
+        String content,
+        LlmChatResult metrics,
+        long promptBuildMs,
+        boolean fallback
+    ) {
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public PolishScriptVO polish(Integer id, PolishScriptDTO dto) {
         AiStoryboardScript script = ownedScript(id);
-        hydrateProductFrame(dto);
-
         String sourceContent = StringUtils.hasText(dto.getContent()) ? dto.getContent().trim() : script.getContentText();
         if (!StringUtils.hasText(sourceContent)) {
             throw new BusinessException("原脚本内容为空，无法继续润色");
         }
 
         String instruction = dto.getInstruction().trim();
-        String briefContext = "";
+        Integer tenantId = currentTenantId();
+        Integer userId = currentUserId();
+        String requestNo = requirePaidRequestNo(dto.getRequestNo());
+        ensurePaidOperationTransaction();
+        PaidOperationClaim claim = paidOperationCoordinator.claim(new PaidOperationSpec(
+            tenantId,
+            userId,
+            script.getProjectId(),
+            "script_polish",
+            "paid_script_polish",
+            "继续润色",
+            requestNo,
+            paidOperationFingerprint.sha256(polishFingerprint(dto, script, sourceContent)),
+            requireExpectedPointCost(dto.getExpectedPointCost())
+        ));
+        if (!claim.newlyClaimed()) {
+            return replayPolishResult(claim);
+        }
+
+        AtomicReference<RuntimeException> failure = new AtomicReference<>();
+        registerPaidOperationRollback(claim, tenantId, userId, failure);
+        try {
+            hydrateProductFrame(dto);
+            String briefContext = "";
         if (StringUtils.hasText(dto.getBriefId())) {
             try {
                 AiBrief recalledBrief = briefMapper.selectAccessibleProjectBrief(
@@ -321,6 +573,7 @@ public class ScriptServiceImpl implements ScriptService {
         variables.put("content", sourceContent);
         variables.put("referenceContext", referenceContext);
         variables.put("conversationHistory", conversationHistory);
+        TitlePromptRules titlePromptRules = titlePromptRules(variables);
         boolean preserveStructure = !requestsStructureChange(instruction);
         String structureRequirement = preserveStructure
             ? "\n\n【不可变结构约束】用户本次没有要求修改脚本配置。必须逐字保留原表头、列顺序、镜头行数、镜号和每一行时长；不得改变脚本格式、总时长或增删/合并/拆分镜头。只修改用户明确指出的内容字段。"
@@ -333,8 +586,8 @@ public class ScriptServiceImpl implements ScriptService {
                 variables
             );
             String polishedContent = llmClient.chat(
-                renderedPrompt.getSystemPrompt() + structureRequirement,
-                renderedPrompt.getUserPrompt()
+                renderedPrompt.getSystemPrompt() + structureRequirement + titlePromptRules.polishRule(),
+                renderedPrompt.getUserPrompt() + titlePromptRules.polishRule()
             );
             if (!StringUtils.hasText(polishedContent) || "{}".equals(polishedContent.trim())) {
                 throw new BusinessException("AI 未返回有效的润色内容，请稍后重试");
@@ -351,7 +604,11 @@ public class ScriptServiceImpl implements ScriptService {
 
             String summaryInstruction = instruction.length() > 60 ? instruction.substring(0, 60) + "…" : instruction;
             String summary = "已根据修改要求完成润色：" + summaryInstruction;
-            String finalContent = polishedContent.trim();
+            String sourceTitle = ScriptContentTitleNormalizer.extractTitle(sourceContent);
+            String titleFallback = StringUtils.hasText(sourceTitle) ? sourceTitle : script.getScriptName();
+            String finalContent = requestsTitleChange(instruction)
+                ? ScriptContentTitleNormalizer.ensureTitle(polishedContent, titleFallback)
+                : ScriptContentTitleNormalizer.forceTitle(polishedContent, titleFallback);
             AiScriptVersion version = createVersion(
                 script,
                 finalContent,
@@ -372,7 +629,11 @@ public class ScriptServiceImpl implements ScriptService {
                 JsonUtils.toJson(Map.of("scriptContent", finalContent, "scriptVersionId", String.valueOf(version.getId()))),
                 null
             );
-            return new PolishScriptVO(finalContent, summary);
+            PolishScriptVO result = new PolishScriptVO(finalContent, summary, normalizeScriptStatus(script.getStatus()));
+            paidOperationCoordinator.complete(new PaidOperationCompletion(
+                claim.taskId(), tenantId, userId, JsonUtils.toJson(result)
+            ));
+            return result;
         } catch (RuntimeException exception) {
             String errorMessage = StringUtils.hasText(exception.getMessage()) ? exception.getMessage() : "润色失败，请稍后重试";
             polishMessagePersistenceService.fail(polishMessageId, errorMessage);
@@ -380,6 +641,10 @@ public class ScriptServiceImpl implements ScriptService {
                 currentTenantId(), currentUserId(), script.getId(), polishMessageId,
                 "failed", "润色失败：" + errorMessage, null, errorMessage
             );
+            throw exception;
+        }
+        } catch (RuntimeException exception) {
+            failure.set(exception);
             throw exception;
         }
     }
@@ -443,6 +708,7 @@ public class ScriptServiceImpl implements ScriptService {
             Map.of(
                 "source", "restore",
                 "summary", "已恢复到版本 V" + target.getVersionNo(),
+                "restoredFromVersionId", target.getId(),
                 "restoredFromVersionNo", target.getVersionNo()
             )
         );
@@ -470,13 +736,19 @@ public class ScriptServiceImpl implements ScriptService {
             }
             script.setStatus(status);
         }
+        String normalizedContent = null;
         if (dto.getContent() != null) {
-            script.setContentText(dto.getContent());
+            String previousTitle = ScriptContentTitleNormalizer.extractTitle(previousContent);
+            normalizedContent = ScriptContentTitleNormalizer.ensureTitle(
+                dto.getContent(),
+                StringUtils.hasText(previousTitle) ? previousTitle : script.getScriptName()
+            );
+            script.setContentText(normalizedContent);
         }
-        if (dto.getContent() != null && !Objects.equals(previousContent, dto.getContent())) {
+        if (normalizedContent != null && !Objects.equals(previousContent, normalizedContent)) {
             AiScriptVersion version = createVersion(
                 script,
-                dto.getContent(),
+                normalizedContent,
                 "人工编辑并保存",
                 Map.of("source", "manual", "summary", "已保存人工编辑内容")
             );
@@ -522,6 +794,7 @@ public class ScriptServiceImpl implements ScriptService {
         vo.setSource(String.valueOf(snapshot.getOrDefault("source", "legacy")));
         vo.setInstruction(stringSnapshotValue(snapshot, "instruction"));
         vo.setSummary(stringSnapshotValue(snapshot, "summary"));
+        vo.setRestoredFromVersionId(stringSnapshotValue(snapshot, "restoredFromVersionId"));
         vo.setCurrent(Objects.equals(version.getId(), currentVersionId));
         vo.setCreatedAt(version.getCreateTime() == null ? "" : version.getCreateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         return vo;
@@ -544,6 +817,10 @@ public class ScriptServiceImpl implements ScriptService {
 
     private boolean requestsStructureChange(String instruction) {
         return instruction.matches("(?s).*?(?:时长|总时长|秒|分钟|镜头数|镜头数量|新增镜头|增加镜头|删除镜头|删掉镜头|合并镜头|拆分镜头|(?:改|调整|变成|控制为|控制在).{0,12}个?镜头|脚本格式|表格格式|表头|列顺序|改成.{0,8}(?:口播稿|拍摄稿|分镜表)).*");
+    }
+
+    private boolean requestsTitleChange(String instruction) {
+        return instruction.matches("(?s).*?(?:脚本标题|标题|题目|题名|改名|重命名).*?");
     }
 
     private boolean hasSameScriptStructure(String source, String candidate) {
@@ -603,8 +880,11 @@ public class ScriptServiceImpl implements ScriptService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public void delete(Integer id) {
-        scriptMapper.deleteById(ownedScript(id).getId());
+        AiStoryboardScript script = ownedScript(id);
+        recycleBinService.moveScript(script);
+        scriptMapper.deleteById(script.getId());
     }
 
     @Override
@@ -621,7 +901,7 @@ public class ScriptServiceImpl implements ScriptService {
             .toList();
     }
     @Override
-    public PageResult<ScriptTemplateVO> templatePage(PageQuery query, String category) {
+    public PageResult<AdminScriptTemplateVO> templatePage(PageQuery query, String category) {
         LambdaQueryWrapper<AiScriptTemplate> wrapper = new LambdaQueryWrapper<>();
         if (StringUtils.hasText(query.getKeyword())) {
             wrapper.and(keywordWrapper -> keywordWrapper
@@ -638,17 +918,17 @@ public class ScriptServiceImpl implements ScriptService {
             .orderByDesc(AiScriptTemplate::getUpdateTime)
             .orderByAsc(AiScriptTemplate::getId);
         IPage<AiScriptTemplate> page = templateMapper.selectPage(new Page<>(query.getPage(), query.getPageSize()), wrapper);
-        List<ScriptTemplateVO> list = page.getRecords().stream().map(ScriptConvert::toTemplateVO).toList();
+        List<AdminScriptTemplateVO> list = page.getRecords().stream().map(ScriptConvert::toAdminTemplateVO).toList();
         return new PageResult<>(list, page.getTotal(), page.getCurrent(), page.getSize(), page.getPages());
     }
 
     @Override
-    public ScriptTemplateVO templateById(Integer id) {
+    public AdminScriptTemplateVO templateById(Integer id) {
         AiScriptTemplate template = templateMapper.selectById(id);
         if (template == null) {
             throw new BusinessException("模板不存在");
         }
-        return ScriptConvert.toTemplateVO(template);
+        return ScriptConvert.toAdminTemplateVO(template);
     }
 
     @Override
@@ -718,6 +998,114 @@ public class ScriptServiceImpl implements ScriptService {
         templateMapper.deleteById(id);
     }
 
+    private Map<String, Object> generateFingerprint(GenerateScriptDTO dto, Integer projectId) {
+        Map<String, Object> fingerprint = new LinkedHashMap<>();
+        fingerprint.put("operation", "script_generate");
+        fingerprint.put("projectId", projectId);
+        fingerprint.put("request", paidBusinessInput(dto));
+        return fingerprint;
+    }
+
+    private Map<String, Object> polishFingerprint(
+        PolishScriptDTO dto,
+        AiStoryboardScript script,
+        String sourceContent
+    ) {
+        Map<String, Object> fingerprint = new LinkedHashMap<>();
+        fingerprint.put("operation", "script_polish");
+        fingerprint.put("scriptId", script.getId());
+        fingerprint.put("sourceContent", sourceContent);
+        fingerprint.put("request", paidBusinessInput(dto));
+        return fingerprint;
+    }
+
+    private Map<String, Object> paidBusinessInput(Object dto) {
+        Map<String, Object> request = new LinkedHashMap<>(JsonUtils.toMap(JsonUtils.toJson(dto)));
+        request.remove("requestNo");
+        request.remove("expectedPointCost");
+        return request;
+    }
+
+    private String requirePaidRequestNo(String requestNo) {
+        if (!StringUtils.hasText(requestNo)) {
+            throw new BusinessException("水滴操作请求号不能为空");
+        }
+        return requestNo.trim();
+    }
+
+    private long requireExpectedPointCost(Long expectedPointCost) {
+        if (expectedPointCost == null || expectedPointCost < 0) {
+            throw new BusinessException("水滴费用参数错误");
+        }
+        return expectedPointCost;
+    }
+
+    private void ensurePaidOperationTransaction() {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            throw new IllegalStateException("付费操作必须在事务中执行");
+        }
+    }
+
+    private ScriptVO replayGenerateResult(PaidOperationClaim claim) {
+        requireSuccessfulReplay(claim);
+        ScriptVO result = JsonUtils.fromJson(claim.resultPayload(), ScriptVO.class);
+        if (result == null || !StringUtils.hasText(result.getId())) {
+            throw new BusinessException(ResultCode.CONFLICT, "已完成的脚本生成结果不完整");
+        }
+        return result;
+    }
+
+    private PolishScriptVO replayPolishResult(PaidOperationClaim claim) {
+        requireSuccessfulReplay(claim);
+        Map<String, Object> result = JsonUtils.toMap(claim.resultPayload());
+        if (!result.containsKey("content") || !result.containsKey("summary")) {
+            throw new BusinessException(ResultCode.CONFLICT, "已完成的脚本润色结果不完整");
+        }
+        return new PolishScriptVO(
+            String.valueOf(result.get("content")),
+            String.valueOf(result.get("summary")),
+            result.get("status") == null ? null : String.valueOf(result.get("status"))
+        );
+    }
+
+    private void requireSuccessfulReplay(PaidOperationClaim claim) {
+        if (claim.isSuccess()) {
+            return;
+        }
+        if (claim.isFailed()) {
+            throw new BusinessException(ResultCode.CONFLICT, "该请求此前执行失败，请使用新的请求号重试");
+        }
+        throw new BusinessException(ResultCode.CONFLICT, "该请求正在处理中，请勿重复提交");
+    }
+
+    private void registerPaidOperationRollback(
+        PaidOperationClaim claim,
+        Integer tenantId,
+        Integer userId,
+        AtomicReference<RuntimeException> failure
+    ) {
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == TransactionSynchronization.STATUS_COMMITTED) {
+                    return;
+                }
+                RuntimeException cause = failure.get();
+                String errorCode = cause == null ? "TRANSACTION_ROLLED_BACK" : cause.getClass().getSimpleName();
+                String errorMessage = cause == null || !StringUtils.hasText(cause.getMessage())
+                    ? "付费操作事务回滚"
+                    : cause.getMessage();
+                try {
+                    paidOperationCoordinator.failAndRefund(new PaidOperationFailure(
+                        claim.taskId(), tenantId, userId, errorCode, errorMessage
+                    ));
+                } catch (RuntimeException refundFailure) {
+                    log.error("付费操作回滚后退款失败，taskId={}", claim.taskId(), refundFailure);
+                }
+            }
+        });
+    }
+
     private String defaultScriptName(GenerateScriptDTO dto) {
         String productName = "未命名产品";
         if (StringUtils.hasText(dto.getBriefId())) {
@@ -739,26 +1127,17 @@ public class ScriptServiceImpl implements ScriptService {
         return productName + tabName + date;
     }
 
-    private AiGenerationTask createGenerationTask(GenerateScriptDTO dto) {
-        AiGenerationTask task = new AiGenerationTask();
-        task.setTenantId(TenantContext.getTenantId() == null ? DEFAULT_TENANT_ID : TenantContext.getTenantId());
-        task.setProjectId(Integer.valueOf(dto.getProjectId()));
-        task.setCreateBy(currentUserId());
-        task.setTaskType("generate_script");
-        task.setProviderCode("llm_default");
-        task.setTaskLabel(defaultScriptName(dto));
-        task.setStatus("running");
-        task.setProgress(10);
-        task.setInputPayload(JsonUtils.toJson(dto));
-        task.setStartTime(LocalDateTime.now());
-        generationTaskMapper.insert(task);
-        return task;
-    }
-
-    private String generateContent(GenerateScriptDTO dto, AiGenerationTask task, AiBrief brief) {
+    private GeneratedScriptContent generateContent(
+        GenerateScriptDTO dto,
+        AiBrief brief,
+        AiScriptTemplate generationTemplate,
+        String requestNo,
+        Integer taskId
+    ) {
+        long promptBuildStartedAt = System.nanoTime();
         String userPrompt = StringUtils.hasText(dto.getPrompt()) ? dto.getPrompt() : "";
         String productInfo = buildProductInfo(brief);
-        String templateText = "template".equals(dto.getType()) ? templateInstruction(dto.getTemplateId()) : "";
+        String templateText = "template".equals(dto.getType()) ? templateInstruction(generationTemplate) : "";
         ScriptFormatInfo formatInfo = scriptFormatInfo(dto);
         Map<String, String> variables = new HashMap<>();
         variables.put("prompt", userPrompt);
@@ -790,22 +1169,74 @@ public class ScriptServiceImpl implements ScriptService {
         );
         String contentContext = buildScriptContentContext(dto, productInfo, templateText, userPrompt, formatInfo);
         String isolationRule = generationIsolationRule(dto.getType());
-        String modelSystemPrompt = renderedPrompt.getSystemPrompt() + "\n\n" + isolationRule;
+        TitlePromptRules titlePromptRules = titlePromptRules(variables);
+        String modelSystemPrompt = renderedPrompt.getSystemPrompt() + "\n\n" + isolationRule + titlePromptRules.generationRule();
         String modelUserPrompt = renderedPrompt.getUserPrompt()
             + "\n\n【本次生成内容信息】\n" + contentContext
-            + "\n\n" + isolationRule;
+            + "\n\n" + isolationRule
+            + titlePromptRules.generationRule();
+        long promptBuildMs = elapsedMs(promptBuildStartedAt);
         try {
-            String content = llmClient.chat(modelSystemPrompt, modelUserPrompt);
+            LlmChatResult metrics = llmClient.chatWithMetrics(modelSystemPrompt, modelUserPrompt);
+            String content = metrics.content();
+            log.info(
+                "[SCRIPT_GENERATE_STAGE] stage=model requestNo={} taskId={} firstTokenMs={} firstContentMs={} generateMs={} promptTokens={} completionTokens={} reasoningTokens={} totalTokens={} finishReason={}",
+                requestNo,
+                taskId,
+                metrics.firstTokenLatencyMs(),
+                metrics.firstContentLatencyMs(),
+                metrics.totalLatencyMs(),
+                metrics.promptTokens(),
+                metrics.completionTokens(),
+                metrics.reasoningTokens(),
+                metrics.totalTokens(),
+                metrics.finishReason()
+            );
             if (StringUtils.hasText(content) && !"{}".equals(content.trim())) {
-                return content;
+                return new GeneratedScriptContent(
+                    ScriptContentTitleNormalizer.ensureTitle(content, fallbackContentTitle(dto, brief)),
+                    metrics,
+                    promptBuildMs,
+                    false
+                );
             }
-            return "【AI脚本草稿】" + (StringUtils.hasText(productInfo) ? productInfo : userPrompt) + "\n镜头1：产品核心卖点开场，引出用户痛点。\n镜头2：展示使用场景和利益点。\n镜头3：用行动号召收束。";
+            String fallbackContent = "【AI脚本草稿】" + (StringUtils.hasText(productInfo) ? productInfo : userPrompt) + "\n镜头1：产品核心卖点开场，引出用户痛点。\n镜头2：展示使用场景和利益点。\n镜头3：用行动号召收束。";
+            return new GeneratedScriptContent(
+                ScriptContentTitleNormalizer.ensureTitle(fallbackContent, fallbackContentTitle(dto, brief)),
+                metrics,
+                promptBuildMs,
+                true
+            );
         } catch (RuntimeException ex) {
-            task.setErrorCode("LLM_FALLBACK");
-            task.setErrorMessage(ex.getMessage());
-            generationTaskMapper.updateById(task);
-            return fallbackScriptContent(dto, StringUtils.hasText(productInfo) ? productInfo : userPrompt);
+            log.warn(
+                "[SCRIPT_GENERATE_STAGE] stage=model requestNo={} taskId={} status=fallback errorType={} errorMessage={}",
+                requestNo,
+                taskId,
+                ex.getClass().getSimpleName(),
+                ex.getMessage()
+            );
+            return new GeneratedScriptContent(
+                ScriptContentTitleNormalizer.ensureTitle(
+                    fallbackScriptContent(dto, StringUtils.hasText(productInfo) ? productInfo : userPrompt),
+                    fallbackContentTitle(dto, brief)
+                ),
+                null,
+                promptBuildMs,
+                true
+            );
         }
+    }
+
+    private String fallbackContentTitle(GenerateScriptDTO dto, AiBrief brief) {
+        String productName = brief != null && StringUtils.hasText(brief.getProductName())
+            ? brief.getProductName().trim()
+            : "产品";
+        String titleSuffix = switch (StringUtils.hasText(dto.getType()) ? dto.getType() : "original") {
+            case "viral" -> "爆款灵感短视频";
+            case "template" -> "高转化短视频";
+            default -> "创意短视频";
+        };
+        return productName + titleSuffix;
     }
 
     private String scriptGenerateSceneCode(String type) {
@@ -837,15 +1268,7 @@ public class ScriptServiceImpl implements ScriptService {
     }
 
     private AiStoryboardScript ownedScript(Integer id) {
-        AiStoryboardScript script = scriptMapper.selectOne(new LambdaQueryWrapper<AiStoryboardScript>()
-            .eq(AiStoryboardScript::getId, id)
-            .eq(AiStoryboardScript::getTenantId, currentTenantId())
-            .eq(AiStoryboardScript::getCreateBy, currentUserId())
-            .last("LIMIT 1"));
-        if (script == null) {
-            throw new BusinessException("脚本不存在或无权操作");
-        }
-        return script;
+        return scriptReviewService.internalScript(id);
     }
 
     private Integer currentTenantId() {
@@ -928,7 +1351,11 @@ public class ScriptServiceImpl implements ScriptService {
     }
 
     private void hydrateProductFrame(GenerateScriptDTO dto) {
-        ProductFrameReference reference = productFrameReference(dto.getProductFrameAssetId());
+        hydrateProductFrame(dto, true);
+    }
+
+    private void hydrateProductFrame(GenerateScriptDTO dto, boolean incrementUsage) {
+        ProductFrameReference reference = productFrameReference(dto.getProductFrameAssetId(), incrementUsage);
         if (reference == null) {
             return;
         }
@@ -939,7 +1366,7 @@ public class ScriptServiceImpl implements ScriptService {
     }
 
     private void hydrateProductFrame(PolishScriptDTO dto) {
-        ProductFrameReference reference = productFrameReference(dto.getProductFrameAssetId());
+        ProductFrameReference reference = productFrameReference(dto.getProductFrameAssetId(), true);
         if (reference == null) {
             return;
         }
@@ -948,7 +1375,7 @@ public class ScriptServiceImpl implements ScriptService {
         dto.setProductImage(reference.previewUrl());
     }
 
-    private ProductFrameReference productFrameReference(String assetId) {
+    private ProductFrameReference productFrameReference(String assetId, boolean incrementUsage) {
         if (!StringUtils.hasText(assetId)) {
             return null;
         }
@@ -968,8 +1395,10 @@ public class ScriptServiceImpl implements ScriptService {
             throw new BusinessException("产品画面资产不存在或无权使用");
         }
         Object extractedText = JsonUtils.toMap(asset.getMetadataJson()).get("extractedText");
-        asset.setUsageCount((asset.getUsageCount() == null ? 0 : asset.getUsageCount()) + 1);
-        assetMapper.updateById(asset);
+        if (incrementUsage) {
+            asset.setUsageCount((asset.getUsageCount() == null ? 0 : asset.getUsageCount()) + 1);
+            assetMapper.updateById(asset);
+        }
         return new ProductFrameReference(
             asset.getAssetName(),
             extractedText instanceof String text ? text : "",
@@ -980,33 +1409,45 @@ public class ScriptServiceImpl implements ScriptService {
     private record ProductFrameReference(String fileName, String extractedText, String previewUrl) {
     }
 
-    private String templateInstruction(String templateId) {
-        if (!StringUtils.hasText(templateId)) {
+    private AiScriptTemplate resolveGenerationTemplate(GenerateScriptDTO dto) {
+        if (!"template".equals(dto.getType())) {
+            return null;
+        }
+        if (!StringUtils.hasText(dto.getTemplateId())) {
+            throw new BusinessException("请先选择脚本模板");
+        }
+        final Integer templateId;
+        try {
+            templateId = Integer.valueOf(dto.getTemplateId());
+        } catch (NumberFormatException ex) {
+            throw new BusinessException("模板参数错误");
+        }
+        AiScriptTemplate template = templateMapper.selectById(templateId);
+        if (template == null) {
+            throw new BusinessException("模板不存在");
+        }
+        if (!"approved".equals(template.getAuditStatus()) || !"online".equals(template.getPublishStatus())) {
+            throw new BusinessException("该模板尚未审核通过或已下架");
+        }
+        ensureTemplateAccess(template);
+        return template;
+    }
+
+    private String templateInstruction(AiScriptTemplate template) {
+        if (template == null) {
             return "模板要求：无指定模板，按标准短视频分镜脚本生成。";
         }
-        try {
-            AiScriptTemplate template = templateMapper.selectById(Integer.valueOf(templateId));
-            if (template == null) {
-                return "模板要求：按标准短视频分镜脚本生成。";
-            }
-            if (!"approved".equals(template.getAuditStatus()) || !"online".equals(template.getPublishStatus())) {
-                throw new BusinessException("该模板尚未审核通过或已下架");
-            }
-            ensureTemplateAccess(template);
-            return "模板要求：参考模板《" + template.getTemplateName() + "》；分类：" + nullToEmpty(template.getCategory())
-                + "；适用演员/账号：" + nullToEmpty(template.getActor())
-                + "；适用人群：" + nullToEmpty(template.getPeople())
-                + "；难度：" + nullToEmpty(template.getDifficulty()) + "。"
-                + "\n段落结构拆解：" + nullToEmpty(template.getParagraphStructure())
-                + "\n情绪转折点：" + nullToEmpty(template.getEmotionTurningPoints())
-                + "\n前5秒钩子话术提炼：" + nullToEmpty(template.getFirstFiveSecondsHook())
-                + "\n结构模型公式：" + nullToEmpty(template.getStructureFormula())
-                + "\n脚本模版库提示词：" + nullToEmpty(template.getScriptTemplateLibrary())
-                + "\n参考链接：" + nullToEmpty(template.getReferenceUrl())
-                + "\n参考说明：" + nullToEmpty(template.getReferenceDesc());
-        } catch (NumberFormatException ex) {
-            return "模板要求：按标准短视频分镜脚本生成。";
-        }
+        return "模板要求：参考模板《" + template.getTemplateName() + "》；分类：" + nullToEmpty(template.getCategory())
+            + "；适用演员/账号：" + nullToEmpty(template.getActor())
+            + "；适用人群：" + nullToEmpty(template.getPeople())
+            + "；难度：" + nullToEmpty(template.getDifficulty()) + "。"
+            + "\n段落结构拆解：" + nullToEmpty(template.getParagraphStructure())
+            + "\n情绪转折点：" + nullToEmpty(template.getEmotionTurningPoints())
+            + "\n前5秒钩子话术提炼：" + nullToEmpty(template.getFirstFiveSecondsHook())
+            + "\n结构模型公式：" + nullToEmpty(template.getStructureFormula())
+            + "\n脚本模版库提示词：" + nullToEmpty(template.getScriptTemplateLibrary())
+            + "\n完整参考视频（仅后台生成时使用）：" + nullToEmpty(firstText(template.getFullVideoUrl(), template.getReferenceUrl()))
+            + "\n参考说明：" + nullToEmpty(template.getReferenceDesc());
     }
 
     private void ensureTemplateAccess(AiScriptTemplate template) {
@@ -1066,8 +1507,32 @@ public class ScriptServiceImpl implements ScriptService {
     private record ScriptFormatInfo(String name, String requirement) {
     }
 
+    private TitlePromptRules titlePromptRules(Map<String, String> variables) {
+        PromptRenderService.RenderedPrompt renderedPrompt = promptRenderService.render(
+            "script_title_rules",
+            DEFAULT_SCRIPT_TITLE_OUTPUT_RULE,
+            DEFAULT_SCRIPT_TITLE_POLISH_RULE,
+            variables
+        );
+        return new TitlePromptRules(
+            "\n\n" + renderedPrompt.getSystemPrompt().trim(),
+            "\n\n" + renderedPrompt.getUserPrompt().trim()
+        );
+    }
+
+    private record TitlePromptRules(String generationRule, String polishRule) {
+    }
+
     private String nullToEmpty(String value) {
         return value == null ? "" : value;
+    }
+
+    private String firstText(String primary, String fallback) {
+        return StringUtils.hasText(primary) ? primary : fallback;
+    }
+
+    private String trimToNull(String value) {
+        return StringUtils.hasText(value) ? value.trim() : null;
     }
 
     private String fallbackScriptContent(GenerateScriptDTO dto, String prompt) {
@@ -1100,6 +1565,8 @@ public class ScriptServiceImpl implements ScriptService {
         template.setScriptTemplateLibrary(dto.getScriptTemplateLibrary());
         template.setReferenceUrl(dto.getReferenceUrl());
         template.setReferenceDesc(dto.getReferenceDesc());
+        template.setPreviewVideoUrl(dto.getPreviewVideoUrl());
+        template.setFullVideoUrl(dto.getFullVideoUrl());
         template.setSortOrder(dto.getSortOrder() == null ? 0 : dto.getSortOrder());
         if (dto.getLocked() != null || template.getLocked() == null) {
             template.setLocked(Boolean.TRUE.equals(dto.getLocked()) ? 1 : 0);

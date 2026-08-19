@@ -384,9 +384,12 @@ INSERT INTO ai_membership_benefit_definition (
   reset_type, preview_only, enabled, description, display_order
 ) VALUES
   ('SCRIPT_MONTHLY_LIMIT', '脚本月度生成额度', 'script', 'integer', '次', 'membership_month', 0, 1, '按会员开通日逐月重置', 10),
+  ('SCRIPT_GENERATE_POINT_COST', '脚本生成水滴消耗', 'script', 'integer', '💧/次', 'none', 0, 1, '每次提交生成脚本消耗的铼河水滴', 11),
+  ('SCRIPT_POLISH_POINT_COST', '脚本润色水滴消耗', 'script', 'integer', '💧/次', 'none', 0, 1, '每次发送修改要求消耗的铼河水滴', 12),
+  ('SCRIPT_QUEUE_CONCURRENCY_LIMIT', '脚本队列并发数', 'script', 'integer', '个', 'none', 0, 1, '普通套餐固定串行，至尊版可配置并行生成', 13),
   ('BRIEF_MAX_ACTIVE', '当前有效Brief数量', 'brief', 'integer', '个', 'none', 0, 1, '去重统计用户当前可用Brief', 20),
   ('BRIEF_DETECT_ACCESS', 'Brief检测权限', 'brief', 'boolean', NULL, 'none', 0, 1, NULL, 21),
-  ('BRIEF_DETECT_POINT_COST', 'Brief检测积分消耗', 'brief', 'integer', '积分/次', 'none', 0, 1, NULL, 22),
+  ('BRIEF_DETECT_POINT_COST', 'Brief检测水滴消耗', 'brief', 'integer', '💧/次', 'none', 0, 1, '每次执行 Brief 智能检测消耗的铼河水滴', 22),
   ('BRIEF_BATCH_IMPORT', 'Brief批量导入', 'brief', 'boolean', NULL, 'none', 0, 1, NULL, 23),
   ('BRIEF_COLLABORATION', 'Brief账号共享协作', 'brief', 'boolean', NULL, 'none', 0, 1, NULL, 24),
   ('TEMPLATE_ACCESS_SCOPE', '模板访问范围', 'template', 'string', NULL, 'none', 0, 1, 'free_only/all', 30),
@@ -394,14 +397,15 @@ INSERT INTO ai_membership_benefit_definition (
   ('CUSTOM_TEMPLATE_LIMIT', '自定义模板保存上限', 'template', 'integer', '个', 'none', 0, 1, NULL, 32),
   ('EXCLUSIVE_TEMPLATE_REQUEST', '独家定制模板工单', 'template', 'boolean', NULL, 'none', 0, 1, NULL, 33),
   ('VIRAL_SIMPLE_ACCESS', '爆款简易解析权限', 'viral', 'boolean', NULL, 'none', 0, 1, NULL, 40),
-  ('VIRAL_SIMPLE_POINT_COST', '爆款简易解析积分消耗', 'viral', 'integer', '积分/次', 'none', 0, 1, NULL, 41),
+  ('VIRAL_SIMPLE_POINT_COST', '爆款简易解析水滴消耗', 'viral', 'integer', '💧/次', 'none', 0, 1, '每次确认生成简易文案分析消耗的铼河水滴', 41),
   ('VIRAL_SIMPLE_TRIAL_LIMIT', '爆款简易解析试用次数', 'viral', 'integer', '次', 'lifetime', 0, 1, NULL, 42),
   ('VIRAL_DEEP_ACCESS', '爆款深度解析权限', 'viral', 'boolean', NULL, 'none', 0, 1, NULL, 43),
-  ('VIRAL_DEEP_POINT_COST', '爆款深度解析积分消耗', 'viral', 'integer', '积分/次', 'none', 0, 1, NULL, 44),
-  ('POINT_PURCHASE_ACCESS', '积分购买权限', 'point', 'boolean', NULL, 'none', 0, 1, NULL, 50),
-  ('POINTS_PER_10_YUAN', '每10元购买积分数', 'point', 'integer', '积分', 'none', 0, 1, NULL, 51),
-  ('DAILY_LOGIN_POINT', '每日登录积分奖励', 'point', 'integer', '积分', 'day', 0, 1, NULL, 52),
-  ('VIDEO_LAUNCH_BONUS_POINT', '视频功能上线赠送积分', 'point', 'integer', '积分', 'lifetime', 1, 0, '视频功能上线时再启用', 53),
+  ('VIRAL_DEEP_POINT_COST', '爆款深度解析水滴消耗', 'viral', 'integer', '💧/次', 'none', 0, 1, '每次确认生成深度拉片拆解消耗的铼河水滴', 44),
+  ('POINT_PURCHASE_ACCESS', '水滴购买权限', 'point', 'boolean', NULL, 'none', 0, 1, NULL, 50),
+  ('POINTS_PER_10_YUAN', '每10元购买水滴数', 'point', 'integer', '💧', 'none', 0, 1, NULL, 51),
+  ('DAILY_LOGIN_POINT', '每日登录水滴奖励', 'point', 'integer', '💧', 'day', 0, 1, NULL, 52),
+  ('VIDEO_LAUNCH_BONUS_POINT', '视频功能上线赠送水滴', 'point', 'integer', '💧', 'lifetime', 1, 0, '视频功能上线时再启用', 53),
+  ('NEW_USER_WELCOME_POINT', '新用户初始水滴', 'point', 'integer', '💧', 'lifetime', 0, 1, '首次创建前台账号时一次性赠送，可在后台套餐权益或水滴管理中修改', 54),
   ('REMOVE_WATERMARK', '去品牌水印', 'common', 'boolean', NULL, 'none', 0, 1, NULL, 60),
   ('TASK_CONCURRENCY_LIMIT', '并发任务数上限', 'common', 'integer', '个', 'none', 0, 1, NULL, 61),
   ('STORAGE_LIMIT_BYTES', '云端存储空间', 'common', 'integer', 'Byte', 'none', 0, 1, NULL, 62),
@@ -421,10 +425,10 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO ai_point_package (
   package_code, package_name, price, points, description, display_order, status
 ) VALUES
-  ('points_500', '基础积分包', 10.00, 500, '适合少量补充积分', 10, 1),
-  ('points_2500', '进阶积分包', 50.00, 2500, '适合日常内容创作', 20, 1),
-  ('points_5000', '专业积分包', 100.00, 5000, '适合稳定批量生产', 30, 1),
-  ('points_15000', '团队积分包', 300.00, 15000, '适合团队集中采购', 40, 1)
+  ('points_500', '基础水滴包', 10.00, 500, '适合少量补充水滴', 10, 1),
+  ('points_2500', '进阶水滴包', 50.00, 2500, '适合日常内容创作', 20, 1),
+  ('points_5000', '专业水滴包', 100.00, 5000, '适合稳定批量生产', 30, 1),
+  ('points_15000', '团队水滴包', 300.00, 15000, '适合团队集中采购', 40, 1)
 ON DUPLICATE KEY UPDATE
   package_name = VALUES(package_name),
   price = VALUES(price),
@@ -440,9 +444,12 @@ SELECT p.id, d.id, benefit_values.benefit_value, 1
 FROM JSON_TABLE(
   '[
     {"plan":"free","code":"SCRIPT_MONTHLY_LIMIT","value":"3"},
+    {"plan":"free","code":"SCRIPT_GENERATE_POINT_COST","value":"50"},
+    {"plan":"free","code":"SCRIPT_POLISH_POINT_COST","value":"20"},
+    {"plan":"free","code":"SCRIPT_QUEUE_CONCURRENCY_LIMIT","value":"1"},
     {"plan":"free","code":"BRIEF_MAX_ACTIVE","value":"0"},
     {"plan":"free","code":"BRIEF_DETECT_ACCESS","value":"false"},
-    {"plan":"free","code":"BRIEF_DETECT_POINT_COST","value":"0"},
+    {"plan":"free","code":"BRIEF_DETECT_POINT_COST","value":"40"},
     {"plan":"free","code":"BRIEF_BATCH_IMPORT","value":"false"},
     {"plan":"free","code":"BRIEF_COLLABORATION","value":"false"},
     {"plan":"free","code":"TEMPLATE_ACCESS_SCOPE","value":"free_only"},
@@ -450,12 +457,13 @@ FROM JSON_TABLE(
     {"plan":"free","code":"CUSTOM_TEMPLATE_LIMIT","value":"0"},
     {"plan":"free","code":"EXCLUSIVE_TEMPLATE_REQUEST","value":"false"},
     {"plan":"free","code":"VIRAL_SIMPLE_ACCESS","value":"true"},
-    {"plan":"free","code":"VIRAL_SIMPLE_POINT_COST","value":"0"},
+    {"plan":"free","code":"VIRAL_SIMPLE_POINT_COST","value":"40"},
     {"plan":"free","code":"VIRAL_SIMPLE_TRIAL_LIMIT","value":"1"},
     {"plan":"free","code":"VIRAL_DEEP_ACCESS","value":"false"},
-    {"plan":"free","code":"VIRAL_DEEP_POINT_COST","value":"0"},
+    {"plan":"free","code":"VIRAL_DEEP_POINT_COST","value":"80"},
     {"plan":"free","code":"POINT_PURCHASE_ACCESS","value":"false"},
     {"plan":"free","code":"POINTS_PER_10_YUAN","value":"0"},
+    {"plan":"free","code":"NEW_USER_WELCOME_POINT","value":"200"},
     {"plan":"free","code":"DAILY_LOGIN_POINT","value":"10"},
     {"plan":"free","code":"VIDEO_LAUNCH_BONUS_POINT","value":"0"},
     {"plan":"free","code":"REMOVE_WATERMARK","value":"false"},
@@ -465,6 +473,9 @@ FROM JSON_TABLE(
     {"plan":"free","code":"VIDEO_GENERATE_LIMIT","value":"80"},
 
     {"plan":"light","code":"SCRIPT_MONTHLY_LIMIT","value":"50"},
+    {"plan":"light","code":"SCRIPT_GENERATE_POINT_COST","value":"40"},
+    {"plan":"light","code":"SCRIPT_POLISH_POINT_COST","value":"15"},
+    {"plan":"light","code":"SCRIPT_QUEUE_CONCURRENCY_LIMIT","value":"1"},
     {"plan":"light","code":"BRIEF_MAX_ACTIVE","value":"10"},
     {"plan":"light","code":"BRIEF_DETECT_ACCESS","value":"true"},
     {"plan":"light","code":"BRIEF_DETECT_POINT_COST","value":"30"},
@@ -490,6 +501,9 @@ FROM JSON_TABLE(
     {"plan":"light","code":"VIDEO_GENERATE_LIMIT","value":"200"},
 
     {"plan":"pro","code":"SCRIPT_MONTHLY_LIMIT","value":"150"},
+    {"plan":"pro","code":"SCRIPT_GENERATE_POINT_COST","value":"30"},
+    {"plan":"pro","code":"SCRIPT_POLISH_POINT_COST","value":"10"},
+    {"plan":"pro","code":"SCRIPT_QUEUE_CONCURRENCY_LIMIT","value":"1"},
     {"plan":"pro","code":"BRIEF_MAX_ACTIVE","value":"30"},
     {"plan":"pro","code":"BRIEF_DETECT_ACCESS","value":"true"},
     {"plan":"pro","code":"BRIEF_DETECT_POINT_COST","value":"25"},
@@ -515,6 +529,9 @@ FROM JSON_TABLE(
     {"plan":"pro","code":"VIDEO_GENERATE_LIMIT","value":"1000"},
 
     {"plan":"ultimate","code":"SCRIPT_MONTHLY_LIMIT","value":"500"},
+    {"plan":"ultimate","code":"SCRIPT_GENERATE_POINT_COST","value":"20"},
+    {"plan":"ultimate","code":"SCRIPT_POLISH_POINT_COST","value":"5"},
+    {"plan":"ultimate","code":"SCRIPT_QUEUE_CONCURRENCY_LIMIT","value":"8"},
     {"plan":"ultimate","code":"BRIEF_MAX_ACTIVE","value":"unlimited"},
     {"plan":"ultimate","code":"BRIEF_DETECT_ACCESS","value":"true"},
     {"plan":"ultimate","code":"BRIEF_DETECT_POINT_COST","value":"20"},
@@ -547,6 +564,8 @@ FROM JSON_TABLE(
 ) benefit_values
 JOIN ai_membership_plan p ON p.plan_code = benefit_values.plan_code
 JOIN ai_membership_benefit_definition d ON d.benefit_code = benefit_values.benefit_code
+WHERE p.deleted = 0
+  AND d.deleted = 0
 ON DUPLICATE KEY UPDATE
   benefit_value = VALUES(benefit_value),
   enabled = VALUES(enabled),
@@ -626,6 +645,7 @@ INSERT INTO sys_prompt_template (
   (21, NULL, NULL, 'script_generate_viral', '爆款复刻脚本生成Prompt', 'v1', '你是专业商业短视频爆款复刻脚本策划。严格按照后台规范生成脚本，不输出解释、变量说明、假设说明或占位符。', '请结合爆款参考文案、结构分析、产品Brief和脚本配置，生成可拍摄的爆款复刻脚本。', JSON_OBJECT('type', 'object'), 1),
   (22, NULL, NULL, 'script_generate_template', '脚本模板库生成Prompt', 'v1', '你是专业商业短视频模板脚本策划。严格按照后台规范和所选模板生成脚本，不输出解释、变量说明、假设说明或占位符。', '请结合所选模板信息、产品Brief和脚本配置，生成可拍摄的模板脚本。', JSON_OBJECT('type', 'object'), 1),
   (23, NULL, NULL, 'script_generate_original', 'AI原创脚本生成Prompt', 'v1', '你是专业商业短视频原创脚本策划。严格按照后台规范生成脚本，不输出解释、变量说明、假设说明或占位符。', '请结合用户创作需求、产品Brief和脚本配置，生成可拍摄的原创脚本。', JSON_OBJECT('type', 'object'), 1),
+  (27, NULL, NULL, 'script_title_rules', '脚本标题生成与润色规则', 'v1', '【脚本标题硬性规则】最终输出第一行必须严格使用“标题：<创意标题>”格式，标题应基于本次 Brief 和脚本内容创作，建议 10-30 个字，具体、有吸引力但不得编造产品事实。标题不得使用 Markdown 标题符号、加粗符号或占位符。标题行后空一行，再输出所选格式的完整脚本；若正文为 Markdown 表格，标题必须放在表格外。', '【脚本标题规则】完整结果必须保留首行“标题：<创意标题>”及其后的空行。用户未明确要求修改标题时必须逐字保留原稿标题；只有用户或标题定位评论明确要求改标题时，才根据修改后的脚本更新标题。标题不得放入 Markdown 表格。', NULL, 1),
   (24, NULL, NULL, 'source_copy_analyze', '爆款文案结构分析Prompt', 'v1', '你是商业短视频爆款文案结构分析专家。请只输出中文分析结果，便于后续生成带货脚本。', '请根据分析模式和原始文案，输出可复刻的结构分析。要求简洁、具体、可直接用于后续脚本生成。', JSON_OBJECT('type', 'object'), 1),
   (25, NULL, NULL, 'source_copy_cleanup', 'ASR文案整理Prompt', 'v3', '你是专业的短视频ASR逐字稿校对员。这份逐字稿将用于拆解爆款文案，必须忠实保留每一个原始口语信息。你只能纠正上下文完全明确的明显同音错字、补充标点和按语义分段；不得删除、改写、调换、概括或补充任何词语。只输出整理后的纯文本，不要标题、说明、Markdown或JSON。', '请整理下面的短视频ASR原始逐字稿：\n\n{{copy}}\n\n整理要求（必须全部遵守）：\n1. 只纠正上下文完全明确的同音、近音造成的明显错别字；不确定时保持原样，不得润色；\n2. 严禁删减任何内容。所有口头禅、重复词、填充词（例如“那个、然后、就是、嗯、啊”）、语气词、口吃、卡顿、倒装以及没说完的话，都必须原样保留；\n3. 在不删减、不合并、不调整词语顺序的前提下分段。每个以“。！？；”结束的完整句子必须单独占一行；同一句内部的逗号停顿不得强制换行；\n4. 标点必须体现原始口语语气：疑问使用“？”，感叹使用“！”，句中停顿使用“，”或“、”；只有完整陈述句才使用“。”，严禁把所有句子统一处理成句号结尾；\n5. 不总结、不概括、不分析、不改写、不重新组织，也不得添加原文没有的信息；\n6. 只返回整理后的完整文案，不要附带任何说明或标记。', NULL, 1),
   (2, NULL, NULL, 'brief_score', 'Brief评分默认Prompt', 'v1', '你是短视频商业Brief评估专家。', '请对以下Brief进行完整度、差异化、风险点评分：{{brief}}', JSON_OBJECT('type', 'object'), 1),
@@ -658,7 +678,7 @@ ON DUPLICATE KEY UPDATE
 INSERT INTO sys_script_format_config (
   code, name, format_requirement, sort_order, status
 ) VALUES
-  ('storyboard', '分镜脚本表', '请按分镜脚本表输出，至少包含镜号、时长、画面/镜头、人物动作、台词/旁白、字幕、音效/音乐、道具/备注等信息，便于拍摄执行。', 10, 1),
+  ('storyboard', '分镜脚本表', '第一行输出“标题：<创意标题>”，空一行后再按Markdown分镜脚本表输出；标题不得放入表格。表格至少包含镜号、时长、画面/镜头、人物动作、台词/旁白、字幕、音效/音乐、道具/备注等信息，便于拍摄执行。', 10, 1),
   ('oral', '口播脚本', '请按口播脚本输出，突出开场钩子、痛点共鸣、产品卖点、信任背书和行动引导，语言口语化、节奏紧凑、适合真人出镜直接朗读。', 20, 1),
   ('shot', '拍摄脚本', '请按拍摄脚本输出，明确拍摄场景、机位/景别、镜头运动、演员调度、画面重点、台词字幕和后期提示，保证现场可执行。', 30, 1)
 ON DUPLICATE KEY UPDATE

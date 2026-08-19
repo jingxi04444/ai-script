@@ -29,6 +29,12 @@ export interface Script {
   duration?: string;
   format?: string;
   formatName?: string;
+  templateId?: string;
+  templateName?: string;
+  originalCategoryId?: string;
+  originalCategoryName?: string;
+  originalScenarioId?: string;
+  originalScenarioName?: string;
   status: ScriptStatus;
   content?: string;
   createdAt: string;
@@ -49,8 +55,7 @@ export interface ScriptTemplate {
   structureFormula?: string;
   modelFormula?: string;
   scriptTemplateLibrary?: string;
-  referenceUrl?: string;
-  referenceDesc?: string;
+  previewVideoUrl?: string;
   sortOrder?: number;
   createdAt?: string;
   updatedAt?: string;
@@ -68,9 +73,15 @@ export interface ScriptFormatOption {
 }
 
 export interface GenerateScriptParams {
+  requestNo: string;
+  expectedPointCost: number;
   projectId: string;
   type: ScriptType;
   templateId?: string;
+  originalCategoryId?: string;
+  originalCategoryName?: string;
+  originalScenarioId?: string;
+  originalScenarioName?: string;
   briefId?: string;
   referenceUrl?: string;
   referenceCopy?: string;
@@ -99,6 +110,8 @@ export interface ScriptPolishMessage {
 }
 
 export interface PolishScriptParams {
+  requestNo: string;
+  expectedPointCost: number;
   instruction: string;
   content: string;
   briefId?: string;
@@ -111,6 +124,7 @@ export interface PolishScriptParams {
 export interface PolishScriptResult {
   content: string;
   summary: string;
+  status?: ScriptStatus;
 }
 
 export interface ScriptVersion {
@@ -122,6 +136,48 @@ export interface ScriptVersion {
   source?: 'generate' | 'ai_polish' | 'manual' | 'restore' | 'legacy';
   instruction?: string;
   summary?: string;
+  restoredFromVersionId?: string;
   current: boolean;
   createdAt: string;
+}
+
+export interface ScriptAccess {
+  canView: boolean;
+  canComment: boolean;
+  canEditScript: boolean;
+  canUseAi: boolean;
+  canViewAiMessages: boolean;
+  canViewVersions: boolean;
+  canSubmitReview: boolean;
+  accessMode: 'internal' | 'review';
+}
+
+export interface ScriptReviewComment {
+  id: string;
+  parentId?: string;
+  versionId?: string;
+  userId: string;
+  username?: string;
+  userAvatar?: string;
+  rowIndex?: number;
+  columnKey?: string;
+  content: string;
+  status: 'open' | 'resolved';
+  mine: boolean;
+  deletable: boolean;
+  createdAt: string;
+}
+
+export interface ShareLinkResult {
+  id: string;
+  token: string;
+  path: string;
+  expiresAt: string;
+}
+
+export interface ScriptReviewContext {
+  script: Script;
+  access: ScriptAccess;
+  versions: ScriptVersion[];
+  comments: ScriptReviewComment[];
 }

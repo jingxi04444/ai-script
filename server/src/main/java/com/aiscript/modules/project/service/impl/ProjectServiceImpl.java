@@ -3,8 +3,6 @@ package com.aiscript.modules.project.service.impl;
 import com.aiscript.common.api.PageResult;
 import com.aiscript.common.exception.BusinessException;
 import com.aiscript.framework.tenant.TenantContext;
-import com.aiscript.modules.brief.entity.AiProjectBriefRef;
-import com.aiscript.modules.brief.mapper.AiProjectBriefRefMapper;
 import com.aiscript.modules.project.convert.ProjectConvert;
 import com.aiscript.modules.project.dto.ProjectCreateDTO;
 import com.aiscript.modules.project.dto.ProjectQueryDTO;
@@ -14,6 +12,7 @@ import com.aiscript.modules.project.mapper.AiProjectMapper;
 import com.aiscript.modules.project.service.ProjectService;
 import com.aiscript.modules.project.vo.ProjectVO;
 import com.aiscript.modules.project.vo.ProjectStatsRow;
+import com.aiscript.modules.recyclebin.service.RecycleBinService;
 import com.aiscript.security.LoginUser;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -30,14 +29,14 @@ public class ProjectServiceImpl implements ProjectService {
     private static final Integer DEFAULT_TENANT_ID = 1;
 
     private final AiProjectMapper projectMapper;
-    private final AiProjectBriefRefMapper projectBriefRefMapper;
+    private final RecycleBinService recycleBinService;
 
     public ProjectServiceImpl(
         AiProjectMapper projectMapper,
-        AiProjectBriefRefMapper projectBriefRefMapper
+        RecycleBinService recycleBinService
     ) {
         this.projectMapper = projectMapper;
-        this.projectBriefRefMapper = projectBriefRefMapper;
+        this.recycleBinService = recycleBinService;
     }
 
     @Override
@@ -73,6 +72,8 @@ public class ProjectServiceImpl implements ProjectService {
         project.setTenantId(TenantContext.getTenantId() == null ? DEFAULT_TENANT_ID : TenantContext.getTenantId());
         project.setOwnerId(currentUserId());
         project.setProjectName(StringUtils.hasText(dto.getName()) ? dto.getName() : "未命名项目");
+        project.setAvatarUrl(dto.getAvatarUrl());
+        project.setAnnouncement(dto.getAnnouncement());
         project.setCategory(dto.getCategory());
         project.setProductName(dto.getProductName());
         project.setPlatform(dto.getPlatform());
@@ -95,6 +96,12 @@ public class ProjectServiceImpl implements ProjectService {
         if (StringUtils.hasText(dto.getName())) {
             project.setProjectName(dto.getName());
         }
+        if (StringUtils.hasText(dto.getAvatarUrl())) {
+            project.setAvatarUrl(dto.getAvatarUrl());
+        }
+        if (StringUtils.hasText(dto.getAnnouncement())) {
+            project.setAnnouncement(dto.getAnnouncement());
+        }
         if (StringUtils.hasText(dto.getCategory())) {
             project.setCategory(dto.getCategory());
         }
@@ -115,8 +122,7 @@ public class ProjectServiceImpl implements ProjectService {
     @Transactional(rollbackFor = Exception.class)
     public void delete(Integer id) {
         AiProject project = accessibleProject(id);
-        projectBriefRefMapper.delete(new LambdaQueryWrapper<AiProjectBriefRef>()
-            .eq(AiProjectBriefRef::getProjectId, project.getId()));
+        recycleBinService.moveProject(project);
         projectMapper.deleteById(project.getId());
     }
 
@@ -155,6 +161,8 @@ public class ProjectServiceImpl implements ProjectService {
         ProjectVO vo = new ProjectVO();
         vo.setId(String.valueOf(row.getId()));
         vo.setName(row.getProjectName());
+        vo.setAvatarUrl(row.getAvatarUrl());
+        vo.setAnnouncement(row.getAnnouncement());
         vo.setUserId(row.getOwnerId() == null ? null : String.valueOf(row.getOwnerId()));
         vo.setUsername("demo");
         vo.setCategory(row.getCategory());

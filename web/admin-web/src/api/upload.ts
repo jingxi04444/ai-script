@@ -10,10 +10,10 @@ export interface UploadFileResult {
 }
 
 export const uploadApi = {
-  uploadFile: async (file: File): Promise<UploadFileResult> => {
+  uploadFile: async (file: File, folder = 'site-config'): Promise<UploadFileResult> => {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('folder', 'site-config');
+    formData.append('folder', folder);
 
     const token = localStorage.getItem('admin_token');
     try {

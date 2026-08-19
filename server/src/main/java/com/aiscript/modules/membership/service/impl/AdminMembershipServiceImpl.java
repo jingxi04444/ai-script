@@ -12,6 +12,8 @@ import com.aiscript.modules.membership.dto.AdminPlanBenefitUpdateDTO;
 import com.aiscript.modules.membership.dto.AdminPointAdjustDTO;
 import com.aiscript.modules.membership.dto.AdminPointPackageCreateDTO;
 import com.aiscript.modules.membership.dto.AdminPointPackageUpdateDTO;
+import com.aiscript.modules.membership.dto.AdminPointCostItemDTO;
+import com.aiscript.modules.membership.dto.AdminPointCostsUpdateDTO;
 import com.aiscript.modules.membership.entity.AiMembershipBenefitDefinition;
 import com.aiscript.modules.membership.entity.AiMembershipPlan;
 import com.aiscript.modules.membership.entity.AiMembershipPlanBenefit;
@@ -33,9 +35,12 @@ import com.aiscript.modules.membership.vo.PointTransactionVO;
 import com.aiscript.modules.membership.vo.PointPackageVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -99,6 +104,8 @@ public class AdminMembershipServiceImpl implements AdminMembershipService {
         plan.setDisplayOrder(dto.getDisplayOrder() == null ? 0 : dto.getDisplayOrder());
         plan.setStatus(dto.getStatus());
         planMapper.insert(plan);
+        attachDefaultPointCosts(plan);
+        attachDefaultWelcomePoints(plan);
         clearPlanEntitlementCaches(plan.getId().longValue());
         return planById(plan.getId().longValue());
     }
@@ -195,10 +202,11 @@ public class AdminMembershipServiceImpl implements AdminMembershipService {
         if (existing != null) {
             throw new BusinessException("套餐已配置该权益");
         }
+        String benefitValue = validateBenefitValue(definition, dto.getValue());
         AiMembershipPlanBenefit binding = new AiMembershipPlanBenefit();
         binding.setPlanId(planId);
         binding.setBenefitId(definition.getId());
-        binding.setBenefitValue(dto.getValue().trim());
+        binding.setBenefitValue(benefitValue);
         binding.setEnabled(Boolean.FALSE.equals(dto.getEnabled()) ? 0 : 1);
         planBenefitMapper.insert(binding);
         clearPlanEntitlementCaches(planId);
@@ -225,11 +233,52 @@ public class AdminMembershipServiceImpl implements AdminMembershipService {
         if (binding == null) {
             throw new BusinessException("套餐未配置该权益");
         }
-        binding.setBenefitValue(dto.getValue().trim());
+        binding.setBenefitValue(validateBenefitValue(definition, dto.getValue()));
         binding.setEnabled(Boolean.FALSE.equals(dto.getEnabled()) ? 0 : 1);
         planBenefitMapper.updateById(binding);
         clearPlanEntitlementCaches(planId);
         return planById(planId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public List<MembershipPlanVO> updatePointCosts(AdminPointCostsUpdateDTO dto) {
+        for (AdminPointCostItemDTO item : dto.getItems()) {
+            AiMembershipPlan plan = planMapper.selectById(Math.toIntExact(item.getPlanId()));
+            if (plan == null) {
+                throw new BusinessException("会员套餐不存在");
+            }
+            AiMembershipBenefitDefinition definition = benefitDefinitionMapper.selectOne(
+                new LambdaQueryWrapper<AiMembershipBenefitDefinition>()
+                    .eq(AiMembershipBenefitDefinition::getBenefitCode, item.getBenefitCode().trim())
+                    .last("LIMIT 1")
+            );
+            if (definition == null || !definition.getBenefitCode().endsWith("_POINT_COST")) {
+                throw new BusinessException("水滴消耗权益不存在：" + item.getBenefitCode());
+            }
+            AiMembershipPlanBenefit binding = planBenefitMapper.selectOne(
+                new LambdaQueryWrapper<AiMembershipPlanBenefit>()
+                    .eq(AiMembershipPlanBenefit::getPlanId, item.getPlanId())
+                    .eq(AiMembershipPlanBenefit::getBenefitId, definition.getId())
+                    .last("LIMIT 1")
+            );
+            if (binding == null) {
+                binding = new AiMembershipPlanBenefit();
+                binding.setPlanId(item.getPlanId());
+                binding.setBenefitId(definition.getId());
+                binding.setBenefitValue(String.valueOf(item.getValue()));
+                binding.setEnabled(1);
+                planBenefitMapper.insert(binding);
+            } else {
+                binding.setBenefitValue(String.valueOf(item.getValue()));
+                binding.setEnabled(1);
+                planBenefitMapper.updateById(binding);
+            }
+        }
+        clearPlanEntitlementCachesAfterCommit(
+            dto.getItems().stream().map(AdminPointCostItemDTO::getPlanId).collect(java.util.stream.Collectors.toSet())
+        );
+        return membershipService.adminPlans();
     }
 
     @Override
@@ -247,7 +296,7 @@ public class AdminMembershipServiceImpl implements AdminMembershipService {
     @Override
     public PointTransactionVO adjustPoints(AdminPointAdjustDTO dto, Integer operatorId) {
         if (dto.getChangePoints() == 0) {
-            throw new BusinessException("积分调整数量不能为 0");
+            throw new BusinessException("水滴调整数量不能为 0");
         }
         Integer userId;
         try {
@@ -256,7 +305,7 @@ public class AdminMembershipServiceImpl implements AdminMembershipService {
             throw new BusinessException("用户 ID 格式不正确");
         }
         String requestNo = "admin_point:" + operatorId + ":" + UUID.randomUUID().toString().replace("-", "");
-        String remark = StringUtils.hasText(dto.getRemark()) ? dto.getRemark() : "后台人工调整积分";
+        String remark = StringUtils.hasText(dto.getRemark()) ? dto.getRemark() : "后台人工调整水滴";
         if (dto.getChangePoints() > 0) {
             return pointService.grantPoints(
                 DEFAULT_TENANT_ID, userId, dto.getChangePoints(), "admin_adjust", requestNo,
@@ -284,7 +333,7 @@ public class AdminMembershipServiceImpl implements AdminMembershipService {
         if (pointPackageMapper.selectOne(new LambdaQueryWrapper<AiPointPackage>()
             .eq(AiPointPackage::getPackageCode, code)
             .last("LIMIT 1")) != null) {
-            throw new BusinessException("积分包编码已存在");
+            throw new BusinessException("水滴包编码已存在");
         }
         AiPointPackage pointPackage = new AiPointPackage();
         pointPackage.setPackageCode(code);
@@ -298,7 +347,7 @@ public class AdminMembershipServiceImpl implements AdminMembershipService {
     public PointPackageVO updatePointPackage(Long id, AdminPointPackageUpdateDTO dto) {
         AiPointPackage pointPackage = pointPackageMapper.selectById(id);
         if (pointPackage == null) {
-            throw new BusinessException("积分包不存在");
+            throw new BusinessException("水滴包不存在");
         }
         applyPointPackage(pointPackage, dto.getName(), dto.getPrice(), dto.getPoints(), dto.getDescription(), dto.getDisplayOrder(), dto.getStatus());
         pointPackageMapper.updateById(pointPackage);
@@ -342,10 +391,95 @@ public class AdminMembershipServiceImpl implements AdminMembershipService {
             .orElseThrow(() -> new BusinessException("会员套餐不存在"));
     }
 
+    private void attachDefaultPointCosts(AiMembershipPlan plan) {
+        List<AiMembershipBenefitDefinition> definitions = benefitDefinitionMapper.selectList(
+            new LambdaQueryWrapper<AiMembershipBenefitDefinition>()
+                .eq(AiMembershipBenefitDefinition::getEnabled, 1)
+        ).stream().filter(definition -> definition.getBenefitCode().endsWith("_POINT_COST")).toList();
+        for (AiMembershipBenefitDefinition definition : definitions) {
+            AiMembershipPlanBenefit binding = new AiMembershipPlanBenefit();
+            binding.setPlanId(plan.getId().longValue());
+            binding.setBenefitId(definition.getId());
+            binding.setBenefitValue(defaultPointCost(definition.getBenefitCode()));
+            binding.setEnabled(1);
+            planBenefitMapper.insert(binding);
+        }
+    }
+
+    private String defaultPointCost(String benefitCode) {
+        return switch (benefitCode) {
+            case "BRIEF_DETECT_POINT_COST", "VIRAL_SIMPLE_POINT_COST" -> "40";
+            case "VIRAL_DEEP_POINT_COST" -> "80";
+            case "SCRIPT_GENERATE_POINT_COST" -> "50";
+            case "SCRIPT_POLISH_POINT_COST" -> "20";
+            default -> "50";
+        };
+    }
+
+    private void attachDefaultWelcomePoints(AiMembershipPlan plan) {
+        if (plan.getIsFree() == null || plan.getIsFree() != 1) {
+            return;
+        }
+        AiMembershipBenefitDefinition definition = benefitDefinitionMapper.selectOne(
+            new LambdaQueryWrapper<AiMembershipBenefitDefinition>()
+                .eq(AiMembershipBenefitDefinition::getBenefitCode, "NEW_USER_WELCOME_POINT")
+                .eq(AiMembershipBenefitDefinition::getEnabled, 1)
+                .last("LIMIT 1")
+        );
+        if (definition == null) {
+            return;
+        }
+        AiMembershipPlanBenefit binding = new AiMembershipPlanBenefit();
+        binding.setPlanId(plan.getId().longValue());
+        binding.setBenefitId(definition.getId());
+        binding.setBenefitValue("200");
+        binding.setEnabled(1);
+        planBenefitMapper.insert(binding);
+    }
+
+    private String validateBenefitValue(AiMembershipBenefitDefinition definition, String value) {
+        String normalized = value == null ? "" : value.trim();
+        if (!isWaterDropIntegerBenefit(definition.getBenefitCode())) {
+            return normalized;
+        }
+        if (!normalized.matches("\\d+")) {
+            throw new BusinessException("NEW_USER_WELCOME_POINT".equals(definition.getBenefitCode())
+                ? "新用户初始水滴必须是非负整数"
+                : "水滴消耗必须是非负整数");
+        }
+        try {
+            long parsed = Long.parseLong(normalized);
+            if (parsed > 1_000_000L) {
+                throw new BusinessException("水滴数值不能超过1,000,000");
+            }
+        } catch (NumberFormatException exception) {
+            throw new BusinessException("水滴数值过大");
+        }
+        return normalized;
+    }
+
+    private boolean isWaterDropIntegerBenefit(String benefitCode) {
+        return benefitCode != null && (benefitCode.endsWith("_POINT_COST")
+            || "NEW_USER_WELCOME_POINT".equals(benefitCode));
+    }
+
     private void clearPlanEntitlementCaches(Long planId) {
         if (planId == null) {
             return;
         }
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    doClearPlanEntitlementCaches(planId);
+                }
+            });
+            return;
+        }
+        doClearPlanEntitlementCaches(planId);
+    }
+
+    private void doClearPlanEntitlementCaches(Long planId) {
         subscriptionMapper.selectList(new LambdaQueryWrapper<com.aiscript.modules.membership.entity.AiUserSubscription>()
             .eq(com.aiscript.modules.membership.entity.AiUserSubscription::getPlanId, planId)
             .in(com.aiscript.modules.membership.entity.AiUserSubscription::getStatus, "active", "canceling", "past_due")
@@ -353,5 +487,19 @@ public class AdminMembershipServiceImpl implements AdminMembershipService {
             subscription.getTenantId() == null ? null : Math.toIntExact(subscription.getTenantId()),
             Math.toIntExact(subscription.getUserId())
         ));
+    }
+
+    private void clearPlanEntitlementCachesAfterCommit(Set<Long> planIds) {
+        Runnable clearCaches = () -> planIds.forEach(this::doClearPlanEntitlementCaches);
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            clearCaches.run();
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                clearCaches.run();
+            }
+        });
     }
 }

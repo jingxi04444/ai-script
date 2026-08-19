@@ -17,6 +17,7 @@ import com.aiscript.modules.auth.service.AuthService;
 import com.aiscript.modules.auth.vo.AdminUserVO;
 import com.aiscript.modules.auth.vo.LoginVO;
 import com.aiscript.modules.auth.vo.UserInfoVO;
+import com.aiscript.modules.membership.service.NewUserWaterDropService;
 import com.aiscript.modules.system.entity.SysRole;
 import com.aiscript.modules.system.entity.SysUserRole;
 import com.aiscript.modules.system.mapper.SysRoleMapper;
@@ -52,6 +53,7 @@ public class AuthServiceImpl implements AuthService {
     private final PermissionService permissionService;
     private final SysRoleMapper roleMapper;
     private final SysUserRoleMapper userRoleMapper;
+    private final NewUserWaterDropService newUserWaterDropService;
 
     public AuthServiceImpl(
         JwtTokenProvider jwtTokenProvider,
@@ -61,7 +63,8 @@ public class AuthServiceImpl implements AuthService {
         SmsClient smsClient,
         PermissionService permissionService,
         SysRoleMapper roleMapper,
-        SysUserRoleMapper userRoleMapper
+        SysUserRoleMapper userRoleMapper,
+        NewUserWaterDropService newUserWaterDropService
     ) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.sysUserMapper = sysUserMapper;
@@ -71,6 +74,7 @@ public class AuthServiceImpl implements AuthService {
         this.permissionService = permissionService;
         this.roleMapper = roleMapper;
         this.userRoleMapper = userRoleMapper;
+        this.newUserWaterDropService = newUserWaterDropService;
     }
 
     @Override
@@ -183,6 +187,7 @@ public class AuthServiceImpl implements AuthService {
         user.setMemberLevel(0);
         user.setStatus(1);
         sysUserMapper.insert(user);
+        newUserWaterDropService.initialize(user.getTenantId(), user.getId());
         return issueLogin(user, "front");
     }
 
@@ -202,6 +207,7 @@ public class AuthServiceImpl implements AuthService {
             user.setMemberLevel(0);
             user.setStatus(1);
             sysUserMapper.insert(user);
+            newUserWaterDropService.initialize(user.getTenantId(), user.getId());
         }
         return issueLogin(user, "front");
     }

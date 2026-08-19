@@ -1,6 +1,7 @@
 package com.aiscript.modules.brief.service.impl;
 
 import com.aiscript.common.exception.BusinessException;
+import com.aiscript.common.api.ResultCode;
 import com.aiscript.common.util.JsonUtils;
 import com.aiscript.framework.tenant.TenantContext;
 import com.aiscript.integration.llm.LlmClient;
@@ -11,24 +12,33 @@ import com.aiscript.modules.brief.mapper.AiBriefAiResultMapper;
 import com.aiscript.modules.brief.mapper.AiBriefMapper;
 import com.aiscript.modules.brief.service.BriefAiService;
 import com.aiscript.modules.brief.vo.BriefAiResultVO;
+import com.aiscript.modules.brief.vo.BriefDetailQueryResult;
 import com.aiscript.modules.brief.vo.BriefDetectionMetricVO;
 import com.aiscript.modules.brief.vo.BriefDetectionReportVO;
 import com.aiscript.modules.brief.vo.BriefDetectionSuggestionVO;
+import com.aiscript.modules.generation.service.PaidOperationClaim;
+import com.aiscript.modules.generation.service.PaidOperationCompletion;
+import com.aiscript.modules.generation.service.PaidOperationCoordinator;
+import com.aiscript.modules.generation.service.PaidOperationFailure;
+import com.aiscript.modules.generation.service.PaidOperationFingerprint;
+import com.aiscript.modules.generation.service.PaidOperationSpec;
 import com.aiscript.modules.system.service.PromptRenderService;
 import com.aiscript.modules.membership.service.MembershipEntitlementService;
-import com.aiscript.modules.membership.service.MembershipPointService;
 import com.aiscript.security.LoginUser;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @Service
+@Slf4j
 public class BriefAiServiceImpl implements BriefAiService {
     private static final Integer DEFAULT_TENANT_ID = 1;
     private static final Integer DEFAULT_USER_ID = 2;
@@ -37,73 +47,165 @@ public class BriefAiServiceImpl implements BriefAiService {
     private final LlmClient llmClient;
     private final PromptRenderService promptRenderService;
     private final MembershipEntitlementService entitlementService;
-    private final MembershipPointService pointService;
+    private final PaidOperationCoordinator paidOperationCoordinator;
+    private final PaidOperationFingerprint paidOperationFingerprint;
 
-    public BriefAiServiceImpl(AiBriefMapper briefMapper, AiBriefAiResultMapper resultMapper, LlmClient llmClient, PromptRenderService promptRenderService, MembershipEntitlementService entitlementService, MembershipPointService pointService) {
+    public BriefAiServiceImpl(
+        AiBriefMapper briefMapper,
+        AiBriefAiResultMapper resultMapper,
+        LlmClient llmClient,
+        PromptRenderService promptRenderService,
+        MembershipEntitlementService entitlementService,
+        PaidOperationCoordinator paidOperationCoordinator,
+        PaidOperationFingerprint paidOperationFingerprint
+    ) {
         this.briefMapper = briefMapper;
         this.resultMapper = resultMapper;
         this.llmClient = llmClient;
         this.promptRenderService = promptRenderService;
         this.entitlementService = entitlementService;
-        this.pointService = pointService;
+        this.paidOperationCoordinator = paidOperationCoordinator;
+        this.paidOperationFingerprint = paidOperationFingerprint;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BriefDetectionReportVO detect(Integer briefId, BriefDetectDTO dto) {
-        AiBrief brief = briefMapper.selectById(briefId);
-        if (brief == null) {
-            throw new BusinessException("Brief 不存在");
-        }
         LoginUser user = currentUser();
+        Integer tenantId = user.getTenantId() == null
+            ? (TenantContext.getTenantId() == null ? DEFAULT_TENANT_ID : TenantContext.getTenantId())
+            : user.getTenantId();
+        BriefDetailQueryResult accessibleDetail = briefMapper.selectDetail(briefId, tenantId, user.getUserId());
+        AiBrief brief = accessibleDetail == null ? null : accessibleDetail.getBrief();
+        if (brief == null) {
+            throw new BusinessException("Brief 不存在或无权检测");
+        }
         entitlementService.requireFeature(
-            user.getTenantId(), user.getUserId(), "BRIEF_DETECT_ACCESS"
+            tenantId, user.getUserId(), "BRIEF_DETECT_ACCESS"
         );
-        long pointCost = entitlementService.getPointCost(
-            user.getTenantId(), user.getUserId(), "brief_detect"
-        );
-        if (pointCost > 0) {
-            String requestNo = dto != null && dto.getRequestNo() != null && !dto.getRequestNo().isBlank()
-                ? dto.getRequestNo()
-                : "brief_detect:" + briefId + ":" + UUID.randomUUID();
-            pointService.consumePoints(
-                user.getTenantId(), user.getUserId(), pointCost, requestNo,
-                "brief_detect", briefId.longValue(), "Brief检测积分消耗"
-            );
+        String briefContent = buildBriefContent(brief, dto);
+        PaidOperationClaim paidClaim = paidOperationCoordinator.claim(new PaidOperationSpec(
+            tenantId,
+            user.getUserId(),
+            brief.getProjectId(),
+            "brief_detect",
+            "paid_brief_detect",
+            "Brief 检测",
+            dto.getRequestNo(),
+            paidOperationFingerprint.sha256(Map.of(
+                "briefId", briefId,
+                "briefContent", briefContent
+            )),
+            dto.getExpectedPointCost()
+        ));
+        if (!paidClaim.newlyClaimed()) {
+            return replayDetection(paidClaim);
         }
+        boolean refundRegistered = registerRefundAfterRollback(paidClaim, tenantId, user.getUserId());
 
-        String rawResponse = null;
-        BriefDetectionReportVO report = null;
         try {
-            PromptRenderService.RenderedPrompt prompt = promptRenderService.render(
-                "brief_detect",
-                buildDetectSystemPrompt(),
-                buildDetectUserPrompt(),
-                Map.of("briefContent", buildBriefContent(brief, dto))
-            );
-            rawResponse = llmClient.chat(prompt.getSystemPrompt(), prompt.getUserPrompt());
-            report = parseDetectionReport(rawResponse);
-        } catch (Exception ignored) {
-            report = null;
-        }
-        if (report == null) {
-            report = buildMockDetectionReport(brief, dto);
-            rawResponse = rawResponse == null || rawResponse.isBlank() ? JsonUtils.toJson(report) : rawResponse;
-        }
-        normalizeDetectionReport(report, brief, dto);
-        AiBriefAiResult result = new AiBriefAiResult();
-        result.setTenantId(TenantContext.getTenantId() == null ? DEFAULT_TENANT_ID : TenantContext.getTenantId());
-        result.setBriefId(briefId);
-        result.setResultType("detect");
-        result.setResultJson(JsonUtils.toJson(report));
-        result.setRawResponse(rawResponse);
-        result.setCreateBy(currentUser().getUserId());
-        resultMapper.insert(result);
+            String rawResponse = null;
+            BriefDetectionReportVO report = null;
+            try {
+                PromptRenderService.RenderedPrompt prompt = promptRenderService.render(
+                    "brief_detect",
+                    buildDetectSystemPrompt(),
+                    buildDetectUserPrompt(),
+                    Map.of("briefContent", briefContent)
+                );
+                rawResponse = llmClient.chat(prompt.getSystemPrompt(), prompt.getUserPrompt());
+                report = parseDetectionReport(rawResponse);
+            } catch (Exception ignored) {
+                report = null;
+            }
+            if (report == null) {
+                report = buildMockDetectionReport(brief, dto);
+                rawResponse = rawResponse == null || rawResponse.isBlank() ? JsonUtils.toJson(report) : rawResponse;
+            }
+            normalizeDetectionReport(report, brief, dto);
+            AiBriefAiResult result = new AiBriefAiResult();
+            result.setTenantId(tenantId);
+            result.setBriefId(briefId);
+            result.setResultType("detect");
+            result.setResultJson(JsonUtils.toJson(report));
+            result.setRawResponse(rawResponse);
+            result.setCreateBy(user.getUserId());
+            resultMapper.insert(result);
 
-        report.id = String.valueOf(result.getId());
-        report.createdAt = result.getCreateTime() == null ? null : result.getCreateTime().toString();
-        report.evaluatedAt = report.createdAt;
-        return report;
+            report.id = String.valueOf(result.getId());
+            report.createdAt = result.getCreateTime() == null ? null : result.getCreateTime().toString();
+            report.evaluatedAt = report.createdAt;
+            paidOperationCoordinator.complete(new PaidOperationCompletion(
+                paidClaim.taskId(), tenantId, user.getUserId(), JsonUtils.toJson(report)
+            ));
+            return report;
+        } catch (RuntimeException exception) {
+            refundWithoutTransactionSynchronization(
+                refundRegistered, paidClaim, tenantId, user.getUserId(), exception
+            );
+            throw exception;
+        }
+    }
+
+    private BriefDetectionReportVO replayDetection(PaidOperationClaim claim) {
+        if (claim.isSuccess()) {
+            BriefDetectionReportVO replay = JsonUtils.fromJson(
+                claim.resultPayload(), BriefDetectionReportVO.class
+            );
+            if (replay != null) {
+                return replay;
+            }
+            throw new BusinessException(ResultCode.CONFLICT, "Brief 检测结果记录不完整，请重新检测");
+        }
+        if (claim.isFailed()) {
+            throw new BusinessException(ResultCode.CONFLICT, "上次 Brief 检测已失败并退回水滴，请重新检测");
+        }
+        throw new BusinessException(ResultCode.CONFLICT, "Brief 检测正在处理，请稍后重试");
+    }
+
+    private boolean registerRefundAfterRollback(
+        PaidOperationClaim claim,
+        Integer tenantId,
+        Integer userId
+    ) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return false;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status != TransactionSynchronization.STATUS_COMMITTED) {
+                    try {
+                        paidOperationCoordinator.failAndRefund(new PaidOperationFailure(
+                            claim.taskId(), tenantId, userId, "BRIEF_DETECT_FAILED", "Brief 检测未完成"
+                        ));
+                    } catch (RuntimeException refundFailure) {
+                        log.error("Brief 检测回滚后退回水滴失败，taskId={}", claim.taskId(), refundFailure);
+                    }
+                }
+            }
+        });
+        return true;
+    }
+
+    private void refundWithoutTransactionSynchronization(
+        boolean refundRegistered,
+        PaidOperationClaim claim,
+        Integer tenantId,
+        Integer userId,
+        RuntimeException exception
+    ) {
+        if (refundRegistered) {
+            return;
+        }
+        try {
+            paidOperationCoordinator.failAndRefund(new PaidOperationFailure(
+                claim.taskId(), tenantId, userId, "BRIEF_DETECT_FAILED",
+                exception.getMessage() == null ? "Brief 检测未完成" : exception.getMessage()
+            ));
+        } catch (RuntimeException refundFailure) {
+            log.error("Brief 检测失败后退回水滴失败，taskId={}", claim.taskId(), refundFailure);
+        }
     }
 
     @Override

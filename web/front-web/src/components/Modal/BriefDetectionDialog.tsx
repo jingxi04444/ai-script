@@ -10,12 +10,18 @@ import {
 } from '@ant-design/icons';
 import { message } from 'antd';
 import { briefApi } from '../../api/brief';
+import OperationCostLabel from '../Membership/OperationCostLabel';
 import type { Brief, BriefDetectionReport } from '../../types/brief';
+import type { PointOperationCosts } from '../../types/membership';
+import { getApiErrorMessage } from '../../utils/apiError';
+import { createOperationRequestNo, isAmbiguousOperationError, notifyPointBalanceChanged, requestOperationCostRefresh } from '../../utils/operationRequest';
 import './modal-dialogs.css';
 import './brief-detection-dialog.css';
 
 interface BriefDetectionDialogProps {
   brief: Brief;
+  requestNo: string;
+  operationCosts: PointOperationCosts;
   onClose: () => void;
   onApplyOptimized?: (brief: Partial<Brief>) => Promise<void> | void;
 }
@@ -140,28 +146,36 @@ const toneLabels: Record<BriefDetectionReport['metrics'][number]['tone'], string
   danger: 'red',
 };
 
-const BriefDetectionDialog = ({ brief, onClose, onApplyOptimized }: BriefDetectionDialogProps) => {
+const BriefDetectionDialog = ({ brief, requestNo, operationCosts, onClose, onApplyOptimized }: BriefDetectionDialogProps) => {
   const [report, setReport] = useState<BriefDetectionReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [rechecking, setRechecking] = useState(false);
   const [applying, setApplying] = useState(false);
   const autoDetectedBriefIdRef = useRef<string | null>(null);
+  const recheckRequestNoRef = useRef<string | null>(null);
 
   const loadReport = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const result = await briefApi.detect(brief.id, brief);
+      const result = await briefApi.detect(brief.id, {
+        ...brief,
+        requestNo,
+        expectedPointCost: operationCosts.briefDetect,
+      });
       setReport(result);
-    } catch {
+      notifyPointBalanceChanged();
+    } catch (requestError) {
+      requestOperationCostRefresh();
+      const errorMessage = getApiErrorMessage(requestError, 'Brief 检测失败，请稍后重试');
       setReport(null);
-      setError('Brief 检测失败，请稍后重试');
-      message.error('Brief 检测失败');
+      setError(errorMessage);
+      message.error(errorMessage);
     } finally {
       setLoading(false);
     }
-  }, [brief]);
+  }, [brief, operationCosts.briefDetect, requestNo]);
 
   useEffect(() => {
     if (autoDetectedBriefIdRef.current === brief.id) return;
@@ -177,11 +191,21 @@ const BriefDetectionDialog = ({ brief, onClose, onApplyOptimized }: BriefDetecti
   const handleRecheck = async () => {
     setRechecking(true);
     try {
-      const result = await briefApi.detect(brief.id, brief);
+      const nextRequestNo = recheckRequestNoRef.current || createOperationRequestNo('brief_detect');
+      recheckRequestNoRef.current = nextRequestNo;
+      const result = await briefApi.detect(brief.id, {
+        ...brief,
+        requestNo: nextRequestNo,
+        expectedPointCost: operationCosts.briefDetect,
+      });
+      recheckRequestNoRef.current = null;
       setReport(result);
+      notifyPointBalanceChanged();
       message.success('已重新检测');
-    } catch {
-      message.error('重新检测失败');
+    } catch (requestError) {
+      if (!isAmbiguousOperationError(requestError)) recheckRequestNoRef.current = null;
+      requestOperationCostRefresh();
+      message.error(getApiErrorMessage(requestError, '重新检测失败'));
     } finally {
       setRechecking(false);
     }
@@ -195,8 +219,8 @@ const BriefDetectionDialog = ({ brief, onClose, onApplyOptimized }: BriefDetecti
       const patch = parsed ? toBriefPatch(parsed, report.reconstructedExample) : { briefContent: report.reconstructedExample };
       await onApplyOptimized?.(patch);
       message.success('已采纳优化并应用');
-    } catch {
-      message.error('采纳优化失败');
+    } catch (requestError) {
+      message.error(getApiErrorMessage(requestError, '采纳优化失败'));
     } finally {
       setApplying(false);
     }
@@ -355,6 +379,7 @@ const BriefDetectionDialog = ({ brief, onClose, onApplyOptimized }: BriefDetecti
         <footer className="brief-detection-actions">
           <button type="button" className="secondary-action" onClick={handleRecheck} disabled={loading || rechecking || applying}>
             <ReloadOutlined />{rechecking ? '检测中...' : '重新检测'}
+            <OperationCostLabel cost={operationCosts.briefDetect} />
           </button>
           <button type="button" className="primary-action" onClick={handleApply} disabled={loading || rechecking || applying}>
             {applying ? '应用中...' : '采纳优化并应用'}

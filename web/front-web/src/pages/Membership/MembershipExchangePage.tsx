@@ -12,7 +12,7 @@ const MembershipExchangePage = () => {
           <LeftOutlined /> 返回会员中心
         </button>
         <nav aria-label="会员中心导航">
-          <button type="button" onClick={() => navigate('/membership/points')}>购买积分</button>
+          <button type="button" onClick={() => navigate('/membership/points')}>购买水滴</button>
           <button type="button" onClick={() => navigate('/membership/orders')}>订阅管理</button>
           <button className="active" type="button">会员兑换</button>
         </nav>

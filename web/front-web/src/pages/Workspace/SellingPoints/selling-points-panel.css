@@ -224,7 +224,10 @@
 }
 
 .brief-check-button {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   width: fit-content;
   height: 34px;
   min-height: 34px;
@@ -240,8 +243,7 @@
   cursor: pointer;
 }
 
-.brief-check-button span {
-  margin-right: 6px;
+.brief-check-button > span:first-child {
   color: currentColor;
 }
 

@@ -12,6 +12,7 @@ public class ScriptVersionVO {
     private String source;
     private String instruction;
     private String summary;
+    private String restoredFromVersionId;
     private Boolean current;
     private String createdAt;
 }

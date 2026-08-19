@@ -10,6 +10,8 @@ public class ScriptListVO {
     private String briefId;
     private String briefName;
     private String type;
+    private String templateId;
+    private String templateName;
     private String status;
     private String createdAt;
     private String updatedAt;

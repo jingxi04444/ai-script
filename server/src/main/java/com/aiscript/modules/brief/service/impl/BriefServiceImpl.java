@@ -31,6 +31,8 @@ import com.aiscript.modules.brief.mapper.AiBriefVersionMapper;
 import com.aiscript.modules.brief.mapper.AiProjectBriefRefMapper;
 import com.aiscript.modules.project.entity.AiProject;
 import com.aiscript.modules.project.mapper.AiProjectMapper;
+import com.aiscript.modules.project.service.ProjectCollaborationService;
+import com.aiscript.modules.recyclebin.service.RecycleBinService;
 import com.aiscript.modules.membership.service.MembershipEntitlementService;
 import com.aiscript.modules.brief.service.BriefService;
 import com.aiscript.modules.brief.vo.BriefEditRequestVO;
@@ -76,6 +78,8 @@ public class BriefServiceImpl implements BriefService {
     private final AiBriefSharePackMapper sharePackMapper;
     private final AiBriefSharePackItemMapper sharePackItemMapper;
     private final MembershipEntitlementService entitlementService;
+    private final ProjectCollaborationService projectCollaborationService;
+    private final RecycleBinService recycleBinService;
 
     public BriefServiceImpl(
         AiBriefMapper briefMapper,
@@ -88,7 +92,9 @@ public class BriefServiceImpl implements BriefService {
         AiBriefShareLinkMapper shareLinkMapper,
         AiBriefSharePackMapper sharePackMapper,
         AiBriefSharePackItemMapper sharePackItemMapper
-        , MembershipEntitlementService entitlementService
+        , MembershipEntitlementService entitlementService,
+        ProjectCollaborationService projectCollaborationService,
+        RecycleBinService recycleBinService
     ) {
         this.briefMapper = briefMapper;
         this.briefAiResultMapper = briefAiResultMapper;
@@ -101,11 +107,13 @@ public class BriefServiceImpl implements BriefService {
         this.sharePackMapper = sharePackMapper;
         this.sharePackItemMapper = sharePackItemMapper;
         this.entitlementService = entitlementService;
+        this.projectCollaborationService = projectCollaborationService;
+        this.recycleBinService = recycleBinService;
     }
 
     @Override
     public List<BriefVO> list(Integer projectId) {
-        ensureOwnedProject(projectId);
+        projectCollaborationService.requireAccess(projectId);
         List<Integer> linkedBriefIds = projectBriefRefMapper.selectList(
                 new LambdaQueryWrapper<AiProjectBriefRef>()
                     .eq(AiProjectBriefRef::getProjectId, projectId)
@@ -216,6 +224,7 @@ public class BriefServiceImpl implements BriefService {
     @Transactional(rollbackFor = Exception.class)
     public BriefVO create(BriefSaveDTO dto) {
         assertCanAddBriefs(1);
+        projectCollaborationService.requireAccess(Integer.valueOf(dto.getProjectId()));
         AiBrief brief = new AiBrief();
         brief.setTenantId(TenantContext.getTenantId() == null ? DEFAULT_TENANT_ID : TenantContext.getTenantId());
         brief.setProjectId(Integer.valueOf(dto.getProjectId()));
@@ -269,21 +278,7 @@ public class BriefServiceImpl implements BriefService {
     public void delete(Integer id) {
         AiBrief brief = getBrief(id);
         ensureOwner(brief);
-        projectBriefRefMapper.delete(new LambdaQueryWrapper<AiProjectBriefRef>()
-            .eq(AiProjectBriefRef::getBriefId, id));
-        briefVersionMapper.delete(new LambdaQueryWrapper<AiBriefVersion>()
-            .eq(AiBriefVersion::getBriefId, id));
-        briefAiResultMapper.delete(new LambdaQueryWrapper<AiBriefAiResult>()
-            .eq(AiBriefAiResult::getBriefId, id));
-        collaboratorMapper.delete(new LambdaQueryWrapper<AiBriefCollaborator>()
-            .eq(AiBriefCollaborator::getBriefId, id));
-        editRequestMapper.delete(new LambdaQueryWrapper<AiBriefEditRequest>()
-            .eq(AiBriefEditRequest::getBriefId, id));
-        shareLinkMapper.delete(new LambdaQueryWrapper<AiBriefShareLink>()
-            .eq(AiBriefShareLink::getBriefId, id));
-        sharePackItemMapper.delete(new LambdaQueryWrapper<AiBriefSharePackItem>()
-            .eq(AiBriefSharePackItem::getBriefId, id));
-        briefMapper.deleteSellingPoints(id);
+        recycleBinService.moveBrief(brief);
         briefMapper.deleteById(id);
     }
 

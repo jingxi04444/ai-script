@@ -5,6 +5,7 @@ import lombok.Data;
 @Data
 public class CopyAnalyzeDTO {
     private String requestNo;
+    private String sourceAnalysisId;
     private String projectId;
     private String copy;
     private String mode;

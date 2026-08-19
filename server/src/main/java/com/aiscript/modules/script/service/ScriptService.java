@@ -8,6 +8,7 @@ import com.aiscript.modules.script.dto.ScriptSaveDTO;
 import com.aiscript.modules.script.dto.TemplateSaveDTO;
 import com.aiscript.modules.script.dto.TemplateStateDTO;
 import com.aiscript.modules.script.vo.PolishScriptVO;
+import com.aiscript.modules.script.vo.AdminScriptTemplateVO;
 import com.aiscript.modules.script.vo.ScriptListVO;
 import com.aiscript.modules.script.vo.ScriptPolishMessageVO;
 import com.aiscript.modules.script.vo.ScriptTemplateVO;
@@ -44,9 +45,9 @@ public interface ScriptService {
 
     List<ScriptTemplateVO> enabledTemplates();
 
-    PageResult<ScriptTemplateVO> templatePage(PageQuery query, String category);
+    PageResult<AdminScriptTemplateVO> templatePage(PageQuery query, String category);
 
-    ScriptTemplateVO templateById(Integer id);
+    AdminScriptTemplateVO templateById(Integer id);
 
     ScriptTemplateVO createTemplate(TemplateSaveDTO dto);
 

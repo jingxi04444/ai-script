@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CheckCircle, LockKeyhole, Plus, RefreshCcw, Save, Send, Trash2, UnlockKeyhole, XCircle } from 'lucide-react';
+import { CheckCircle, ExternalLink, Film, LockKeyhole, Plus, RefreshCcw, Save, Send, Trash2, UnlockKeyhole, UploadCloud, XCircle } from 'lucide-react';
 import { templateApi, type Template } from '../../api/template';
+import { uploadApi } from '../../api/upload';
 import { DEFAULT_PAGE_SIZE, EmptyState, Modal, Pagination } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
 import { optionalNumberFromInput } from '../../utils/form';
@@ -83,6 +84,8 @@ const emptyForm: TemplateForm = {
   scriptTemplateLibrary: '',
   referenceUrl: '',
   referenceDesc: '',
+  previewVideoUrl: '',
+  fullVideoUrl: '',
   sortOrder: 0,
   auditStatus: 'draft',
   publishStatus: 'offline',
@@ -110,6 +113,7 @@ const TemplateListPage = () => {
   const [form, setForm] = useState<TemplateForm>(emptyForm);
   const [paragraphStructure, setParagraphStructure] = useState<ParagraphStructureState>(defaultParagraphState);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [uploadingVideo, setUploadingVideo] = useState<'preview' | 'full' | null>(null);
 
   const load = async () => {
     setLoading(true);
@@ -211,6 +215,76 @@ const TemplateListPage = () => {
     }
   };
 
+  const uploadTemplateVideo = async (kind: 'preview' | 'full', file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith('video/')) {
+      notify('请选择视频文件');
+      return;
+    }
+    if (file.size > 120 * 1024 * 1024) {
+      notify('视频不能超过 120MB');
+      return;
+    }
+    setUploadingVideo(kind);
+    try {
+      const result = await uploadApi.uploadFile(file, 'script-template-video');
+      setForm((current) => ({
+        ...current,
+        [kind === 'preview' ? 'previewVideoUrl' : 'fullVideoUrl']: result.url,
+      }));
+      notify(kind === 'preview' ? '5 秒预览视频上传成功' : '完整视频上传成功');
+    } catch {
+      notify('视频上传失败');
+    } finally {
+      setUploadingVideo(null);
+    }
+  };
+
+  const renderVideoField = (
+    kind: 'preview' | 'full',
+    label: string,
+    description: string,
+  ) => {
+    const field = kind === 'preview' ? 'previewVideoUrl' : 'fullVideoUrl';
+    const value = form[field] || '';
+    return (
+      <section className="template-video-field">
+        <div className="template-video-field-header">
+          <span>{label}</span>
+          <small>{description}</small>
+        </div>
+        <div className="template-video-control">
+          <div className="template-video-preview">
+            {value ? <video src={value} muted controls preload="metadata" /> : <Film size={24} />}
+          </div>
+          <div className="template-video-inputs">
+            <input
+              value={value}
+              onChange={(event) => setForm((current) => ({ ...current, [field]: event.target.value }))}
+              placeholder="上传视频后自动填写，也可粘贴 https:// 视频地址"
+            />
+            <div className="template-video-actions">
+              <label className={`toolbar-btn upload-btn${uploadingVideo === kind ? ' disabled' : ''}`}>
+                <UploadCloud size={15} />{uploadingVideo === kind ? '上传中…' : '上传视频'}
+                <input
+                  type="file"
+                  hidden
+                  accept="video/*"
+                  disabled={uploadingVideo !== null}
+                  onChange={(event) => {
+                    void uploadTemplateVideo(kind, event.target.files?.[0]);
+                    event.currentTarget.value = '';
+                  }}
+                />
+              </label>
+              {value ? <button className="table-btn danger" type="button" onClick={() => setForm((current) => ({ ...current, [field]: '' }))}><Trash2 size={14} />移除</button> : null}
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  };
+
   const remove = async () => {
     if (!deleteId) return;
     try {
@@ -279,7 +353,7 @@ const TemplateListPage = () => {
         <>
         <div className="admin-table">
           <div className="table-head template-table-grid">
-            <span>序号</span><span>模板来源</span><span>模板名称</span><span>参考链接</span><span>人数</span><span>标签</span><span>审核状态</span><span>上下架</span><span>使用权限</span><span>操作</span>
+            <span>序号</span><span>模板来源</span><span>模板名称</span><span>视频素材</span><span>人数</span><span>标签</span><span>审核状态</span><span>上下架</span><span>使用权限</span><span>操作</span>
           </div>
           {rows.map((template, index) => (
             <div className="table-row template-table-grid" key={template.id}>
@@ -290,9 +364,11 @@ const TemplateListPage = () => {
               <strong className="template-name-cell" title={template.name || '-'}>
                 {template.name || '-'}
               </strong>
-              {template.referenceUrl ? (
-                <a className="template-reference-link" href={template.referenceUrl} target="_blank" rel="noreferrer">查看链接</a>
-              ) : <span>-</span>}
+              <div className="template-video-links">
+                {template.previewVideoUrl ? <a className="template-reference-link" href={template.previewVideoUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} />5秒预览</a> : null}
+                {template.fullVideoUrl ? <a className="template-reference-link is-private" href={template.fullVideoUrl} target="_blank" rel="noreferrer"><ExternalLink size={13} />完整视频</a> : null}
+                {!template.previewVideoUrl && !template.fullVideoUrl ? <span>-</span> : null}
+              </div>
               <span>{template.people || '-'}</span>
               <span className="template-tag">{template.difficulty || '-'}</span>
               <span className={`template-status-badge audit-${template.auditStatus || 'draft'}`}>
@@ -354,7 +430,7 @@ const TemplateListPage = () => {
         size="full"
         footer={<><button className="modal-btn" type="button" onClick={() => setEditorOpen(false)}>取消</button><button className="modal-btn primary" type="button" onClick={save}><Save size={16} />保存</button></>}
       >
-        <div className="field-grid">
+        <div className="field-grid template-editor-basic-grid">
           <label className="field"><span>模板名称</span><input value={form.name || ''} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
           <label className="field"><span>分类</span><select value={form.category || '产品介绍'} onChange={(e) => setForm({ ...form, category: e.target.value })}>{templateCategories.filter((category) => category !== '全部').map((category) => <option value={category} key={category}>{category}</option>)}</select></label>
           <label className="field"><span>模板来源</span><input value={form.templateSource || ''} onChange={(e) => setForm({ ...form, templateSource: e.target.value })} placeholder="例如：平台模板、用户上传、飞书" /></label>
@@ -363,8 +439,8 @@ const TemplateListPage = () => {
           <label className="field"><span>难度</span><input value={form.popularity || ''} onChange={(e) => setForm({ ...form, popularity: e.target.value })} /></label>
           <label className="field"><span>标签</span><input value={form.difficulty || ''} onChange={(e) => setForm({ ...form, difficulty: e.target.value })} /></label>
           <label className="field"><span>排序序号</span><input type="number" min="1" value={form.sortOrder ?? ''} onChange={(e) => setForm({ ...form, sortOrder: optionalNumberFromInput(e.target.value) })} /><small>数字越小越靠前；相同序号按修改时间倒序。</small></label>
-          <label className="field"><span>URL 链接</span><input value={form.referenceUrl || ''} onChange={(e) => setForm({ ...form, referenceUrl: e.target.value })} placeholder="https://" /></label>
-          <label className="field template-lock-field">
+          <label className="field template-editor-wide-field"><span>原始来源链接（仅后台可见）</span><input value={form.referenceUrl || ''} onChange={(e) => setForm({ ...form, referenceUrl: e.target.value })} placeholder="https://" /><small>只供后台核对来源，用户端接口不会返回此链接。</small></label>
+          <label className="field template-lock-field template-editor-wide-field">
             <span>前台使用权限</span>
             <button
               className={`template-lock-toggle${form.locked ? ' active' : ''}`}
@@ -379,8 +455,12 @@ const TemplateListPage = () => {
             <small>加锁模板仍在前台显示，但用户不能选择；后续可接入会员等级解锁。</small>
           </label>
         </div>
+        <div className="template-video-fields">
+          {renderVideoField('preview', '5 秒预览视频', '前台模板说明只播放这段视频，不展示原链接或完整视频。')}
+          {renderVideoField('full', '完整参考视频（仅后台）', '供后台查看和生成逻辑参考，用户端不会收到该地址。')}
+        </div>
         <label className="field" style={{ marginTop: 14 }}>
-          <span>URL 内容描述</span>
+          <span>来源内容描述（仅后台）</span>
           <textarea value={form.referenceDesc || ''} onChange={(e) => setForm({ ...form, referenceDesc: e.target.value })} placeholder="说明参考链接内容、使用场景或参考要点" />
         </label>
         <div className="field paragraph-structure-editor" style={{ marginTop: 14 }}>

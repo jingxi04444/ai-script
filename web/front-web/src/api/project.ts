@@ -1,7 +1,13 @@
 import { config } from '../config';
 import { mockProjectApi } from '../mock/project';
 import api from './request';
-import type { Project, ProjectListParams, ProjectStep, ProjectStepSaveParams } from '../types/project';
+import type {
+  Project,
+  ProjectCollaborationOverview,
+  ProjectListParams,
+  ProjectStep,
+  ProjectStepSaveParams,
+} from '../types/project';
 
 export const projectApi = {
   getList: (params?: ProjectListParams): Promise<{ list: Project[]; total: number }> => {
@@ -28,6 +34,20 @@ export const projectApi = {
     if (config.useMock) return mockProjectApi.delete(id);
     return api.delete(`/projects/${id}`);
   },
+
+  createCollaborationLink: (id: string, options?: { expiresInHours?: number; maxUses?: number }): Promise<{ id: string; token: string; path: string; expiresAt: string }> =>
+    api.post(`/projects/${id}/collaboration-links`, options || { expiresInHours: 168 }),
+
+  joinCollaboration: (token: string): Promise<{ projectId: string }> => api.post(`/project-collaboration/${token}/join`),
+
+  getCollaboration: (id: string): Promise<ProjectCollaborationOverview> =>
+    api.get(`/projects/${id}/collaboration`),
+
+  revokeCollaborationLink: (projectId: string, linkId: string): Promise<void> =>
+    api.delete(`/projects/${projectId}/collaboration-links/${linkId}`),
+
+  removeCollaborator: (projectId: string, userId: string): Promise<void> =>
+    api.delete(`/projects/${projectId}/collaborators/${userId}`),
 
   steps: (projectId: string): Promise<ProjectStep[]> => api.get(`/projects/${projectId}/steps`),
 

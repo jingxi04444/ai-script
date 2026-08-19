@@ -72,7 +72,7 @@ const PaymentOrdersPage = () => {
     } catch {
       setTransactions([]);
       setTotal(0);
-      message.error('积分记录加载失败');
+      message.error('水滴记录加载失败');
     } finally {
       setLoading(false);
     }
@@ -113,20 +113,20 @@ const PaymentOrdersPage = () => {
       <section className="payment-orders-page">
         <header className="payment-orders-hero">
           <div>
-            <h1>积分消耗记录</h1>
-            <p>查看积分获取与消耗明细，包括登录奖励、购买、功能消耗等。</p>
+            <h1>水滴消耗记录</h1>
+            <p>查看铼河水滴的获取与消耗明细，包括登录奖励、购买、功能消耗等。</p>
           </div>
           <button className="payment-orders-refresh" type="button" onClick={refresh}><ReloadOutlined />刷新</button>
         </header>
 
-        <section className="payment-orders-summary" aria-label="积分记录概览">
+        <section className="payment-orders-summary" aria-label="水滴记录概览">
           <span><WalletOutlined /> 共 {displayTotal} 条</span>
           <span><ClockCircleOutlined /> 消耗 {summary.consume}</span>
           <span><ClockCircleOutlined /> 获取 {summary.income}</span>
           <span><ClockCircleOutlined /> 扣减 {summary.expense}</span>
         </section>
 
-        <section className="payment-orders-toolbar" aria-label="积分记录筛选">
+        <section className="payment-orders-toolbar" aria-label="水滴记录筛选">
           <label className="payment-orders-search">
             <SearchOutlined />
             <input
@@ -164,7 +164,7 @@ const PaymentOrdersPage = () => {
                     <th scope="col">描述</th>
                     <th scope="col">类型</th>
                     <th scope="col">业务类型</th>
-                    <th scope="col" className="is-centered">积分变动</th>
+                    <th scope="col" className="is-centered">💧变动</th>
                     <th scope="col" className="is-centered">余额</th>
                   </tr>
                 </thead>
@@ -195,7 +195,7 @@ const PaymentOrdersPage = () => {
           ) : (
             <div className="payment-orders-empty">
               <div className={loading ? 'spin' : ''} aria-hidden="true">{loading ? '↻' : '·'}</div>
-              <strong>{loading ? '加载中…' : '暂无积分记录'}</strong>
+              <strong>{loading ? '加载中…' : '暂无水滴记录'}</strong>
               <p>没有符合条件的记录。</p>
             </div>
           )}

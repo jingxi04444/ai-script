@@ -11,6 +11,7 @@ import com.aiscript.modules.membership.dto.AdminPlanBenefitUpdateDTO;
 import com.aiscript.modules.membership.dto.AdminPointAdjustDTO;
 import com.aiscript.modules.membership.dto.AdminPointPackageCreateDTO;
 import com.aiscript.modules.membership.dto.AdminPointPackageUpdateDTO;
+import com.aiscript.modules.membership.dto.AdminPointCostsUpdateDTO;
 import com.aiscript.modules.membership.vo.AdminSubscriptionVO;
 import com.aiscript.modules.membership.vo.MembershipPlanVO;
 import com.aiscript.modules.membership.vo.PointTransactionVO;
@@ -31,6 +32,8 @@ public interface AdminMembershipService {
     MembershipPlanVO createPlanBenefit(Long planId, AdminPlanBenefitCreateDTO dto);
 
     MembershipPlanVO updatePlanBenefit(Long planId, String benefitCode, AdminPlanBenefitUpdateDTO dto);
+
+    List<MembershipPlanVO> updatePointCosts(AdminPointCostsUpdateDTO dto);
 
     PageResult<AdminSubscriptionVO> subscriptions(PageQuery query, String status);
 

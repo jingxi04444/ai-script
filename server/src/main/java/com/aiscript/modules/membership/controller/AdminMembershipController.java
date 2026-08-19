@@ -15,6 +15,7 @@ import com.aiscript.modules.membership.dto.AdminPlanBenefitUpdateDTO;
 import com.aiscript.modules.membership.dto.AdminPointAdjustDTO;
 import com.aiscript.modules.membership.dto.AdminPointPackageCreateDTO;
 import com.aiscript.modules.membership.dto.AdminPointPackageUpdateDTO;
+import com.aiscript.modules.membership.dto.AdminPointCostsUpdateDTO;
 import com.aiscript.modules.membership.service.AdminMembershipService;
 import com.aiscript.modules.membership.service.MembershipPurchaseModeService;
 import com.aiscript.modules.membership.vo.AdminSubscriptionVO;
@@ -115,6 +116,12 @@ public class AdminMembershipController {
     ) {
         currentUser();
         return R.ok(adminMembershipService.updatePlanBenefit(planId, benefitCode, dto));
+    }
+
+    @PutMapping("/point-costs")
+    public R<List<MembershipPlanVO>> updatePointCosts(@Valid @RequestBody AdminPointCostsUpdateDTO dto) {
+        currentUser();
+        return R.ok(adminMembershipService.updatePointCosts(dto));
     }
 
     @GetMapping("/subscriptions")

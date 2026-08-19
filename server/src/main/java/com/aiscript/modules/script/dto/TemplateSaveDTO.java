@@ -18,6 +18,8 @@ public class TemplateSaveDTO {
     private String scriptTemplateLibrary;
     private String referenceUrl;
     private String referenceDesc;
+    private String previewVideoUrl;
+    private String fullVideoUrl;
     private Integer sortOrder;
     private String status;
     private Boolean locked;

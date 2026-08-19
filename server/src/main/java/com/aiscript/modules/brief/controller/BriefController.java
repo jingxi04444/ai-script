@@ -7,6 +7,7 @@ import com.aiscript.modules.brief.dto.BriefSaveDTO;
 import com.aiscript.modules.brief.dto.BriefShareDTO;
 import com.aiscript.modules.brief.dto.BriefSharePackCreateDTO;
 import com.aiscript.modules.brief.dto.BriefSharePackLinkDTO;
+import com.aiscript.modules.brief.service.BriefDocumentService;
 import com.aiscript.modules.brief.service.BriefService;
 import com.aiscript.modules.brief.vo.BriefEditRequestVO;
 import com.aiscript.modules.brief.vo.BriefAssetLibraryVO;
@@ -54,12 +55,19 @@ import org.springframework.web.multipart.MultipartFile;
 @RequestMapping("/api/briefs")
 public class BriefController {
     private final BriefService briefService;
+    private final BriefDocumentService briefDocumentService;
     private final SysImportTemplateConfigMapper importTemplateMapper;
     private final StorageClient storageClient;
     private final HttpClient httpClient;
 
-    public BriefController(BriefService briefService, SysImportTemplateConfigMapper importTemplateMapper, StorageClient storageClient) {
+    public BriefController(
+        BriefService briefService,
+        BriefDocumentService briefDocumentService,
+        SysImportTemplateConfigMapper importTemplateMapper,
+        StorageClient storageClient
+    ) {
         this.briefService = briefService;
+        this.briefDocumentService = briefDocumentService;
         this.importTemplateMapper = importTemplateMapper;
         this.storageClient = storageClient;
         this.httpClient = HttpClient.newHttpClient();
@@ -125,6 +133,22 @@ public class BriefController {
     @GetMapping("/{id}")
     public R<BriefVO> getById(@PathVariable Integer id) {
         return R.ok(briefService.getById(id));
+    }
+
+    @GetMapping("/{id}/export-docx")
+    public ResponseEntity<byte[]> exportDocx(
+        @PathVariable Integer id,
+        @RequestParam(required = false) String versionId
+    ) {
+        BriefVO brief = briefService.getById(id);
+        byte[] document = briefDocumentService.createDocx(brief, versionId);
+        String title = StringUtils.hasText(brief.getProductName()) ? brief.getProductName() : brief.getName();
+        String fileName = safeFileName(title) + "-Brief.docx";
+        return ResponseEntity.ok()
+            .header(HttpHeaders.CONTENT_DISPOSITION, contentDisposition(fileName))
+            .contentType(MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.wordprocessingml.document"))
+            .contentLength(document.length)
+            .body(document);
     }
 
     @PostMapping
@@ -217,7 +241,14 @@ public class BriefController {
 
     private String contentDisposition(String fileName) {
         String encoded = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");
-        return "attachment; filename=\"" + fileName.replace("\"", "") + "\"; filename*=UTF-8''" + encoded;
+        String asciiFallback = fileName.replaceAll("[^\\x20-\\x7E]", "_").replace("\"", "");
+        return "attachment; filename=\"" + asciiFallback + "\"; filename*=UTF-8''" + encoded;
+    }
+
+    private String safeFileName(String value) {
+        if (!StringUtils.hasText(value)) return "产品";
+        String safe = value.replaceAll("[\\\\/:*?\"<>|\\r\\n]+", "-").trim();
+        return StringUtils.hasText(safe) ? safe : "产品";
     }
 
     private byte[] createSellingPointTemplateWorkbook() {

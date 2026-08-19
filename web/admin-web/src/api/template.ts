@@ -17,6 +17,8 @@ export interface Template {
   scriptTemplateLibrary?: string;
   referenceUrl?: string;
   referenceDesc?: string;
+  previewVideoUrl?: string;
+  fullVideoUrl?: string;
   sortOrder?: number;
   status?: 'active' | 'disabled' | string;
   auditStatus?: 'draft' | 'running' | 'approved' | 'rejected';

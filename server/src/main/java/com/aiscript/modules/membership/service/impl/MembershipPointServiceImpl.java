@@ -16,6 +16,7 @@ import com.aiscript.modules.membership.service.MembershipPointService;
 import com.aiscript.modules.membership.service.MembershipService;
 import com.aiscript.modules.membership.vo.DailyPointRewardVO;
 import com.aiscript.modules.membership.vo.PointAccountVO;
+import com.aiscript.modules.membership.vo.PointOperationCostsVO;
 import com.aiscript.modules.membership.vo.PointTransactionVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
@@ -54,6 +55,17 @@ public class MembershipPointServiceImpl implements MembershipPointService {
     @Transactional(rollbackFor = Exception.class)
     public PointAccountVO account(Integer tenantId, Integer userId) {
         return toAccountVO(ensureAccount(tenantId, userId));
+    }
+
+    @Override
+    public PointOperationCostsVO operationCosts(Integer tenantId, Integer userId) {
+        return new PointOperationCostsVO(
+            entitlementService.getPointCost(tenantId, userId, "brief_detect"),
+            entitlementService.getPointCost(tenantId, userId, "viral_simple"),
+            entitlementService.getPointCost(tenantId, userId, "viral_deep"),
+            entitlementService.getPointCost(tenantId, userId, "script_generate"),
+            entitlementService.getPointCost(tenantId, userId, "script_polish")
+        );
     }
 
     @Override
@@ -101,7 +113,7 @@ public class MembershipPointServiceImpl implements MembershipPointService {
             return toTransactionVO(transaction);
         }
         if (accountMapper.addPoints(account.getId(), points) == 0) {
-            throw new BusinessException("积分入账失败");
+            throw new BusinessException("水滴入账失败");
         }
         account = accountMapper.selectByUserForUpdate(userId.longValue());
         transaction.setAccountId(account.getId());
@@ -132,7 +144,7 @@ public class MembershipPointServiceImpl implements MembershipPointService {
             return toTransactionVO(transaction);
         }
         if (accountMapper.consumePoints(account.getId(), points) == 0) {
-            throw new BusinessException(ResultCode.CONFLICT, "积分余额不足");
+            throw new BusinessException(ResultCode.CONFLICT, "💧余额不足");
         }
         account = accountMapper.selectByUserForUpdate(userId.longValue());
         transaction.setAccountId(account.getId());
@@ -156,7 +168,7 @@ public class MembershipPointServiceImpl implements MembershipPointService {
         AiUserSubscription subscription = membershipService.ensureActiveSubscription(tenantId, userId);
         long rewardPoints = entitlementService.getLimit(tenantId, userId, DAILY_REWARD_BENEFIT);
         if (rewardPoints <= 0) {
-            throw new BusinessException("当前会员等级没有每日登录积分奖励");
+            throw new BusinessException("当前会员等级没有每日登录水滴奖励");
         }
 
         AiDailyPointReward reward = new AiDailyPointReward();
@@ -179,7 +191,7 @@ public class MembershipPointServiceImpl implements MembershipPointService {
         String requestNo = "daily_login:" + userId + ":" + today;
         PointTransactionVO transaction = grantPoints(
             tenantId, userId, rewardPoints, "reward", requestNo,
-            "daily_login", reward.getId(), null, "每日登录积分奖励"
+            "daily_login", reward.getId(), null, "每日登录水滴奖励"
         );
         reward.setTransactionId(Long.parseLong(transaction.getId()));
         dailyRewardMapper.updateById(reward);
@@ -242,7 +254,7 @@ public class MembershipPointServiceImpl implements MembershipPointService {
     ) {
         if (!transaction.getUserId().equals(userId.longValue())
             || !transaction.getChangePoints().equals(changePoints)) {
-            throw new BusinessException(ResultCode.CONFLICT, "积分请求号已被其他业务使用");
+            throw new BusinessException(ResultCode.CONFLICT, "水滴请求号已被其他业务使用");
         }
     }
 
@@ -254,7 +266,7 @@ public class MembershipPointServiceImpl implements MembershipPointService {
         ensureAccount(tenantId, userId);
         AiPointAccount account = accountMapper.selectByUserForUpdate(userId.longValue());
         if (account == null) {
-            throw new BusinessException("积分账户不存在");
+            throw new BusinessException("水滴账户不存在");
         }
         return account;
     }
@@ -288,7 +300,7 @@ public class MembershipPointServiceImpl implements MembershipPointService {
 
     private void validateChange(Integer userId, long points, String requestNo) {
         if (userId == null || points <= 0 || !StringUtils.hasText(requestNo)) {
-            throw new BusinessException("积分变动参数不完整");
+            throw new BusinessException("水滴变动参数不完整");
         }
     }
 

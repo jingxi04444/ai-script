@@ -5,8 +5,8 @@ const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const mockScripts: Script[] = [
   { id: 'script-1', name: '爆款复刻脚本_2026-05-30', projectId: 'project-1', briefId: 'b1', briefName: 'JRFH-2026', type: 'viral', status: 'approved', content: '熬夜累眼圈、毛孔粗大、胶原崩塌？别再拿美妆硬撑了！', createdAt: '2026-05-30', updatedAt: '2026-05-30 23:51:10' },
-  { id: 'script-2', name: '模板脚本_2026-05-30', projectId: 'project-1', briefId: 'b1', briefName: 'JRFH-2026', type: 'template', status: 'pending_review', createdAt: '2026-05-30', updatedAt: '2026-05-30 22:47:37' },
-  { id: 'script-3', name: 'AI原创脚本_2026-05-30', projectId: 'project-1', briefId: 'b2', briefName: 'A60MAX', type: 'original', status: 'draft', createdAt: '2026-05-30', updatedAt: '2026-05-30 22:47:37' },
+  { id: 'script-2', name: '模板脚本_2026-05-30', projectId: 'project-1', briefId: 'b1', briefName: 'JRFH-2026', type: 'template', templateId: '01', templateName: '痛点解决型', status: 'pending_review', createdAt: '2026-05-30', updatedAt: '2026-05-30 22:47:37' },
+  { id: 'script-3', name: 'AI原创脚本_2026-05-30', projectId: 'project-1', briefId: 'b2', briefName: 'A60MAX', type: 'original', originalCategoryId: 'ecommerce', originalCategoryName: '电商', originalScenarioId: 'product-intro', originalScenarioName: '产品介绍口播', status: 'draft', createdAt: '2026-05-30', updatedAt: '2026-05-30 22:47:37' },
   { id: 'script-4', name: '产品维度脚本_2026-05-30', projectId: 'project-1', briefId: 'b2', briefName: 'A60MAX', type: 'product', status: 'approved', content: '围绕产品核心卖点拆解：开场点出场景痛点，中段展示成分/功能证据，结尾给出明确购买理由。', createdAt: '2026-05-30', updatedAt: '2026-05-30 21:35:18' },
   { id: 'script-5', name: '产品卖点拆解脚本_2026-05-30', projectId: 'project-1', briefId: 'b3', briefName: '分层便当盒', type: 'product-dimension', status: 'pending_review', content: '从产品维度展开：目标人群、使用场景、差异化卖点、行动引导四段式脚本。', createdAt: '2026-05-30', updatedAt: '2026-05-30 20:18:42' },
 ];
@@ -59,7 +59,7 @@ const ensureMockVersions = (script: Script): ScriptVersion[] => {
 
 const appendMockVersion = (
   script: Script,
-  data: Pick<ScriptVersion, 'content' | 'changeNote' | 'source' | 'instruction' | 'summary'>,
+  data: Pick<ScriptVersion, 'content' | 'changeNote' | 'source' | 'instruction' | 'summary' | 'restoredFromVersionId'>,
 ) => {
   const versions = ensureMockVersions(script);
   versions.forEach((version) => { version.current = false; });
@@ -94,8 +94,21 @@ export const mockScriptApi = {
       projectId: _params.projectId,
       briefId: _params.briefId,
       type: _params.type,
+      templateId: _params.templateId,
+      templateName: _params.type === 'template' ? mockTemplates.find((item) => item.id === _params.templateId)?.name : undefined,
+      originalCategoryId: _params.originalCategoryId,
+      originalCategoryName: _params.originalCategoryName,
+      originalScenarioId: _params.originalScenarioId,
+      originalScenarioName: _params.originalScenarioName,
+      duration: _params.duration,
+      format: _params.format,
+      formatName: _params.format === 'product-storyboard'
+        ? '产品类分镜脚本表'
+        : _params.format === 'plot-storyboard'
+          ? '剧情类分镜脚本表'
+          : '分镜脚本表',
       status: 'approved' as const,
-      content: `【${_params.type === 'viral' ? '爆款复刻' : _params.type === 'template' ? '模板生成' : _params.type === 'product' || _params.type === 'product-dimension' ? '产品维度' : 'AI原创'}】开场抛出痛点，展示产品卖点，结尾引导立即行动。`,
+      content: `标题：一开口就抓住注意力的产品创意\n\n【${_params.type === 'viral' ? '爆款复刻' : _params.type === 'template' ? '模板生成' : _params.type === 'product' || _params.type === 'product-dimension' ? '产品维度' : 'AI原创'}】开场抛出痛点，展示产品卖点，结尾引导立即行动。`,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -140,6 +153,7 @@ export const mockScriptApi = {
     return unwrapApiResponse(createSuccessResponse({
       content: revised,
       summary: `已按“${instruction}”完成改写，重点优化开场钩子、卖点表达和结尾转化。`,
+      status: script?.status,
     }));
   },
 
@@ -163,6 +177,7 @@ export const mockScriptApi = {
       changeNote: `恢复到版本 V${target.versionNo}`,
       source: 'restore',
       summary: `已恢复到版本 V${target.versionNo}`,
+      restoredFromVersionId: target.id,
     });
     return unwrapApiResponse(createSuccessResponse({ ...script }));
   },

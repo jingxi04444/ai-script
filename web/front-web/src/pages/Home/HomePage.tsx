@@ -10,9 +10,14 @@ import {
   ThunderboltOutlined,
 } from '@ant-design/icons';
 import { message } from 'antd';
+import { fileApi } from '../../api/asset';
 import { siteApi, type HomeBanner } from '../../api/site';
 import HomeRail from '../../components/Layout/HomeRail';
+import { config } from '../../config';
+import { useProjectStore } from '../../stores/projectStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
+import CreateProjectDialog, { type CreateProjectValues } from '../Projects/CreateProjectDialog';
+import { projectAvatarToDataUrl } from '../Projects/projectAvatar';
 import './home-page.css';
 
 type QuickAction = {
@@ -64,7 +69,9 @@ const defaultHotWorks: HomeWork[] = [
 
 const HomePage = () => {
   const navigate = useNavigate();
+  const createProject = useProjectStore((state) => state.createProject);
   const resetWorkspace = useWorkspaceStore((state) => state.reset);
+  const setProject = useWorkspaceStore((state) => state.setProject);
   const setActiveStep = useWorkspaceStore((state) => state.setActiveStep);
   const setScriptMode = useWorkspaceStore((state) => state.setScriptMode);
   const [banners, setBanners] = useState<HomeBanner[]>([]);
@@ -77,6 +84,7 @@ const HomePage = () => {
   const [worksTitle, setWorksTitle] = useState('作品');
   const [activeCategory, setActiveCategory] = useState('全部');
   const [previewWork, setPreviewWork] = useState<HomeWork | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -154,7 +162,38 @@ const HomePage = () => {
     navigate('/workspace');
   };
 
+  const handleCreate = () => {
+    setCreateDialogOpen(true);
+  };
+
+  const confirmCreateProject = async ({ avatarFile, name, announcement }: CreateProjectValues) => {
+    try {
+      const avatarUrl = avatarFile
+        ? config.useMock
+          ? await projectAvatarToDataUrl(avatarFile)
+          : (await fileApi.upload(avatarFile, 'project-avatar')).url
+        : undefined;
+      const created = await createProject({
+        name,
+        announcement,
+        avatarUrl,
+        category: '产品介绍',
+        status: 'active',
+      });
+      resetWorkspace();
+      setProject({ id: created.id, title: created.name });
+      message.success('项目创建成功');
+      navigate(`/workspace?projectId=${created.id}&step=selling-points`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '项目创建失败，请稍后重试');
+    }
+  };
+
   const handleQuickAction = (action: QuickAction) => {
+    if (action.key === 'create') {
+      handleCreate();
+      return;
+    }
     resetWorkspace();
     setActiveStep(action.step);
     if (action.mode) setScriptMode(action.mode);
@@ -230,7 +269,7 @@ const HomePage = () => {
     <main className="prototype-home">
       <HomeRail
         activeLabel="首页"
-        onCreate={handleOpen}
+        onCreate={handleCreate}
       />
 
       <section className="home-stage">
@@ -354,6 +393,12 @@ const HomePage = () => {
             />
           </section>
         </div>
+      )}
+      {createDialogOpen && (
+        <CreateProjectDialog
+          onClose={() => setCreateDialogOpen(false)}
+          onConfirm={confirmCreateProject}
+        />
       )}
     </main>
   );

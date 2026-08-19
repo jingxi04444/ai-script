@@ -32,7 +32,7 @@ public class SourceAnalysisController {
     }
 
     @PostMapping("/video/share-url/parse")
-    public R<SourceAnalysisVO> parseShareUrl(@RequestBody SourceParseDTO dto) {
+    public R<SourceAnalysisVO> parseShareUrl(@Valid @RequestBody SourceParseDTO dto) {
         return R.ok(sourceAnalysisService.parseShareUrl(dto));
     }
 
@@ -42,12 +42,12 @@ public class SourceAnalysisController {
     }
 
     @PostMapping("/video/share-url/parse-tasks")
-    public R<SourceAnalysisVO> parseShareUrlSync(@RequestBody SourceParseDTO dto) {
+    public R<SourceAnalysisVO> parseShareUrlSync(@Valid @RequestBody SourceParseDTO dto) {
         return R.ok(sourceAnalysisService.parseShareUrl(dto));
     }
 
     @PostMapping("/script-generator/extract-copy")
-    public R<SourceAnalysisVO> extractCopy(@RequestBody CopyExtractDTO dto) {
+    public R<SourceAnalysisVO> extractCopy(@Valid @RequestBody CopyExtractDTO dto) {
         return R.ok(sourceAnalysisService.extractCopy(dto));
     }
 

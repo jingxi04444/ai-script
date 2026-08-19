@@ -145,7 +145,7 @@ public class PaymentServiceImpl implements PaymentService {
     @Transactional(rollbackFor = Exception.class)
     public PaymentOrderVO pointOrder(PaymentOrderDTO dto) {
         if (dto == null || !StringUtils.hasText(dto.getPointPackageId())) {
-            throw new BusinessException("请选择积分包");
+            throw new BusinessException("请选择水滴包");
         }
         membershipEntitlementService.requireFeature(
             currentTenantId(), currentUserId(), "POINT_PURCHASE_ACCESS"
@@ -154,24 +154,24 @@ public class PaymentServiceImpl implements PaymentService {
         try {
             pointPackageId = Long.valueOf(dto.getPointPackageId());
         } catch (NumberFormatException exception) {
-            throw new BusinessException("积分包ID格式不正确");
+            throw new BusinessException("水滴包ID格式不正确");
         }
         AiPointPackage pointPackage = pointPackageMapper.selectOne(new LambdaQueryWrapper<AiPointPackage>()
             .eq(AiPointPackage::getId, pointPackageId)
             .eq(AiPointPackage::getStatus, 1)
             .last("LIMIT 1"));
         if (pointPackage == null) {
-            throw new BusinessException("积分包不存在或已下架");
+            throw new BusinessException("水滴包不存在或已下架");
         }
         if (pointPackage.getPrice() == null || pointPackage.getPrice().compareTo(BigDecimal.ZERO) <= 0
             || pointPackage.getPoints() == null || pointPackage.getPoints() <= 0) {
-            throw new BusinessException("积分包配置无效");
+            throw new BusinessException("水滴包配置无效");
         }
         long pointsPer10Yuan = membershipEntitlementService.getLimit(
             currentTenantId(), currentUserId(), "POINTS_PER_10_YUAN"
         );
         if (pointsPer10Yuan <= 0) {
-            throw new BusinessException("当前会员等级不能购买积分");
+            throw new BusinessException("当前会员等级不能购买水滴");
         }
         long effectivePoints = BigDecimal.valueOf(pointPackage.getPoints())
             .multiply(BigDecimal.valueOf(pointsPer10Yuan))
@@ -186,7 +186,7 @@ public class PaymentServiceImpl implements PaymentService {
             "points", effectivePoints
         ));
         PaymentOrderVO created = createOrder(
-            "point", dto.getPayMethod(), pointPackage.getPrice(), pointPackage.getPackageName() + "-" + effectivePoints + "积分",
+            "point", dto.getPayMethod(), pointPackage.getPrice(), pointPackage.getPackageName() + "-" + effectivePoints + "水滴",
             null, null, "point_purchase", dto.getIdempotencyKey(), snapshot
         );
         return created;
@@ -862,15 +862,15 @@ public class PaymentServiceImpl implements PaymentService {
             JsonNode snapshot = objectMapper.readTree(order.getProductSnapshotJson());
             points = snapshot.path("points").asLong(0);
         } catch (Exception exception) {
-            throw new BusinessException("积分订单快照解析失败");
+            throw new BusinessException("水滴订单快照解析失败");
         }
         if (points <= 0) {
-            throw new BusinessException("积分订单数量无效");
+            throw new BusinessException("水滴订单数量无效");
         }
         membershipPointService.grantPoints(
             order.getTenantId(), order.getUserId(), points, "purchase",
             "point_purchase:" + order.getOrderNo(), "payment_order",
-            order.getId().longValue(), order.getOrderNo(), "积分包购买"
+            order.getId().longValue(), order.getOrderNo(), "水滴包购买"
         );
         membershipEntitlementService.clearEntitlementCache(order.getTenantId(), order.getUserId());
     }

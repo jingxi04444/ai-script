@@ -139,6 +139,8 @@ export const membershipApi = {
     api.post(`/membership/plans/${planId}/benefits`, payload),
   updateBenefit: (planId: string, code: string, payload: { value: string; enabled: boolean }): Promise<MembershipPlan> =>
     api.put(`/membership/plans/${planId}/benefits/${encodeURIComponent(code)}`, payload),
+  updatePointCosts: (items: Array<{ planId: string; benefitCode: string; value: number }>): Promise<MembershipPlan[]> =>
+    api.put('/membership/point-costs', { items }),
   subscriptions: (params: { page: number; pageSize: number; keyword?: string; status?: string }): Promise<PageResult<AdminSubscription>> =>
     api.get('/membership/subscriptions', { params }),
   adjustPoints: (payload: { userId: string; changePoints: number; remark?: string }) =>

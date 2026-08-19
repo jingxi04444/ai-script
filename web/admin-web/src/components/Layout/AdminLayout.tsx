@@ -63,7 +63,7 @@ const menuGroups: Array<{ title: string; items: MenuItem[] }> = [
     items: [
       { label: '套餐权益', path: '/membership/plans', icon: WalletCards },
       { label: '用户订阅', path: '/membership/subscriptions', icon: Users },
-      { label: '积分管理', path: '/membership/points', icon: Coins },
+      { label: '水滴管理', path: '/membership/points', icon: Coins },
       { label: '退款审核', path: '/membership/refunds', icon: BadgeDollarSign },
       { label: '定制模板工单', path: '/membership/custom-requests', icon: Sparkles },
     ],
@@ -99,7 +99,7 @@ const routeMeta: Record<string, { title: string; desc: string }> = {
   '/models': { title: '大模型管理', desc: '配置 Provider、模型路由和服务状态。' },
   '/membership/plans': { title: '套餐权益', desc: '维护会员套餐、订阅周期和可用权益。' },
   '/membership/subscriptions': { title: '用户订阅', desc: '查看用户会员状态、续费和套餐变更。' },
-  '/membership/points': { title: '积分管理', desc: '维护可售积分包，并支持人工调整用户积分。' },
+  '/membership/points': { title: '水滴管理', desc: '维护可售水滴包，并支持人工调整用户水滴。' },
   '/membership/refunds': { title: '退款审核', desc: '审核会员退款并跟踪处理状态。' },
   '/membership/custom-requests': { title: '定制模板工单', desc: '处理至尊会员的独家模板定制需求。' },
   '/payments/orders': { title: '支付订单', desc: '查看支付订单、回调状态和履约结果。' },

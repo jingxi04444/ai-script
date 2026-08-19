@@ -31,6 +31,8 @@ export const mockProjectApi = {
     const newProject: Project = {
       id: `project-${Date.now()}`,
       name: data.name || '未命名项目',
+      avatarUrl: data.avatarUrl,
+      announcement: data.announcement,
       category: data.category,
       status: 'active',
       briefCount: 0,
@@ -39,6 +41,7 @@ export const mockProjectApi = {
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+    mockProjects.unshift(newProject);
     return newProject;
   },
 

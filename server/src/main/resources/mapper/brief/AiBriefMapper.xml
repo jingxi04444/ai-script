@@ -93,6 +93,23 @@
                     AND collaborator.status = 1
                     AND collaborator.deleted = 0
               )
+              OR EXISTS (
+                  SELECT 1
+                  FROM ai_project owner_project
+                  WHERE owner_project.id = #{projectId}
+                    AND owner_project.owner_id = #{userId}
+                    AND owner_project.tenant_id = #{tenantId}
+                    AND owner_project.deleted = 0
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM ai_project_collaborator project_collaborator
+                  WHERE project_collaborator.project_id = #{projectId}
+                    AND project_collaborator.user_id = #{userId}
+                    AND project_collaborator.tenant_id = #{tenantId}
+                    AND project_collaborator.status = 'active'
+                    AND project_collaborator.deleted = 0
+              )
           )
         LIMIT 1
     </select>
@@ -224,6 +241,15 @@
               )
               OR EXISTS (
                   SELECT 1
+                  FROM ai_project_collaborator project_collaborator
+                  WHERE project_collaborator.project_id = b.project_id
+                    AND project_collaborator.user_id = #{userId}
+                    AND project_collaborator.tenant_id = #{tenantId}
+                    AND project_collaborator.status = 'active'
+                    AND project_collaborator.deleted = 0
+              )
+              OR EXISTS (
+                  SELECT 1
                   FROM ai_project_brief_ref ref
                   INNER JOIN ai_project linked_project
                       ON linked_project.id = ref.project_id
@@ -233,6 +259,19 @@
                   WHERE ref.brief_id = b.id
                     AND ref.tenant_id = #{tenantId}
                     AND ref.deleted = 0
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM ai_project_brief_ref collaborator_ref
+                  INNER JOIN ai_project_collaborator linked_collaborator
+                      ON linked_collaborator.project_id = collaborator_ref.project_id
+                     AND linked_collaborator.user_id = #{userId}
+                     AND linked_collaborator.tenant_id = #{tenantId}
+                     AND linked_collaborator.status = 'active'
+                     AND linked_collaborator.deleted = 0
+                  WHERE collaborator_ref.brief_id = b.id
+                    AND collaborator_ref.tenant_id = #{tenantId}
+                    AND collaborator_ref.deleted = 0
               )
           )
         ORDER BY version.version_no DESC, version.create_time DESC

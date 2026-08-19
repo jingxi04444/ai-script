@@ -1,0 +1,292 @@
+.project-invite-dialog-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(5, 7, 8, 0.18);
+}
+
+.project-invite-dialog {
+  width: min(540px, 100%);
+  overflow: hidden;
+  border: 1px solid #3a4143;
+  border-radius: 18px;
+  outline: 0;
+  background: linear-gradient(180deg, #242829, #171a1b);
+  color: #edf1f2;
+  box-shadow: 0 26px 80px rgba(0, 0, 0, 0.52), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.project-invite-dialog > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 22px 24px 19px;
+  border-bottom: 1px solid rgba(126, 150, 164, 0.16);
+}
+
+.project-invite-heading,
+.project-invite-project,
+.project-invite-result > div {
+  display: flex;
+  align-items: center;
+}
+
+.project-invite-heading {
+  min-width: 0;
+  align-items: flex-start;
+  gap: 13px;
+}
+
+.project-invite-icon {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(100, 223, 94, 0.34);
+  border-radius: 12px;
+  background: rgba(89, 219, 82, 0.1);
+  color: #71e669;
+  font-size: 19px;
+}
+
+.project-invite-heading small {
+  color: #68e36b;
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.11em;
+}
+
+.project-invite-heading h2 {
+  margin: 4px 0 3px;
+  color: #fff;
+  font-size: 21px;
+  line-height: 1.25;
+}
+
+.project-invite-heading p {
+  margin: 0;
+  overflow: hidden;
+  color: #99a2a6;
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-invite-dialog > header > button {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border: 1px solid #3c4345;
+  border-radius: 9px;
+  background: #202425;
+  color: #ccd2d4;
+  font-size: 23px;
+  line-height: 1;
+}
+
+.project-invite-content {
+  display: grid;
+  gap: 16px;
+  padding: 22px 24px;
+}
+
+.project-invite-project {
+  min-width: 0;
+  gap: 13px;
+  padding: 13px;
+  border: 1px solid #32383a;
+  border-radius: 12px;
+  background: #181b1c;
+}
+
+.project-invite-project > span {
+  width: 48px;
+  height: 48px;
+  flex: 0 0 48px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #67de66, #318b42);
+  color: #071109;
+  font-size: 19px;
+  font-weight: 850;
+}
+
+.project-invite-project > span.has-image {
+  background: #2d3234;
+}
+
+.project-invite-project img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.project-invite-project > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.project-invite-project strong {
+  overflow: hidden;
+  color: #eef2f3;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-invite-project small,
+.project-invite-result > small {
+  color: #929b9f;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.project-invite-generate {
+  width: 100%;
+  min-height: 74px;
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 14px 16px;
+  border: 1px solid rgba(96, 222, 92, 0.48);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(75, 193, 77, 0.18), rgba(44, 91, 51, 0.12));
+  color: #73e66d;
+  text-align: left;
+}
+
+.project-invite-generate > .anticon {
+  flex: 0 0 auto;
+  font-size: 22px;
+}
+
+.project-invite-generate > span {
+  display: grid;
+  gap: 3px;
+}
+
+.project-invite-generate strong {
+  color: #edf3ee;
+  font-size: 14px;
+}
+
+.project-invite-generate small {
+  color: #9ba6a0;
+  font-size: 12px;
+}
+
+.project-invite-generate:hover:not(:disabled) {
+  border-color: #73e46c;
+  background: linear-gradient(135deg, rgba(79, 210, 81, 0.24), rgba(44, 91, 51, 0.16));
+}
+
+.project-invite-result {
+  display: grid;
+  gap: 9px;
+}
+
+.project-invite-result label {
+  color: #dfe5e6;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.project-invite-result > div {
+  gap: 8px;
+}
+
+.project-invite-result input {
+  min-width: 0;
+  height: 42px;
+  flex: 1;
+  padding: 0 12px;
+  border: 1px solid #3b4345;
+  border-radius: 9px;
+  outline: 0;
+  background: #111415;
+  color: #dce2e3;
+}
+
+.project-invite-result button {
+  height: 42px;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 13px;
+  border: 1px solid #65d762;
+  border-radius: 9px;
+  background: #59d459;
+  color: #0b160c;
+  font-weight: 750;
+}
+
+.project-invite-dialog > footer {
+  display: flex;
+  justify-content: flex-end;
+  padding: 16px 24px 20px;
+  border-top: 1px solid rgba(126, 150, 164, 0.14);
+}
+
+.project-invite-dialog > footer button {
+  height: 38px;
+  min-width: 88px;
+  padding: 0 16px;
+  border: 1px solid #41484a;
+  border-radius: 9px;
+  background: #242829;
+  color: #dce1e2;
+  font-weight: 720;
+}
+
+.project-invite-dialog button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+html[data-color-mode='light'] .project-invite-dialog-mask {
+  background: rgba(35, 43, 47, 0.12);
+}
+
+html[data-color-mode='light'] .project-invite-dialog {
+  border-color: #d8dee1;
+  background: #fff;
+  color: #1f272b;
+  box-shadow: 0 24px 70px rgba(35, 45, 50, 0.2);
+}
+
+html[data-color-mode='light'] .project-invite-dialog > header,
+html[data-color-mode='light'] .project-invite-dialog > footer {
+  border-color: #e3e7e9;
+}
+
+html[data-color-mode='light'] .project-invite-heading h2,
+html[data-color-mode='light'] .project-invite-project strong,
+html[data-color-mode='light'] .project-invite-generate strong,
+html[data-color-mode='light'] .project-invite-result label {
+  color: #1f272b;
+}
+
+html[data-color-mode='light'] .project-invite-project,
+html[data-color-mode='light'] .project-invite-result input {
+  border-color: #d6dde0;
+  background: #f7f9fa;
+  color: #253037;
+}
+
+@media (max-width: 560px) {
+  .project-invite-dialog-mask { padding: 10px; }
+  .project-invite-dialog > header,
+  .project-invite-content { padding: 18px; }
+  .project-invite-dialog > footer { padding: 14px 18px 18px; }
+  .project-invite-result > div { align-items: stretch; flex-direction: column; }
+  .project-invite-result button { justify-content: center; }
+}

@@ -1,6 +1,8 @@
 :root {
   --theme-accent: #62e670;
   --theme-accent-rgb: 98, 230, 112;
+  --theme-accent-ink: #62e670;
+  --theme-accent-soft: rgba(98, 230, 112, 0.14);
 }
 
 html[data-color-mode='light'] {
@@ -11,7 +13,12 @@ html[data-color-mode='light'] {
   --panel-3: #eef2f4;
   --line: rgba(31, 41, 47, 0.14);
   --text: #1f262a;
-  --muted: #667178;
+  --muted: #56636a;
+  --theme-accent-ink: #246f2d;
+  --theme-accent-soft: #eaf7ec;
+  --disabled-bg: #eef1f3;
+  --disabled-border: #d3dade;
+  --disabled-text: #707c82;
   --green-line: rgba(var(--theme-accent-rgb), 0.28);
   --shadow: 0 18px 50px rgba(38, 48, 54, 0.12);
 }
@@ -97,16 +104,17 @@ html[data-color-mode='light'] .workspace-main::before {
 .home-rail nav button:hover,
 .rail-profile-dropdown .ant-dropdown-menu-item:hover,
 .rail-profile-dropdown .ant-dropdown-menu-submenu-title:hover {
-  color: var(--theme-accent) !important;
+  color: var(--theme-accent-ink) !important;
 }
 
-.rail-membership-card,
 .next-step-button,
 .my-projects-create-button,
 .generate-script-button,
 .template-generate-button {
   border-color: rgba(var(--theme-accent-rgb), 0.48) !important;
   background-color: var(--theme-accent) !important;
+  color: #0b2a10 !important;
+  -webkit-text-fill-color: #0b2a10 !important;
 }
 
 .rail-profile-dropdown .ant-dropdown-menu-item:hover,
@@ -116,8 +124,34 @@ html[data-color-mode='light'] .workspace-main::before {
 
 .rail-profile-dropdown .ant-dropdown-menu-item-selected,
 .ant-dropdown-menu-submenu-popup .ant-dropdown-menu-item-selected {
-  color: var(--theme-accent) !important;
+  color: var(--theme-accent-ink) !important;
   background: rgba(var(--theme-accent-rgb), 0.16) !important;
+}
+
+html[data-color-mode='light'] :where(
+  button:disabled,
+  input:disabled,
+  textarea:disabled,
+  select:disabled,
+  .ant-btn:disabled,
+  .ant-input-disabled,
+  .ant-select-disabled .ant-select-selector
+) {
+  border-color: var(--disabled-border) !important;
+  background: var(--disabled-bg) !important;
+  color: var(--disabled-text) !important;
+  -webkit-text-fill-color: var(--disabled-text) !important;
+  opacity: 1 !important;
+  box-shadow: none !important;
+}
+
+html[data-color-mode='light'] .outline-action-button.ant-btn:hover,
+html[data-color-mode='light'] .outline-action-button.ant-btn:focus-visible {
+  border-color: #78ba7f !important;
+  background: #edf8ee !important;
+  color: #246f2d !important;
+  -webkit-text-fill-color: #246f2d !important;
+  box-shadow: 0 0 0 3px rgba(var(--theme-accent-rgb), 0.14) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

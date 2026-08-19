@@ -2,10 +2,9 @@ package com.aiscript.modules.project.service.impl;
 
 import com.aiscript.common.exception.BusinessException;
 import com.aiscript.modules.project.dto.ProjectStepSaveDTO;
-import com.aiscript.modules.project.entity.AiProject;
 import com.aiscript.modules.project.entity.AiProjectStep;
-import com.aiscript.modules.project.mapper.AiProjectMapper;
 import com.aiscript.modules.project.mapper.AiProjectStepMapper;
+import com.aiscript.modules.project.service.ProjectCollaborationService;
 import com.aiscript.modules.project.service.ProjectStepService;
 import com.aiscript.modules.project.vo.ProjectStepVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -19,11 +18,12 @@ import org.springframework.util.StringUtils;
 public class ProjectStepServiceImpl implements ProjectStepService {
     private static final Integer DEFAULT_TENANT_ID = 1;
     private final AiProjectStepMapper stepMapper;
-    private final AiProjectMapper projectMapper;
+    private final ProjectCollaborationService collaborationService;
 
-    public ProjectStepServiceImpl(AiProjectStepMapper stepMapper, AiProjectMapper projectMapper) {
+    public ProjectStepServiceImpl(AiProjectStepMapper stepMapper,
+                                  ProjectCollaborationService collaborationService) {
         this.stepMapper = stepMapper;
-        this.projectMapper = projectMapper;
+        this.collaborationService = collaborationService;
     }
 
     @Override
@@ -61,6 +61,7 @@ public class ProjectStepServiceImpl implements ProjectStepService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ProjectStepVO complete(Integer projectId, Integer id) {
+        ensureProject(projectId);
         AiProjectStep step = stepMapper.selectById(id);
         if (step == null || !projectId.equals(step.getProjectId())) {
             throw new BusinessException("项目步骤不存在");
@@ -75,6 +76,7 @@ public class ProjectStepServiceImpl implements ProjectStepService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public ProjectStepVO reopen(Integer projectId, Integer id) {
+        ensureProject(projectId);
         AiProjectStep step = stepMapper.selectById(id);
         if (step == null || !projectId.equals(step.getProjectId())) {
             throw new BusinessException("项目步骤不存在");
@@ -87,17 +89,12 @@ public class ProjectStepServiceImpl implements ProjectStepService {
     }
 
     private void ensureProject(Integer projectId) {
-        if (projectMapper.selectById(projectId) == null) {
-            throw new BusinessException("项目不存在");
-        }
+        collaborationService.requireAccess(projectId);
     }
 
     private void updateProjectCurrentStep(Integer projectId, String stepCode) {
-        AiProject project = projectMapper.selectById(projectId);
-        if (project != null && StringUtils.hasText(stepCode)) {
-            project.setCurrentStep(stepCode);
-            projectMapper.updateById(project);
-        }
+        if (!StringUtils.hasText(stepCode)) return;
+        collaborationService.updateCurrentStep(projectId, stepCode);
     }
 
     private ProjectStepVO toVO(AiProjectStep step) {

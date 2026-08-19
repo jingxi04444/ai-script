@@ -69,6 +69,18 @@ export const briefApi = {
     return api.delete(`/briefs/${id}`);
   },
 
+  downloadDocx: async (id: string, versionId?: string): Promise<Blob> => {
+    const response = await api.get(`/briefs/${id}/export-docx`, {
+      params: versionId ? { versionId } : undefined,
+      responseType: 'blob',
+    }) as unknown;
+    return response instanceof Blob
+      ? response
+      : new Blob([response as BlobPart], {
+        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      });
+  },
+
   import: (file: File, projectId: string): Promise<Brief[]> => {
     if (config.useMock) return mockBriefApi.import(file).then(() => mockBriefApi.getList(projectId));
     const formData = new FormData();
@@ -141,18 +153,18 @@ export const briefApi = {
       ? mockBriefApi.unlinkFromProject(briefId, projectId)
       : api.delete(`/briefs/${briefId}/link`, { params: { projectId } }),
 
-  detect: (briefId: string, data?: Partial<Brief>): Promise<BriefDetectionReport> => {
+  detect: (briefId: string, data: Partial<Brief> & { requestNo: string; expectedPointCost: number }): Promise<BriefDetectionReport> => {
     if (config.useMock) return mockBriefApi.score(briefId);
-    return api.post(`/briefs/${briefId}/ai/detect`, data || {}, { timeout: 180000 });
+    return api.post(`/briefs/${briefId}/ai/detect`, data, { timeout: 180000 });
   },
 
   optimize: (briefId: string): Promise<BriefDetectionReport> => {
     if (config.useMock) return mockBriefApi.optimize(briefId);
-    return api.post(`/briefs/${briefId}/ai/detect`, {}, { timeout: 180000 });
+    return api.post(`/briefs/${briefId}/ai/optimize`, {}, { timeout: 180000 });
   },
 
   score: (briefId: string): Promise<BriefDetectionReport> => {
     if (config.useMock) return mockBriefApi.score(briefId);
-    return api.post(`/briefs/${briefId}/ai/detect`, {}, { timeout: 180000 });
+    return api.post(`/briefs/${briefId}/ai/score`, {}, { timeout: 180000 });
   },
 };

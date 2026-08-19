@@ -1,8 +1,9 @@
 import { config } from '../config';
 import { mockScriptApi } from '../mock/script';
 import api from './request';
-import type { Script, ScriptFormatOption, ScriptPolishMessage, ScriptTemplate, ScriptVersion, GenerateScriptParams, PolishScriptParams, PolishScriptResult } from '../types/script';
+import type { Script, ScriptAccess, ScriptFormatOption, ScriptPolishMessage, ScriptReviewComment, ScriptReviewContext, ScriptTemplate, ScriptVersion, ShareLinkResult, GenerateScriptParams, PolishScriptParams, PolishScriptResult } from '../types/script';
 import type { PaginatedResponse } from '../types/api';
+import type { ScriptQueueItem, ScriptQueueState } from '../types/generation';
 
 export interface ScriptPageParams {
   projectId: string;
@@ -59,10 +60,45 @@ export const scriptApi = {
     return api.get(`/scripts/${id}`);
   },
 
+  getAccess: (id: string): Promise<ScriptAccess> => api.get(`/scripts/${id}/access`),
+
+  createReviewLink: (id: string, options?: { expiresInHours?: number; maxUses?: number; versionScope?: 'all' | 'current' }): Promise<ShareLinkResult> =>
+    api.post(`/scripts/${id}/review-links`, options || { expiresInHours: 168, versionScope: 'all' }),
+
+  getReviewContext: (token: string): Promise<ScriptReviewContext> => api.get(`/script-reviews/${token}`),
+
+  getReviewComments: (id: string): Promise<ScriptReviewComment[]> => api.get(`/scripts/${id}/review-comments`),
+
+  addInternalReviewComment: (id: string, data: { content: string; parentId?: string; versionId?: string; rowIndex?: number; columnKey?: string }): Promise<ScriptReviewComment> =>
+    api.post(`/scripts/${id}/review-comments`, data),
+
+  addReviewComment: (token: string, data: { content: string; parentId?: string; versionId?: string; rowIndex?: number; columnKey?: string }): Promise<ScriptReviewComment> =>
+    api.post(`/script-reviews/${token}/comments`, data),
+
+  updateReviewComment: (id: string, content: string): Promise<ScriptReviewComment> =>
+    api.put(`/script-review-comments/${id}`, { content }),
+
+  deleteReviewComment: (id: string): Promise<void> => api.delete(`/script-review-comments/${id}`),
+
+  submitReviewDecision: (token: string, data: { decision: 'approved' | 'changes_requested'; opinion?: string; versionId?: string }): Promise<void> =>
+    api.post(`/script-reviews/${token}/decision`, data),
+
   generate: (params: GenerateScriptParams): Promise<Script> => {
     if (config.useMock) return mockScriptApi.generate(params);
     return api.post('/scripts/generate', params, { timeout: 180000 });
   },
+
+  enqueueGeneration: (params: GenerateScriptParams): Promise<ScriptQueueItem> =>
+    api.post('/scripts/generation-queue', params),
+
+  getGenerationQueue: (): Promise<ScriptQueueState> =>
+    api.get('/scripts/generation-queue'),
+
+  updateGenerationConcurrency: (concurrency: number): Promise<ScriptQueueState> =>
+    api.put('/scripts/generation-queue/concurrency', { concurrency }),
+
+  cancelGeneration: (id: string): Promise<void> =>
+    api.delete(`/scripts/generation-queue/${id}`),
 
   update: (id: string, data: Partial<Script>): Promise<Script> => {
     if (config.useMock) return mockScriptApi.update(id, data);

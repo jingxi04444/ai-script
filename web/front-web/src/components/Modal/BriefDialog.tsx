@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   CheckOutlined,
   CloseOutlined,
@@ -11,13 +11,14 @@ import {
   LeftOutlined,
   LinkOutlined,
   LoadingOutlined,
+  MoreOutlined,
   PlusOutlined,
   PlusCircleOutlined,
   SaveOutlined,
   ShareAltOutlined,
-  TeamOutlined,
 } from '@ant-design/icons';
-import { message, Modal } from 'antd';
+import { Dropdown, message, Modal } from 'antd';
+import type { MenuProps } from 'antd';
 import { briefApi } from '../../api/brief';
 import BriefContentLayout from '../Brief/BriefContentLayout';
 import RichTextField from '../../pages/Workspace/SellingPoints/RichTextField';
@@ -112,26 +113,6 @@ const emptyBriefRichValues: BriefRichValues = {
   secondaryPoints: '',
 };
 
-const sanitizeBriefHtml = (html: string) => {
-  if (typeof document === 'undefined') return html;
-  const template = document.createElement('template');
-  template.innerHTML = html;
-  const allowedTags = new Set(['P', 'DIV', 'BR', 'STRONG', 'B', 'SPAN', 'FONT', 'H2', 'H3', 'UL', 'OL', 'LI']);
-  template.content.querySelectorAll('*').forEach((element) => {
-    if (!allowedTags.has(element.tagName)) {
-      element.replaceWith(document.createTextNode(element.textContent || ''));
-      return;
-    }
-    Array.from(element.attributes).forEach((attribute) => {
-      const isFontAttribute = element.tagName === 'FONT' && ['color', 'size'].includes(attribute.name);
-      const isSafeStyle = attribute.name === 'style'
-        && /^(?:\s*(?:color|font-size|font-weight)\s*:\s*[^;]+;?\s*)+$/i.test(attribute.value);
-      if (!isFontAttribute && !isSafeStyle) element.removeAttribute(attribute.name);
-    });
-  });
-  return template.innerHTML;
-};
-
 const BriefDialog = ({
   projectId,
   initialBriefId,
@@ -154,12 +135,20 @@ const BriefDialog = ({
   const [editRichValues, setEditRichValues] = useState<BriefRichValues>(emptyBriefRichValues);
   const [saving, setSaving] = useState(false);
   const [shareLinks, setShareLinks] = useState<Partial<Record<BriefSharePermission, BriefShareResult>>>({});
+  const [shareLinksBriefId, setShareLinksBriefId] = useState('');
   const [selectedSharePermission, setSelectedSharePermission] = useState<BriefSharePermission>('read');
   const [sharing, setSharing] = useState(false);
   const [isBatchShareMode, setIsBatchShareMode] = useState(false);
   const [isBatchDeleteMode, setIsBatchDeleteMode] = useState(false);
   const [selectedBatchBriefIds, setSelectedBatchBriefIds] = useState<string[]>([]);
   const [batchSharePermission, setBatchSharePermission] = useState<BriefSharePermission>('read');
+  const selectedBriefIdRef = useRef('');
+  const editRequestsRequestRef = useRef(0);
+  const shareLinksRequestRef = useRef(0);
+
+  useEffect(() => {
+    selectedBriefIdRef.current = selectedBriefId;
+  }, [selectedBriefId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -167,6 +156,11 @@ const BriefDialog = ({
     setBriefs([]);
     setSelectedBriefId('');
     setSelectedVersionId('');
+    setEditRequests([]);
+    setShareLinks({});
+    setShareLinksBriefId('');
+    editRequestsRequestRef.current += 1;
+    shareLinksRequestRef.current += 1;
     setSelectedBatchBriefIds([]);
     setIsBatchShareMode(false);
     setIsBatchDeleteMode(false);
@@ -232,32 +226,64 @@ const BriefDialog = ({
   }, [briefs, searchTerm]);
 
   const loadEditRequests = useCallback((briefId: string) => {
-    briefApi.editRequests(briefId).then(setEditRequests).catch(() => setEditRequests([]));
+    const requestId = ++editRequestsRequestRef.current;
+    setEditRequests([]);
+    briefApi.editRequests(briefId).then((requests) => {
+      if (editRequestsRequestRef.current === requestId && selectedBriefIdRef.current === briefId) {
+        setEditRequests(requests);
+      }
+    }).catch(() => {
+      if (editRequestsRequestRef.current === requestId && selectedBriefIdRef.current === briefId) {
+        setEditRequests([]);
+      }
+    });
   }, []);
 
   useEffect(() => {
     if (currentBrief?.id) loadEditRequests(currentBrief.id);
-    else setEditRequests([]);
+    else {
+      editRequestsRequestRef.current += 1;
+      setEditRequests([]);
+    }
   }, [currentBrief?.id, loadEditRequests]);
 
   const loadShareLinks = useCallback((briefId: string) => {
+    const requestId = ++shareLinksRequestRef.current;
+    setShareLinks({});
+    setShareLinksBriefId('');
     briefApi.shareLinks(briefId).then((links) => {
+      if (shareLinksRequestRef.current !== requestId || selectedBriefIdRef.current !== briefId) return;
       setShareLinks(links.reduce<Partial<Record<BriefSharePermission, BriefShareResult>>>((result, link) => {
         result[link.permission] = link;
         return result;
       }, {}));
-    }).catch(() => setShareLinks({}));
+      setShareLinksBriefId(briefId);
+    }).catch(() => {
+      if (shareLinksRequestRef.current === requestId && selectedBriefIdRef.current === briefId) {
+        setShareLinks({});
+        setShareLinksBriefId(briefId);
+      }
+    });
   }, []);
 
   useEffect(() => {
     if (currentBrief?.id && canManageCurrentBrief) loadShareLinks(currentBrief.id);
-    else setShareLinks({});
+    else {
+      shareLinksRequestRef.current += 1;
+      setShareLinks({});
+      setShareLinksBriefId('');
+    }
   }, [currentBrief?.id, canManageCurrentBrief, loadShareLinks]);
 
-  const openBrief = (brief: Brief) => {
+  const openBrief = (brief: Brief, targetSideTab: BriefSideTab = 'info') => {
+    editRequestsRequestRef.current += 1;
+    shareLinksRequestRef.current += 1;
+    setEditRequests([]);
+    setShareLinks({});
+    setShareLinksBriefId('');
     setSelectedBriefId(brief.id);
     setSelectedVersionId(brief.versions?.[0]?.id || '');
-    setSideTab('info');
+    setSideTab(targetSideTab);
     setSelectedSharePermission('read');
     setIsEditing(false);
     setView('detail');
@@ -292,13 +318,18 @@ const BriefDialog = ({
 
   const handleShareBrief = async (permission: BriefSharePermission) => {
     if (!currentBrief) return;
+    const briefId = currentBrief.id;
     setSelectedSharePermission(permission);
     setSharing(true);
     try {
-      const result = shareLinks[permission] || await briefApi.enableShare(currentBrief.id, permission);
+      const existingLink = shareLinksBriefId === briefId ? shareLinks[permission] : undefined;
+      const result = existingLink || await briefApi.enableShare(briefId, permission);
       await copyToClipboard(buildShareUrl(result));
-      setShareLinks((current) => ({ ...current, [permission]: result }));
-      setBriefs((current) => current.map((brief) => brief.id === currentBrief.id ? {
+      if (selectedBriefIdRef.current === briefId) {
+        setShareLinks((current) => ({ ...current, [permission]: result }));
+        setShareLinksBriefId(briefId);
+      }
+      setBriefs((current) => current.map((brief) => brief.id === briefId ? {
         ...brief,
         shareEnabled: 1,
       } : brief));
@@ -346,9 +377,9 @@ const BriefDialog = ({
       return;
     }
     Modal.confirm({
-      title: ownedBriefs.length === 1 ? '确认删除这份 Brief？' : `确认删除选中的 ${ownedBriefs.length} 份 Brief？`,
-      content: '删除后会从所有项目和分享记录中移除；历史脚本仍保留生成时的 Brief 快照。',
-      okText: ownedBriefs.length === 1 ? '确认删除' : '批量删除',
+      title: ownedBriefs.length === 1 ? '将这份 Brief 移入回收站？' : `将选中的 ${ownedBriefs.length} 份 Brief 移入回收站？`,
+      content: 'Brief 会保留 7 天，版本、卖点和协作信息都可恢复；历史脚本仍保留生成时的 Brief 快照。',
+      okText: ownedBriefs.length === 1 ? '移入回收站' : '批量移入回收站',
       cancelText: '取消',
       okButtonProps: { danger: true },
       centered: true,
@@ -362,7 +393,7 @@ const BriefDialog = ({
           setSelectedBriefId('');
           setView('folders');
         }
-        message.success(`已删除 ${ownedBriefs.length} 份 Brief`);
+        message.success(`已将 ${ownedBriefs.length} 份 Brief 移入回收站`);
       },
     });
   };
@@ -441,44 +472,71 @@ const BriefDialog = ({
     }
   };
 
+  const handleDownloadBrief = async (brief: Brief, version = brief.versions?.[0]) => {
+    const downloadableBrief = briefFromVersionContent(brief, version?.content);
+    try {
+      const blob = await briefApi.downloadDocx(brief.id, version?.id);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      const title = downloadableBrief.productName || downloadableBrief.name || '产品';
+      const safeTitle = title.replace(/[\\/:*?"<>|\r\n]+/g, '-').trim() || '产品';
+      link.href = url;
+      link.download = `${safeTitle}-Brief.docx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      message.success('AI 通用 DOCX 已下载，可直接上传到大模型');
+    } catch {
+      message.error('Brief 文档下载失败，请稍后重试');
+    }
+  };
+
   const handleDownload = () => {
-    if (!displayBrief) return;
-    const richValues = richValuesFromBrief(displayBrief);
-    const rows = [
-      ['产品名称', escapeHtml(displayBrief.productName || displayBrief.name)],
-      ['产品价格', escapeHtml(displayBrief.price)],
-      ['产品 Slogan', escapeHtml(displayBrief.slogan)],
-      ['目标人群', sanitizeBriefHtml(richValues.audience || escapeHtml(displayBrief.targetAudience))],
-      ['产品特色卖点', sanitizeBriefHtml(richValues.features || escapeHtml(displayBrief.targetScene))],
-      ['产品主要卖点', sanitizeBriefHtml(richValues.mainPoints || escapeHtml(displayBrief.primarySellingPoint))],
-      ['产品次要卖点', sanitizeBriefHtml(richValues.secondaryPoints || escapeHtml(displayBrief.otherRequirements))],
-    ];
-    const html = `<!doctype html><html><head><meta charset="utf-8"><style>
-      body{font-family:"Microsoft YaHei",sans-serif;padding:36px;color:#222}h1{font-size:24px}h2{margin-top:28px;font-size:18px}
-      table{width:100%;border-collapse:collapse;margin-top:24px}td{border:1px solid #bbb;padding:10px;vertical-align:top;line-height:1.7}
-      td:first-child{width:120px;font-weight:700;background:#f3f3f3}
-    </style></head><body><h1>${escapeHtml(displayBrief.productName || displayBrief.name)}</h1>
-      <p>${escapeHtml(currentVersion?.label || '')} · ${escapeHtml(formatDateTime(currentVersion?.createdAt || displayBrief.updatedAt))}</p>
-      <table>${rows.map(([label, value]) => `<tr><td>${label}</td><td>${value || '—'}</td></tr>`).join('')}</table>
-    </body></html>`;
-    const blob = new Blob(['\ufeff', html], { type: 'application/msword;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${displayBrief.productName || displayBrief.name || 'Brief'}.doc`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
-    message.success('Brief Word 文档已下载');
+    if (!currentBrief) return;
+    void handleDownloadBrief(currentBrief, currentVersion || undefined);
+  };
+
+  const getBriefCardMenuItems = (brief: Brief): MenuProps['items'] => [
+    ...((brief.accessPermission || 'manage') === 'manage' ? [{
+      key: 'share',
+      icon: <ShareAltOutlined />,
+      label: '分享',
+    }] : []),
+    {
+      key: 'download',
+      icon: <DownloadOutlined />,
+      label: '下载 AI 通用 DOCX',
+    },
+    ...(brief.ownedByCurrentUser === true ? [
+      { type: 'divider' as const },
+      {
+        key: 'delete',
+        danger: true,
+        icon: <DeleteOutlined />,
+        label: '删除',
+      },
+    ] : []),
+  ];
+
+  const handleBriefCardMenuClick = (brief: Brief, key: string) => {
+    if (key === 'share') {
+      openBrief(brief, 'collaboration');
+      return;
+    }
+    if (key === 'download') {
+      void handleDownloadBrief(brief);
+      return;
+    }
+    if (key === 'delete') handleBatchDelete([brief]);
   };
 
   const handleDeleteBrief = () => {
     if (!currentBrief || currentBrief.ownedByCurrentUser !== true) return;
     Modal.confirm({
-      title: '确认删除这份 Brief？',
-      content: '该 Brief 会从所有项目和分享记录中移除；已经生成的脚本仍保留首次生成时的 Brief 快照。',
-      okText: '确认删除',
+      title: '将这份 Brief 移入回收站？',
+      content: '该 Brief 会保留 7 天，版本、卖点和协作信息都可以恢复；已经生成的脚本仍保留首次生成时的 Brief 快照。',
+      okText: '移入回收站',
       cancelText: '取消',
       okButtonProps: { danger: true },
       centered: true,
@@ -487,7 +545,7 @@ const BriefDialog = ({
         setBriefs((current) => current.filter((brief) => brief.id !== currentBrief.id));
         setSelectedBriefId('');
         setView('folders');
-        message.success('Brief 已删除');
+        message.success('Brief 已移入回收站');
       },
     });
   };
@@ -592,16 +650,44 @@ const BriefDialog = ({
                 const selectionMode = isBatchShareMode || isBatchDeleteMode;
                 const selected = selectedBatchBriefIds.includes(brief.id);
                 return (
-                <article className={`brief-folder-card ${selectionMode && selected ? 'is-selected' : ''}`} key={brief.id} role="button" tabIndex={0} onClick={() => selectionMode ? toggleBatchBrief(brief.id) : openBrief(brief)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); selectionMode ? toggleBatchBrief(brief.id) : openBrief(brief); } }} aria-pressed={selectionMode ? selected : undefined}>
-                  <span className="brief-folder-shape"><FolderOpenOutlined /></span>
-                  <span className="brief-folder-copy">
-                    <strong>{brief.productName || brief.name || '未命名 Brief'}</strong>
-                    <small>{brief.productModel || 'Word Brief 文档'}</small>
-                    <em>{brief.versions?.[0]?.label || 'v1.0'} · {formatDateTime(brief.versions?.[0]?.createdAt || brief.updatedAt)}</em>
-                  </span>
-                  {selectionMode ? <span className={`brief-folder-check ${selected ? 'is-checked' : ''}`}>{selected ? <CheckOutlined /> : null}</span> : null}
-                  {brief.shareEnabled === 1 ? <span className="brief-folder-shared"><TeamOutlined />已分享</span> : null}
-                  {!selectionMode && brief.ownedByCurrentUser === true ? <button type="button" className="brief-folder-delete" aria-label={`删除 ${brief.productName || brief.name || 'Brief'}`} onClick={(event) => { event.stopPropagation(); handleBatchDelete([brief]); }}><DeleteOutlined /></button> : null}
+                <article className={`brief-folder-card ${selectionMode && selected ? 'is-selected' : ''}`} key={brief.id}>
+                  <button
+                    type="button"
+                    className="brief-folder-card-main"
+                    onClick={() => selectionMode ? toggleBatchBrief(brief.id) : openBrief(brief)}
+                    aria-pressed={selectionMode ? selected : undefined}
+                  >
+                    <span className="brief-folder-shape"><FolderOpenOutlined /></span>
+                    <span className="brief-folder-copy">
+                      <strong>{brief.productName || brief.name || '未命名 Brief'}</strong>
+                      <small>{brief.productModel || 'Word Brief 文档'}</small>
+                      <em>{brief.versions?.[0]?.label || 'v1.0'} · {formatDateTime(brief.versions?.[0]?.createdAt || brief.updatedAt)}</em>
+                    </span>
+                    {selectionMode ? <span className={`brief-folder-check ${selected ? 'is-checked' : ''}`}>{selected ? <CheckOutlined /> : null}</span> : null}
+                  </button>
+                  {!selectionMode ? (
+                    <Dropdown
+                      trigger={['click']}
+                      placement="bottomRight"
+                      overlayClassName="brief-folder-more-dropdown"
+                      menu={{
+                        items: getBriefCardMenuItems(brief),
+                        onClick: ({ key, domEvent }) => {
+                          domEvent.stopPropagation();
+                          handleBriefCardMenuClick(brief, key);
+                        },
+                      }}
+                    >
+                      <button
+                        type="button"
+                        className="brief-folder-more"
+                        aria-label={`更多操作：${brief.productName || brief.name || 'Brief'}`}
+                        aria-haspopup="menu"
+                      >
+                        <MoreOutlined />
+                      </button>
+                    </Dropdown>
+                  ) : null}
                 </article>
                 );
               })}
@@ -635,7 +721,7 @@ const BriefDialog = ({
                 {canManageCurrentBrief ? (
                   <button type="button" className={sideTab === 'collaboration' ? 'active' : ''} onClick={openSharePanel}><ShareAltOutlined />分享</button>
                 ) : null}
-                <button type="button" onClick={handleDownload}><DownloadOutlined />下载</button>
+                <button type="button" onClick={handleDownload}><DownloadOutlined />下载 AI 通用 DOCX</button>
                 {currentBrief?.ownedByCurrentUser === true ? <button type="button" className="brief-delete-action" onClick={handleDeleteBrief}><DeleteOutlined />删除</button> : null}
                 {canEditCurrentBrief ? (
                   <button type="button" className={isEditing ? 'active' : ''} onClick={isEditing ? saveEditing : startEditing} disabled={saving}>

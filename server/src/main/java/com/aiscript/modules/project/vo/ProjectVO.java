@@ -6,6 +6,8 @@ import lombok.Data;
 public class ProjectVO {
     private String id;
     private String name;
+    private String avatarUrl;
+    private String announcement;
     private String userId;
     private String username;
     private String category;

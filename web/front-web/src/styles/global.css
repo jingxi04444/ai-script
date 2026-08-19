@@ -1372,3 +1372,40 @@ body,
 .workspace-sidebar nav button i {
   width: 16px !important;
 }
+
+/* Shared entitlement dialog: keep global API permission feedback consistent with the active dark theme. */
+.app-permission-modal-root .ant-modal-mask {
+  background: rgba(0, 0, 0, 0.72) !important;
+  backdrop-filter: blur(5px);
+}
+
+.app-permission-modal .ant-modal-content {
+  border: 1px solid rgba(var(--theme-accent-rgb, 98, 230, 112), 0.42);
+  border-radius: 18px;
+  color: #eef3ef;
+  background: #171b1a;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.58), 0 0 28px rgba(var(--theme-accent-rgb, 98, 230, 112), 0.08);
+}
+
+.app-permission-modal .ant-modal-confirm-title,
+.app-permission-modal .ant-modal-confirm-content,
+.app-permission-modal .ant-modal-close {
+  color: #f1f5f2 !important;
+}
+
+.app-permission-modal .ant-modal-confirm-content {
+  color: #adb6b0 !important;
+}
+
+.app-permission-modal .ant-btn-default {
+  border-color: #3d4541;
+  color: #e4e9e5;
+  background: #202523;
+}
+
+.app-permission-modal .ant-btn-primary {
+  border-color: var(--theme-accent, #62e670);
+  color: #071108;
+  background: var(--theme-accent, #62e670);
+  box-shadow: none;
+}

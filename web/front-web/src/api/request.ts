@@ -32,6 +32,8 @@ const showPermissionReason = (content: string) => {
   lastPermissionMessage = content;
   lastPermissionTime = now;
   Modal.confirm({
+    className: 'app-permission-modal',
+    rootClassName: 'app-permission-modal-root',
     title: '当前套餐暂未开通此权益',
     content: content || '当前会员套餐不支持该功能，请查看会员权益说明后选择合适的套餐。',
     okText: '查看会员套餐',

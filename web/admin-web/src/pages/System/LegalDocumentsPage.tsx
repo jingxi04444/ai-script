@@ -13,11 +13,12 @@ interface LegalDocumentDraft {
   enabled: boolean;
 }
 
-type LegalDocumentType = 'userAgreementConfig' | 'privacyPolicyConfig';
+type LegalDocumentType = 'userAgreementConfig' | 'privacyPolicyConfig' | 'membershipServiceAgreementConfig';
 
 const emptyDocuments: Record<LegalDocumentType, LegalDocumentDraft> = {
   userAgreementConfig: { title: '用户协议', version: '1.0', effectiveAt: '', content: '', enabled: false },
   privacyPolicyConfig: { title: '隐私政策', version: '1.0', effectiveAt: '', content: '', enabled: false },
+  membershipServiceAgreementConfig: { title: '会员服务协议', version: '1.0', effectiveAt: '', content: '', enabled: false },
 };
 
 const parseDocument = (value: string | undefined, fallback: LegalDocumentDraft): LegalDocumentDraft => {
@@ -50,6 +51,7 @@ const LegalDocumentsPage = () => {
       setDocuments({
         userAgreementConfig: parseDocument(config.userAgreementConfig, emptyDocuments.userAgreementConfig),
         privacyPolicyConfig: parseDocument(config.privacyPolicyConfig, emptyDocuments.privacyPolicyConfig),
+        membershipServiceAgreementConfig: parseDocument(config.membershipServiceAgreementConfig, emptyDocuments.membershipServiceAgreementConfig),
       });
     } catch {
       notify('协议配置加载失败');
@@ -87,7 +89,7 @@ const LegalDocumentsPage = () => {
     <div className="page-stack legal-documents-page">
       <PageHeader
         title="协议管理"
-        description="统一维护用户端登录与注册展示的用户协议和隐私政策。保存后，已发布内容会立即在前台生效。"
+        description="统一维护用户协议、隐私政策和会员服务协议。保存后，已发布内容会立即在前台生效。"
         actions={<button className="toolbar-btn" type="button" onClick={() => void load()}><RefreshCcw size={16} />{loading ? '加载中' : '刷新'}</button>}
       />
 
@@ -98,7 +100,11 @@ const LegalDocumentsPage = () => {
             <SectionCard
               key={type}
               title={document.title}
-              description={type === 'userAgreementConfig' ? '约定用户使用平台时的权利、义务及服务规则。' : '说明个人信息的收集、使用、存储与保护方式。'}
+              description={type === 'userAgreementConfig'
+                ? '约定用户使用平台时的权利、义务及服务规则。'
+                : type === 'privacyPolicyConfig'
+                  ? '说明个人信息的收集、使用、存储与保护方式。'
+                  : '约定会员套餐购买、权益、生效、续费与退款规则。'}
               action={<span className={`status-badge ${document.enabled ? 'green' : ''}`}>{document.enabled ? '已发布' : '未发布'}</span>}
             >
               <div className="legal-document-form">

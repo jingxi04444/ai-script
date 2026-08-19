@@ -12,6 +12,8 @@ import lombok.EqualsAndHashCode;
 public class AiProject extends TenantBaseEntity {
     private Integer ownerId;
     private String projectName;
+    private String avatarUrl;
+    private String announcement;
     private String category;
     private String productName;
     private String platform;

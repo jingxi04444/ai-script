@@ -1143,6 +1143,7 @@
 }
 
 .project-gallery-preview {
+  position: relative;
   display: grid;
   place-items: center;
   overflow: hidden;
@@ -1151,9 +1152,28 @@
   color: #8d9294;
 }
 
-.project-gallery-preview .anticon {
-  font-size: 38px;
-  opacity: 0.82;
+.project-gallery-preview.has-avatar {
+  padding: 0;
+}
+
+.project-gallery-preview.has-avatar img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  pointer-events: none;
+}
+
+.project-gallery-preview-fallback {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.055);
+  color: #a3aaad;
+  font-size: 22px;
+  font-weight: 780;
 }
 
 #root .my-projects-shell .project-gallery-card h3 {
@@ -1210,6 +1230,217 @@
 .project-gallery-actions button:hover {
   background: rgba(255, 255, 255, 0.07);
   color: #e8eeee;
+}
+
+.project-team-dialog-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(5, 7, 8, 0.18);
+}
+
+html[data-color-mode='light'] .project-team-dialog-mask {
+  background: rgba(35, 43, 47, 0.12);
+}
+
+.project-team-dialog {
+  width: min(820px, calc(100vw - 32px));
+  max-height: min(860px, calc(100vh - 48px));
+  overflow-y: auto;
+  border: 1px solid #343a3c;
+  border-radius: 18px;
+  background: #171a1b;
+  color: #eef1f2;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+}
+
+.project-team-dialog > header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 24px 26px 20px;
+  border-bottom: 1px solid #303537;
+  background: rgba(23, 26, 27, 0.96);
+  backdrop-filter: blur(12px);
+}
+
+.project-team-dialog > header span {
+  color: #69df5e;
+  font-size: 13px;
+  font-weight: 760;
+}
+
+.project-team-dialog > header h2 {
+  margin: 5px 0 2px;
+  color: #f4f6f6;
+  font-size: 25px;
+}
+
+.project-team-dialog > header p {
+  margin: 0;
+  color: #989fa2;
+}
+
+.project-team-dialog > header > button {
+  width: 38px;
+  height: 38px;
+  border: 1px solid #363b3e;
+  border-radius: 10px;
+  background: #202425;
+  color: #cbd0d2;
+  font-size: 25px;
+}
+
+.project-team-permissions,
+.project-team-section {
+  margin: 20px 24px;
+  padding: 20px;
+  border: 1px solid #303638;
+  border-radius: 14px;
+  background: #1d2122;
+}
+
+.project-team-permissions h3 {
+  margin: 0 0 15px;
+  color: #f0f2f3;
+  font-size: 16px;
+}
+
+.project-team-permission-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.project-team-permission-grid > div {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+  padding: 13px 14px;
+  border-radius: 10px;
+  background: #151819;
+}
+
+.project-team-permission-grid strong,
+.project-team-section-head strong,
+.project-team-row strong {
+  color: #edf0f1;
+  font-size: 14px;
+}
+
+.project-team-permission-grid span,
+.project-team-section-head small,
+.project-team-row small {
+  color: #969da0;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.project-team-section-head,
+.project-team-section-head > div,
+.project-team-row,
+.project-team-invite-result {
+  display: flex;
+  align-items: center;
+}
+
+.project-team-section-head {
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.project-team-section-head > div {
+  gap: 10px;
+}
+
+.project-team-section-head > div > .anticon {
+  color: #6fe265;
+  font-size: 19px;
+}
+
+.project-team-section-head span,
+.project-team-row > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.project-team-section button {
+  min-height: 34px;
+  padding: 0 13px;
+  border: 1px solid #42494b;
+  border-radius: 8px;
+  background: #242829;
+  color: #dfe3e4;
+  font-weight: 700;
+}
+
+.project-team-section button.primary {
+  border-color: #65dc5a;
+  background: #5ada50;
+  color: #101710;
+}
+
+.project-team-section button.danger {
+  border-color: rgba(255, 100, 100, 0.36);
+  color: #ff8585;
+}
+
+.project-team-invite-result {
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.project-team-invite-result input {
+  min-width: 0;
+  flex: 1;
+  height: 38px;
+  padding: 0 12px;
+  border: 1px solid #3a4244;
+  border-radius: 8px;
+  outline: 0;
+  background: #121516;
+  color: #cdd2d3;
+}
+
+.project-team-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.project-team-row {
+  min-width: 0;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 12px;
+  border-radius: 9px;
+  background: #151819;
+}
+
+.project-team-empty {
+  padding: 16px;
+  border-radius: 9px;
+  background: #151819;
+  color: #92999c;
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .project-team-dialog-mask { padding: 8px; }
+  .project-team-dialog { width: calc(100vw - 16px); max-height: calc(100vh - 16px); }
+  .project-team-dialog > header { padding: 18px; }
+  .project-team-permissions,
+  .project-team-section { margin: 14px; padding: 15px; }
+  .project-team-permission-grid { grid-template-columns: 1fr; }
+  .project-team-section-head { align-items: flex-start; }
 }
 
 .project-gallery-actions .anticon {

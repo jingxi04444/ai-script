@@ -225,13 +225,15 @@ public class MembershipEntitlementServiceImpl implements MembershipEntitlementSe
 
     private String pointCostBenefitCode(String operationCode) {
         if (!StringUtils.hasText(operationCode)) {
-            throw new BusinessException("积分消耗操作编码不能为空");
+            throw new BusinessException("水滴消耗操作编码不能为空");
         }
         return switch (operationCode) {
             case "brief_detect", "BRIEF_DETECT_POINT_COST" -> "BRIEF_DETECT_POINT_COST";
             case "viral_simple", "VIRAL_SIMPLE_POINT_COST" -> "VIRAL_SIMPLE_POINT_COST";
             case "viral_deep", "VIRAL_DEEP_POINT_COST" -> "VIRAL_DEEP_POINT_COST";
-            default -> throw new BusinessException("积分消耗操作未配置：" + operationCode);
+            case "script_generate", "SCRIPT_GENERATE_POINT_COST" -> "SCRIPT_GENERATE_POINT_COST";
+            case "script_polish", "SCRIPT_POLISH_POINT_COST" -> "SCRIPT_POLISH_POINT_COST";
+            default -> throw new BusinessException("水滴消耗操作未配置：" + operationCode);
         };
     }
 
@@ -244,6 +246,19 @@ public class MembershipEntitlementServiceImpl implements MembershipEntitlementSe
     }
 
     private MembershipEntitlementRow findUserEntitlement(Integer tenantId, Integer userId, Long planId, String benefitCode) {
+        List<MembershipEntitlementRow> entitlements = getCachedEntitlements(tenantId, userId, planId);
+        MembershipEntitlementRow cached = entitlements.stream()
+            .filter(row -> benefitCode.equals(row.getBenefitCode()))
+            .findFirst()
+            .orElse(null);
+        if (cached != null) {
+            return cached;
+        }
+        // 部署新增权益时，旧 Redis 快照可能仍有效。缺项时强制回源一次，
+        // 避免等待缓存 TTL 才能使用刚上线的消耗规则。
+        if (redisTemplate != null) {
+            redisTemplate.delete(cacheKey(tenantId, userId));
+        }
         return getCachedEntitlements(tenantId, userId, planId).stream()
             .filter(row -> benefitCode.equals(row.getBenefitCode()))
             .findFirst()

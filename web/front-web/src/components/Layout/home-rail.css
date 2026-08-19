@@ -231,3 +231,47 @@ aside.home-rail.home-rail-stable .rail-bottom-bell em {
   font-weight: 800;
   line-height: 14px;
 }
+
+/* Light mode needs its own high-specificity rail palette because the stable
+   geometry rules above intentionally use !important for route consistency. */
+html[data-color-mode='light'] aside.home-rail.home-rail-stable .rail-member .rail-membership-card {
+  border-color: #b9dce4 !important;
+  background: #eef8fa !important;
+  color: #176579 !important;
+  box-shadow: inset 0 0 0 1px rgba(23, 101, 121, 0.03) !important;
+}
+
+html[data-color-mode='light'] aside.home-rail.home-rail-stable .rail-membership-card span,
+html[data-color-mode='light'] aside.home-rail.home-rail-stable .rail-membership-card strong {
+  color: #176579 !important;
+  -webkit-text-fill-color: #176579 !important;
+}
+
+html[data-color-mode='light'] aside.home-rail.home-rail-stable .rail-member .rail-avatar {
+  border: 1px solid #d7dde0 !important;
+  background: #eef1f3 !important;
+  color: #253036 !important;
+}
+
+html[data-color-mode='light'] aside.home-rail.home-rail-stable .rail-member .rail-bottom-icon {
+  background: transparent !important;
+  color: #4d5a60 !important;
+  -webkit-text-fill-color: #4d5a60 !important;
+}
+
+html[data-color-mode='light'] aside.home-rail.home-rail-stable .rail-member .rail-bottom-icon > span {
+  color: inherit !important;
+  -webkit-text-fill-color: inherit !important;
+}
+
+html[data-color-mode='light'] aside.home-rail.home-rail-stable .rail-member .rail-bottom-icon:hover,
+html[data-color-mode='light'] aside.home-rail.home-rail-stable .rail-member .rail-bottom-icon:focus-visible,
+html[data-color-mode='light'] aside.home-rail.home-rail-stable .rail-member .rail-bottom-icon.active {
+  background: #edf2f4 !important;
+  color: #1f292e !important;
+  -webkit-text-fill-color: #1f292e !important;
+}
+
+html[data-color-mode='light'] aside.home-rail.home-rail-stable .rail-bottom-bell em {
+  border-color: #fff;
+}

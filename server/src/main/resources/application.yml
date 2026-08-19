@@ -47,3 +47,8 @@ management:
       exposure:
         include: health,info  # 对外暴露健康检查和基本信息接口
 
+# AI Script 业务配置
+aiscript:
+  recycle-bin:
+    retention-days: ${RECYCLE_BIN_RETENTION_DAYS:7}  # 回收站默认保留天数
+    cleanup-cron: "${RECYCLE_BIN_CLEANUP_CRON:0 20 3 * * ?}"  # 每天 03:20 清理过期内容

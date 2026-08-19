@@ -6,6 +6,7 @@ import type {
   MembershipPlan,
   MembershipPurchaseMode,
   PointAccount,
+  PointOperationCosts,
   PointPackage,
   PointTransaction,
   UserMembership,
@@ -27,6 +28,7 @@ export const membershipApi = {
   cancelRenewal: (): Promise<UserMembership> =>
     api.post('/membership/subscription/cancel-renewal'),
   points: (): Promise<PointAccount> => api.get('/membership/points'),
+  pointOperationCosts: (): Promise<PointOperationCosts> => api.get('/membership/points/costs'),
   pointTransactions: (params?: PaginationParams): Promise<PaginatedResponse<PointTransaction>> =>
     api.get('/membership/points/transactions', { params }),
   claimDailyReward: (): Promise<DailyPointReward> =>

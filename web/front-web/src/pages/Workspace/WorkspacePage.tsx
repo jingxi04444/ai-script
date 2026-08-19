@@ -21,11 +21,14 @@ import BriefDialog from '../../components/Modal/BriefDialog';
 import BriefDetectionDialog from '../../components/Modal/BriefDetectionDialog';
 import UploadDialog from '../../components/Modal/UploadDialog';
 import { projectApi } from '../../api/project';
+import { membershipApi } from '../../api/membership';
 import { siteApi } from '../../api/site';
 import { useWorkspaceStore, steps, type ScriptMode, type StepKey } from '../../stores/workspaceStore';
 import SellingPointsPanel from './SellingPoints/SellingPointsPanel';
 import type { SellingPointsPanelRef } from './SellingPoints/SellingPointsPanel';
 import type { Brief } from '../../types/brief';
+import { defaultPointOperationCosts, type PointOperationCosts } from '../../types/membership';
+import { createOperationRequestNo } from '../../utils/operationRequest';
 import ScriptGeneratorPanel from './ScriptGenerator/ScriptGeneratorPanel';
 import StoryboardPanel from './Storyboard/StoryboardPanel';
 import DevelopmentPanel from './Development/DevelopmentPanel';
@@ -38,6 +41,11 @@ interface ScriptModeVisual {
   key: ScriptMode;
   headerLabel?: string;
   iconUrl?: string;
+}
+
+interface BriefDetectionSession {
+  brief: Brief;
+  requestNo: string;
 }
 
 const WorkspacePage = () => {
@@ -62,11 +70,12 @@ const WorkspacePage = () => {
   const [titleDraft, setTitleDraft] = useState(projectTitle);
   const [productName, setProductName] = useState('');
   const [briefDialog, setBriefDialog] = useState(false);
-  const [briefDetectionBrief, setBriefDetectionBrief] = useState<Brief | null>(null);
+  const [briefDetectionSession, setBriefDetectionSession] = useState<BriefDetectionSession | null>(null);
   const [uploadDialog, setUploadDialog] = useState(false);
   const [briefRefreshKey, setBriefRefreshKey] = useState(0);
   const [isSavingTitle, setIsSavingTitle] = useState(false);
   const [scriptModeVisuals, setScriptModeVisuals] = useState<ScriptModeVisual[]>([]);
+  const [operationCosts, setOperationCosts] = useState<PointOperationCosts>(defaultPointOperationCosts);
   const sellingPointsRef = useRef<SellingPointsPanelRef>(null);
   const isSavingTitleRef = useRef(false);
   const activeIndex = steps.findIndex((s) => s.id === activeStep);
@@ -99,6 +108,28 @@ const WorkspacePage = () => {
         setScriptModeVisuals([]);
       }
     }).catch(() => setScriptModeVisuals([]));
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const loadOperationCosts = (showError = false) => {
+      membershipApi.pointOperationCosts()
+        .then((costs) => {
+          if (active) setOperationCosts(costs);
+        })
+        .catch(() => {
+          if (active && showError) message.error('水滴费用加载失败，请刷新页面重试');
+        });
+    };
+    loadOperationCosts(true);
+    const refreshOnFocus = () => loadOperationCosts(false);
+    window.addEventListener('focus', refreshOnFocus);
+    window.addEventListener('operation-costs:refresh', refreshOnFocus);
+    return () => {
+      active = false;
+      window.removeEventListener('focus', refreshOnFocus);
+      window.removeEventListener('operation-costs:refresh', refreshOnFocus);
+    };
   }, []);
   const saveProjectTitle = async () => {
     if (isSavingTitleRef.current) return;
@@ -232,9 +263,9 @@ const WorkspacePage = () => {
   const renderPanel = () => {
     switch (activeStep) {
       case 'selling-points':
-        return <SellingPointsPanel ref={sellingPointsRef} projectId={projectId} productName={productName} ensureProjectId={ensureProjectId} onBriefDetect={(currentBrief) => setBriefDetectionBrief(currentBrief)} onUpload={() => setUploadDialog(true)} onProductNameLoaded={setProductName} />;
+        return <SellingPointsPanel ref={sellingPointsRef} projectId={projectId} productName={productName} ensureProjectId={ensureProjectId} operationCosts={operationCosts} onBriefDetect={(currentBrief) => setBriefDetectionSession(currentBrief ? { brief: currentBrief, requestNo: createOperationRequestNo('brief_detect') } : null)} onUpload={() => setUploadDialog(true)} onProductNameLoaded={setProductName} />;
       case 'script-generator':
-        return <ScriptGeneratorPanel projectId={projectId} ensureProjectId={ensureProjectId} />;
+        return <ScriptGeneratorPanel projectId={projectId} ensureProjectId={ensureProjectId} operationCosts={operationCosts} />;
       case 'storyboard':
         return (
           <>
@@ -249,7 +280,7 @@ const WorkspacePage = () => {
               setSearchParams(nextParams, { replace: true });
             }} />
             {editingScriptId && (
-              <ScriptGeneratorPanel dialogOnly projectId={projectId} ensureProjectId={ensureProjectId} />
+              <ScriptGeneratorPanel dialogOnly projectId={projectId} ensureProjectId={ensureProjectId} operationCosts={operationCosts} />
             )}
           </>
         );
@@ -396,9 +427,11 @@ const WorkspacePage = () => {
             </>
           )}
           {activeStep === 'storyboard' && (
-            <button className="outline-action-button" onClick={() => { setScriptMode('original'); handleStepChange('script-generator'); message.success('已进入 AI原创，可新增脚本'); }}>
-              <PlusCircleOutlined />新增脚本
-            </button>
+            <>
+              <button className="outline-action-button" onClick={() => { setScriptMode('original'); handleStepChange('script-generator'); message.success('已进入 AI原创，可新增脚本'); }}>
+                <PlusCircleOutlined />新增脚本
+              </button>
+            </>
           )}
           <button className="next-step-button" onClick={handleNextStep}>
             下一步：{steps[activeIndex + 1]?.name || '完成'}
@@ -439,13 +472,15 @@ const WorkspacePage = () => {
           }}
         />
       )}
-      {briefDetectionBrief && (
+      {briefDetectionSession && (
         <BriefDetectionDialog
-          brief={briefDetectionBrief}
-          onClose={() => setBriefDetectionBrief(null)}
+          brief={briefDetectionSession.brief}
+          requestNo={briefDetectionSession.requestNo}
+          operationCosts={operationCosts}
+          onClose={() => setBriefDetectionSession(null)}
           onApplyOptimized={async (patch) => {
             await sellingPointsRef.current?.applyBriefPatch(patch);
-            setBriefDetectionBrief(null);
+            setBriefDetectionSession(null);
           }}
         />
       )}

@@ -18,6 +18,12 @@ public class AiStoryboardScript extends TenantBaseEntity {
     private String generationDuration;
     private String generationFormat;
     private String generationFormatName;
+    private Integer generationTemplateId;
+    private String generationTemplateName;
+    private String generationOriginalCategoryId;
+    private String generationOriginalCategoryName;
+    private String generationOriginalScenarioId;
+    private String generationOriginalScenarioName;
     private String status;
     private String auditStatus;
     private Integer currentVersionId;

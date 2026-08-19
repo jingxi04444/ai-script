@@ -1,7 +1,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
 import { message } from 'antd';
 import { briefApi } from '../../../api/brief';
+import OperationCostLabel from '../../../components/Membership/OperationCostLabel';
 import type { Brief } from '../../../types/brief';
+import type { PointOperationCosts } from '../../../types/membership';
 import RichTextField from './RichTextField';
 import './selling-points-panel.css';
 
@@ -28,6 +30,7 @@ interface SellingPointsPanelProps {
   projectId: string | null;
   productName?: string;
   ensureProjectId: () => Promise<string>;
+  operationCosts: PointOperationCosts;
   onBriefDetect?: (brief: Brief | null) => void;
   onUpload?: () => void;
   onProductNameLoaded?: (productName: string) => void;
@@ -84,7 +87,7 @@ const valuesFromBrief = (current: Brief, previous: SellingPointValues = initialV
   };
 };
 
-const SellingPointsPanel = forwardRef<SellingPointsPanelRef, SellingPointsPanelProps>(({ projectId, productName, ensureProjectId, onBriefDetect, onProductNameLoaded }, ref) => {
+const SellingPointsPanel = forwardRef<SellingPointsPanelRef, SellingPointsPanelProps>(({ projectId, productName, ensureProjectId, operationCosts, onBriefDetect, onProductNameLoaded }, ref) => {
   const [values, setValues] = useState(initialValues);
   const [richValues, setRichValues] = useState(initialRichValues);
   const [brief, setBrief] = useState<Brief | null>(null);
@@ -275,14 +278,22 @@ const SellingPointsPanel = forwardRef<SellingPointsPanelRef, SellingPointsPanelP
           type="button"
           className="brief-check-button"
           onClick={() => {
+            if (!Number.isFinite(operationCosts.briefDetect)) {
+              message.warning('水滴费用尚未加载，请刷新页面重试');
+              return;
+            }
             if (!brief) {
               message.warning('请先保存 Brief 再进行检测');
               return;
             }
             onBriefDetect?.(brief);
           }}
+          disabled={!Number.isFinite(operationCosts.briefDetect)}
+          title={!Number.isFinite(operationCosts.briefDetect) ? '水滴费用加载中' : undefined}
         >
-          <span>▣</span>Brief 检测
+          <span aria-hidden="true">▣</span>
+          <span>Brief 检测</span>
+          <OperationCostLabel cost={operationCosts.briefDetect} />
         </button>
       </section>
     </div>

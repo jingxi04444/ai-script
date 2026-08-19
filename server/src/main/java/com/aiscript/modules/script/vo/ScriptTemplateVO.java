@@ -17,8 +17,7 @@ public class ScriptTemplateVO {
     private String firstFiveSecondsHook;
     private String structureFormula;
     private String scriptTemplateLibrary;
-    private String referenceUrl;
-    private String referenceDesc;
+    private String previewVideoUrl;
     private Integer sortOrder;
     private String status;
     private String auditStatus;

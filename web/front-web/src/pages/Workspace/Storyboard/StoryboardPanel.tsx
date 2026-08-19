@@ -1,7 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import {
   SearchOutlined,
-  DownOutlined,
   LeftOutlined,
   RightOutlined,
   MoreOutlined,
@@ -18,6 +17,7 @@ import { getScriptStatusLabel, normalizeScriptStatus, scriptStatusOptions } from
 import type { Script } from '../../../types/script';
 import type { ScriptType } from '../../../types/script';
 import { formatDateTime } from '../../../utils/format';
+import { extractScriptContentTitle, withScriptContentTitle } from '../../../utils/scriptContent';
 import './storyboard-panel.css';
 
 const scriptCategories = ['我的脚本', '以产品维度的脚本', '爆款复刻脚本', '平台模板库脚本', 'AI 原创脚本'];
@@ -50,7 +50,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
   const [renamingScriptId, setRenamingScriptId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState('');
   const [refreshKey, setRefreshKey] = useState(0);
-  const pageSize = 10;
+  const [pageSize, setPageSize] = useState(10);
 
   const categoryTypeTones = getCategoryTypeTones(activeCategory);
   const requestedType = typeFilter !== 'all'
@@ -89,6 +89,26 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
     };
   }, [activeCategory, currentPage, pageSize, projectId, refreshKey, requestedType, searchText, statusFilter]);
 
+  useEffect(() => {
+    const handleScriptChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ scriptId?: string; projectId?: string; status?: string }>).detail;
+      if (!detail?.scriptId || detail.projectId !== projectId) return;
+      setScripts((items) => {
+        const exists = items.some((item) => item.id === detail.scriptId);
+        if (statusFilter !== 'all' && detail.status !== statusFilter) {
+          if (exists) setTotalScripts((total) => Math.max(0, total - 1));
+          return items.filter((item) => item.id !== detail.scriptId);
+        }
+        return items.map((item) => item.id === detail.scriptId
+          ? { ...item, status: normalizeScriptStatus(detail.status) }
+          : item);
+      });
+      setRefreshKey((key) => key + 1);
+    };
+    window.addEventListener('scripts:changed', handleScriptChanged);
+    return () => window.removeEventListener('scripts:changed', handleScriptChanged);
+  }, [projectId, statusFilter]);
+
   const apiItems = scripts.map((script) => {
     const typeTone = script.type as string;
     return {
@@ -96,6 +116,11 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
       name: script.name,
       type: typeTone === 'viral' ? '爆款复刻脚本' : typeTone === 'template' ? '平台模板脚本' : typeTone === 'product' || typeTone === 'product-dimension' ? '产品维度脚本' : 'AI原创脚本',
       typeTone,
+      templateName: script.templateName,
+      originalCategoryName: script.originalCategoryName,
+      originalScenarioName: script.originalScenarioName,
+      duration: script.duration,
+      formatName: script.formatName,
       updatedAt: script.updatedAt,
       status: getScriptStatusLabel(script.status),
       statusTone: normalizeScriptStatus(script.status),
@@ -120,6 +145,11 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
         type: currentItem.typeTone as ScriptType,
         status: currentItem.statusTone as Script['status'],
         content: currentItem.content,
+        templateName: currentItem.templateName,
+        originalCategoryName: currentItem.originalCategoryName,
+        originalScenarioName: currentItem.originalScenarioName,
+        duration: currentItem.duration,
+        formatName: currentItem.formatName,
         createdAt: currentItem.updatedAt,
         updatedAt: currentItem.updatedAt,
       });
@@ -142,7 +172,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
   const copyScript = async (id: string) => {
     try {
       const script = await scriptApi.getById(id);
-      if (navigator.clipboard) await navigator.clipboard.writeText(script.content || '');
+      if (navigator.clipboard) await navigator.clipboard.writeText(withScriptContentTitle(script.content, script.name));
       message.success('脚本内容已复制');
     } catch {
       message.error('脚本内容加载失败');
@@ -151,9 +181,9 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
 
   const deleteScript = (id: string, name: string) => {
     Modal.confirm({
-      title: '确认删除这篇脚本？',
-      content: `“${name}”删除后将无法恢复，请确认是否继续。`,
-      okText: '确认删除',
+      title: '将这篇脚本移入回收站？',
+      content: `“${name}”会保留 7 天，脚本内容、历史版本和审核信息均可恢复。`,
+      okText: '移入回收站',
       cancelText: '取消',
       okButtonProps: { danger: true },
       centered: true,
@@ -167,7 +197,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
           } else {
             setRefreshKey((key) => key + 1);
           }
-          message.success('脚本已删除');
+          message.success('脚本已移入回收站');
         } catch (error) {
           message.error(error instanceof Error ? error.message : '脚本删除失败');
           throw error;
@@ -215,6 +245,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
   };
 
   const previewText = preview?.content?.trim() || '';
+  const previewContentTitle = extractScriptContentTitle(previewText, preview?.name || '未命名脚本');
   const previewTableLines = previewText.split('\n').map((line) => line.trim()).filter((line) => line.startsWith('|') && line.endsWith('|'));
   const previewHasStoryboardTable = previewTableLines.length >= 3 && /镜头|画面|口播|字幕|运镜|时长/.test(previewTableLines[0]);
   const previewHeaders = previewHasStoryboardTable
@@ -248,6 +279,16 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
       ? Number.parseFloat(previewSummaryRow.cells[previewDurationIndex]) || 0
       : previewRows.reduce((total, row) => total + (Number.parseFloat(row.cells[previewDurationIndex]) || 0), 0)
     : 0;
+  const previewDurationLabel = preview?.duration?.trim()
+    || (previewDuration > 0 ? `${Number(previewDuration.toFixed(2))} 秒` : '');
+  const previewLeadingSourceLabels = preview?.type === 'template'
+    ? [preview.templateName]
+    : preview?.type === 'original'
+      ? [preview.originalCategoryName]
+      : [];
+  const previewTrailingSourceLabels = preview?.type === 'original'
+    ? [preview.originalScenarioName]
+      : [];
   const previewCellText = (value = '', isDuration = false) => {
     const normalized = value.replace(/<br\s*\/?>/gi, '\n').replace(/^\*\*(.*?)\*\*$/, '$1').trim() || '-';
     return isDuration ? normalized.replace(/\s*(?:s|秒)\s*$/i, '').trim() : normalized;
@@ -300,7 +341,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
         </label>
         <label className="storyboard-select">
           <span>脚本类型</span>
-          <Select value={typeFilter} onChange={(value) => { setTypeFilter(value); setCurrentPage(1); }} suffixIcon={<DownOutlined />} options={[
+          <Select value={typeFilter} onChange={(value) => { setTypeFilter(value); setCurrentPage(1); }} options={[
             { value: 'all', label: '全部类型' },
             { value: 'viral', label: '爆款复刻脚本' },
             { value: 'template', label: '平台模板脚本' },
@@ -311,7 +352,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
         </label>
         <label className="storyboard-select">
           <span>状态</span>
-          <Select value={statusFilter} onChange={(value) => { setStatusFilter(value); setCurrentPage(1); }} suffixIcon={<DownOutlined />} options={[
+          <Select value={statusFilter} onChange={(value) => { setStatusFilter(value); setCurrentPage(1); }} options={[
             { value: 'all', label: '全部状态' },
             ...scriptStatusOptions,
           ]} />
@@ -324,6 +365,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
             <div className="storyboard-table-head">
               <span>脚本名称</span>
               <span>脚本类型</span>
+              <span>模板名字</span>
               <span>更新时间 <b>⌄</b></span>
               <span>状态</span>
               <span>操作</span>
@@ -363,6 +405,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
                   </button>
                 )}
                 <em className={`script-type ${item.typeTone}`}>{item.type}</em>
+                <span className={`storyboard-template-name ${item.templateName ? '' : 'is-empty'}`} title={item.templateName || '未记录'}>{item.templateName || '-'}</span>
                 <time>{formatDateTime(item.updatedAt)}</time>
                 <i className={`script-status ${item.statusTone}`}>{item.status}</i>
                 <div className="storyboard-row-actions">
@@ -392,7 +435,16 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
               <button key={i + 1} className={currentPage === i + 1 ? 'active' : ''} onClick={() => setCurrentPage(i + 1)}>{i + 1}</button>
             ))}
             <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages}><RightOutlined /></button>
-            <button>{pageSize} 条/页 <DownOutlined /></button>
+            <Select<number>
+              className="storyboard-page-size-select"
+              aria-label="每页显示条数"
+              value={pageSize}
+              onChange={(value) => {
+                setPageSize(value);
+                setCurrentPage(1);
+              }}
+              options={[10, 20, 50].map((value) => ({ value, label: `${value} 条/页` }))}
+            />
           </div>
         </footer>
       </section>
@@ -403,38 +455,40 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
           <section className="script-output-modal storyboard-preview-modal">
             <header className="script-output-head">
               <div className="script-output-heading">
-                <span>{preview.type === 'viral' ? '爆款复刻' : preview.type === 'template' ? '模板脚本' : '原创脚本'}</span>
-                <div className="storyboard-preview-title-control">
-                  {renamingScriptId === preview.id ? (
-                    <input
-                      autoFocus
-                      value={renameDraft}
-                      maxLength={100}
-                      aria-label="修改脚本名称"
-                      onChange={(event) => setRenameDraft(event.target.value)}
-                      onBlur={() => saveRenamedScript(preview.id, preview.name)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault();
-                          event.currentTarget.blur();
-                        }
-                        if (event.key === 'Escape') {
-                          setRenamingScriptId(null);
-                          setRenameDraft(preview.name);
-                        }
-                      }}
-                    />
-                  ) : (
-                    <>
-                      <h2 id="storyboard-preview-title">{preview.name}</h2>
-                      <button type="button" aria-label="修改脚本名称" onClick={() => startRenameScript(preview.id, preview.name)}><EditOutlined /></button>
-                    </>
-                  )}
-                </div>
-                <div className="script-output-meta">
-                  {previewDuration > 0 && <em>{previewDuration} 秒</em>}
-                  <em>分镜脚本表</em>
-                  <em>{previewRows.length || 1} 个镜头</em>
+                <div className="script-output-title-stack storyboard-preview-title-stack">
+                  <div className="storyboard-preview-title-control">
+                    {renamingScriptId === preview.id ? (
+                      <input
+                        autoFocus
+                        value={renameDraft}
+                        maxLength={100}
+                        aria-label="修改脚本名称"
+                        onChange={(event) => setRenameDraft(event.target.value)}
+                        onBlur={() => saveRenamedScript(preview.id, preview.name)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') {
+                            event.preventDefault();
+                            event.currentTarget.blur();
+                          }
+                          if (event.key === 'Escape') {
+                            setRenamingScriptId(null);
+                            setRenameDraft(preview.name);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <>
+                        <h2 id="storyboard-preview-title">{preview.name}</h2>
+                        <button type="button" aria-label="修改脚本名称" onClick={() => startRenameScript(preview.id, preview.name)}><EditOutlined /></button>
+                      </>
+                    )}
+                  </div>
+                  <div className="script-output-meta">
+                    {previewLeadingSourceLabels.filter(Boolean).map((label) => <em key={`leading-${label}`}>{label}</em>)}
+                    {previewDurationLabel && <em>{previewDurationLabel}</em>}
+                    <em>{preview.formatName || '分镜脚本表'}</em>
+                    {previewTrailingSourceLabels.filter(Boolean).map((label) => <em key={`trailing-${label}`}>{label}</em>)}
+                  </div>
                 </div>
               </div>
               <button type="button" aria-label="关闭脚本预览" onClick={() => setPreview(null)}>×</button>
@@ -452,6 +506,7 @@ const StoryboardPanel = ({ projectId, onPolishScript }: StoryboardPanelProps) =>
                     <section className="script-output-block script-storyboard-block">
                       <div className="script-storyboard-table-wrap">
                         <table className={`script-storyboard-table storyboard-preview-table ${previewHeaders.length === 5 ? 'is-five-column' : ''}`}>
+                          <caption className="script-storyboard-caption"><span>标题：</span>{previewContentTitle}</caption>
                           <colgroup>{previewHeaders.map((header) => <col key={header} className={previewColumnClass(header)} />)}</colgroup>
                           <thead><tr>{previewHeaders.map((header) => <th key={header} className={previewColumnClass(header)}>{/时长/.test(header) ? '时长(s)' : header}</th>)}</tr></thead>
                           <tbody>{previewRows.map((row) => (

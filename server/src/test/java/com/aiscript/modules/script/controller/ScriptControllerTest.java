@@ -12,6 +12,7 @@ import com.aiscript.common.api.PageResult;
 import com.aiscript.common.exception.GlobalExceptionHandler;
 import com.aiscript.common.pagination.PageQuery;
 import com.aiscript.modules.script.dto.PolishScriptDTO;
+import com.aiscript.modules.generation.service.ScriptGenerationQueueService;
 import com.aiscript.modules.script.service.ScriptService;
 import com.aiscript.modules.script.vo.PolishScriptVO;
 import com.aiscript.modules.script.vo.ScriptListVO;
@@ -30,7 +31,8 @@ class ScriptControllerTest {
     @BeforeEach
     void setUp() {
         scriptService = Mockito.mock(ScriptService.class);
-        mockMvc = MockMvcBuilders.standaloneSetup(new ScriptController(scriptService))
+        ScriptGenerationQueueService queueService = Mockito.mock(ScriptGenerationQueueService.class);
+        mockMvc = MockMvcBuilders.standaloneSetup(new ScriptController(scriptService, queueService))
             .setControllerAdvice(new GlobalExceptionHandler())
             .build();
     }
@@ -38,22 +40,23 @@ class ScriptControllerTest {
     @Test
     void polishReturnsPolishedContent() throws Exception {
         when(scriptService.polish(eq(17), any(PolishScriptDTO.class)))
-            .thenReturn(new PolishScriptVO("修改后的脚本", "已完成润色"));
+            .thenReturn(new PolishScriptVO("修改后的脚本", "已完成润色", "changes_requested"));
 
         mockMvc.perform(post("/api/scripts/17/polish")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"instruction\":\"开场更抓人\",\"content\":\"原脚本\"}"))
+                .content("{\"requestNo\":\"script_polish:test-1\",\"expectedPointCost\":10,\"instruction\":\"开场更抓人\",\"content\":\"原脚本\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(0))
             .andExpect(jsonPath("$.data.content").value("修改后的脚本"))
-            .andExpect(jsonPath("$.data.summary").value("已完成润色"));
+            .andExpect(jsonPath("$.data.summary").value("已完成润色"))
+            .andExpect(jsonPath("$.data.status").value("changes_requested"));
     }
 
     @Test
     void polishRejectsBlankInstruction() throws Exception {
         mockMvc.perform(post("/api/scripts/17/polish")
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"instruction\":\" \",\"content\":\"原脚本\"}"))
+                .content("{\"requestNo\":\"script_polish:test-2\",\"expectedPointCost\":10,\"instruction\":\" \",\"content\":\"原脚本\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(40000));
     }

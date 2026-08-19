@@ -4,10 +4,13 @@ import com.aiscript.common.api.PageResult;
 import com.aiscript.common.pagination.PageQuery;
 import com.aiscript.modules.membership.vo.DailyPointRewardVO;
 import com.aiscript.modules.membership.vo.PointAccountVO;
+import com.aiscript.modules.membership.vo.PointOperationCostsVO;
 import com.aiscript.modules.membership.vo.PointTransactionVO;
 
 public interface MembershipPointService {
     PointAccountVO account(Integer tenantId, Integer userId);
+
+    PointOperationCostsVO operationCosts(Integer tenantId, Integer userId);
 
     PageResult<PointTransactionVO> transactions(Integer userId, PageQuery query);
 

@@ -21,6 +21,7 @@ export interface SiteConfig {
   scriptVisualConfig?: string;
   userAgreementConfig?: string;
   privacyPolicyConfig?: string;
+  membershipServiceAgreementConfig?: string;
 }
 
 let siteConfigCache: SiteConfig | null = null;

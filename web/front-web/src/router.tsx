@@ -17,6 +17,9 @@ const MembershipPointsPage = lazy(() => import('./pages/Membership/MembershipPoi
 const MembershipExchangePage = lazy(() => import('./pages/Membership/MembershipExchangePage'));
 const NotificationsPage = lazy(() => import('./pages/Notifications/NotificationsPage'));
 const PaymentResultPage = lazy(() => import('./pages/PaymentResult/PaymentResultPage'));
+const ScriptReviewPage = lazy(() => import('./pages/ScriptReview/ScriptReviewPage'));
+const ProjectCollaborationJoinPage = lazy(() => import('./pages/ProjectCollaborationJoin/ProjectCollaborationJoinPage'));
+const RecycleBinPage = lazy(() => import('./pages/RecycleBin/RecycleBinPage'));
 
 const LazyLoad = ({ children }: { children: React.ReactNode }) => (
   <Suspense fallback={<div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#888' }}>Loading...</div>}>
@@ -58,6 +61,14 @@ export const router: RouteObject[] = [
     element: <RequireAuth><LazyLoad><WorkspacePage /></LazyLoad></RequireAuth>,
   },
   {
+    path: '/script-review/:token',
+    element: <RequireAuth><LazyLoad><ScriptReviewPage /></LazyLoad></RequireAuth>,
+  },
+  {
+    path: '/project-collaboration/:token',
+    element: <RequireAuth><LazyLoad><ProjectCollaborationJoinPage /></LazyLoad></RequireAuth>,
+  },
+  {
     path: '/brief-share-pack/:token',
     element: <LazyLoad><BriefSharePackPage /></LazyLoad>,
   },
@@ -96,6 +107,10 @@ export const router: RouteObject[] = [
   {
     path: '/notifications',
     element: <RequireAuth><LazyLoad><NotificationsPage /></LazyLoad></RequireAuth>,
+  },
+  {
+    path: '/recycle-bin',
+    element: <RequireAuth><LazyLoad><RecycleBinPage /></LazyLoad></RequireAuth>,
   },
   {
     path: '*',

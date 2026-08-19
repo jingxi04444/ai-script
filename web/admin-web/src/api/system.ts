@@ -101,6 +101,7 @@ export interface SiteConfig {
   scriptVisualConfig?: string;
   userAgreementConfig?: string;
   privacyPolicyConfig?: string;
+  membershipServiceAgreementConfig?: string;
   [key: string]: unknown;
 }
 

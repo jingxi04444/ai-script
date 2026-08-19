@@ -5,6 +5,8 @@ import com.aiscript.common.util.JsonUtils;
 import com.aiscript.framework.secret.SecretCipherService;
 import com.aiscript.modules.system.entity.SysApiProviderConfig;
 import com.aiscript.modules.system.service.ProviderConfigService;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -39,13 +41,42 @@ public class OpenAiCompatibleClient implements LlmClient {
         return sendChat(systemPrompt, userPrompt, imageUrls == null ? List.of() : imageUrls);
     }
 
+    @Override
+    public LlmChatResult chatWithMetrics(String systemPrompt, String userPrompt) {
+        return sendStreamingChat(systemPrompt, userPrompt);
+    }
+
     private String sendChat(String systemPrompt, String userPrompt, List<String> imageUrls) {
-        SysApiProviderConfig provider = providerConfigService.firstEnabled("llm");
-        if (provider == null || !StringUtils.hasText(provider.getEndpointUrl())) {
-            throw new BusinessException("未配置LLM Provider");
-        }
+        SysApiProviderConfig provider = requireProvider();
         Map<String, Object> config = JsonUtils.toMap(provider.getConfigJson());
         String model = String.valueOf(config.getOrDefault("model", "gpt-4o-mini"));
+        Map<String, Object> payload = chatPayload(systemPrompt, userPrompt, imageUrls, config, model);
+        HttpRequest.Builder builder = requestBuilder(provider)
+            .POST(HttpRequest.BodyPublishers.ofString(JsonUtils.toJson(payload)));
+        try {
+            HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new BusinessException("LLM Provider调用失败：" + response.statusCode());
+            }
+            return extractContent(response.body());
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException("LLM Provider调用被中断");
+        } catch (Exception ex) {
+            if (ex instanceof BusinessException businessException) {
+                throw businessException;
+            }
+            throw new BusinessException("LLM Provider调用失败：" + ex.getMessage());
+        }
+    }
+
+    private Map<String, Object> chatPayload(
+        String systemPrompt,
+        String userPrompt,
+        List<String> imageUrls,
+        Map<String, Object> config,
+        String model
+    ) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("model", model);
         Object userContent = userPrompt == null ? "" : userPrompt;
@@ -75,20 +106,101 @@ public class OpenAiCompatibleClient implements LlmClient {
 //        if (!isThinkingEnabled(thinking)) {
 //            payload.put("temperature", config.getOrDefault("temperature", 0.7));
 //        }
+        return payload;
+    }
+
+    private SysApiProviderConfig requireProvider() {
+        SysApiProviderConfig provider = providerConfigService.firstEnabled("llm");
+        if (provider == null || !StringUtils.hasText(provider.getEndpointUrl())) {
+            throw new BusinessException("未配置LLM Provider");
+        }
+        return provider;
+    }
+
+    private HttpRequest.Builder requestBuilder(SysApiProviderConfig provider) {
         HttpRequest.Builder builder = HttpRequest.newBuilder()
             .uri(URI.create(normalizeEndpointUrl(provider)))
             .timeout(Duration.ofMillis(Math.max(provider.getTimeoutMs() == null ? DEFAULT_LLM_TIMEOUT_MS : provider.getTimeoutMs(), DEFAULT_LLM_TIMEOUT_MS)))
-            .header("Content-Type", "application/json")
-            .POST(HttpRequest.BodyPublishers.ofString(JsonUtils.toJson(payload)));
+            .header("Content-Type", "application/json");
         if (StringUtils.hasText(provider.getApiKeyEncrypted())) {
             builder.header("Authorization", "Bearer " + secretCipherService.decrypt(provider.getApiKeyEncrypted()));
         }
+        return builder;
+    }
+
+    private LlmChatResult sendStreamingChat(String systemPrompt, String userPrompt) {
+        SysApiProviderConfig provider = requireProvider();
+        Map<String, Object> config = JsonUtils.toMap(provider.getConfigJson());
+        String model = String.valueOf(config.getOrDefault("model", "gpt-4o-mini"));
+        Map<String, Object> payload = chatPayload(systemPrompt, userPrompt, List.of(), config, model);
+        payload.put("stream", true);
+        payload.put("stream_options", Map.of("include_usage", true));
+        HttpRequest request = requestBuilder(provider)
+            .POST(HttpRequest.BodyPublishers.ofString(JsonUtils.toJson(payload)))
+            .build();
+        long startedAt = System.nanoTime();
         try {
-            HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+            HttpResponse<java.io.InputStream> response = httpClient.send(
+                request,
+                HttpResponse.BodyHandlers.ofInputStream()
+            );
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                try (java.io.InputStream ignored = response.body()) {
+                    // 主动关闭错误响应流；响应正文可能包含供应商敏感信息，不写日志。
+                }
                 throw new BusinessException("LLM Provider调用失败：" + response.statusCode());
             }
-            return extractContent(response.body());
+            String contentType = response.headers().firstValue("Content-Type").orElse("");
+            if (!contentType.toLowerCase(java.util.Locale.ROOT).contains("text/event-stream")) {
+                String body;
+                try (java.io.InputStream input = response.body()) {
+                    body = new String(input.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+                }
+                long totalLatencyMs = elapsedMs(startedAt);
+                String content = extractContent(body);
+                return new LlmChatResult(
+                    content,
+                    provider.getProviderName(),
+                    provider.getPlatform(),
+                    model,
+                    characterCount(systemPrompt) + characterCount(userPrompt),
+                    characterCount(content),
+                    totalLatencyMs,
+                    totalLatencyMs,
+                    totalLatencyMs,
+                    usageNumber(body, "prompt_tokens"),
+                    usageNumber(body, "completion_tokens"),
+                    reasoningTokenNumber(body),
+                    usageNumber(body, "total_tokens"),
+                    extractFinishReason(body),
+                    false
+                );
+            }
+            OpenAiStreamResponseParser.ParsedStream parsed;
+            try (
+                java.io.InputStream input = response.body();
+                BufferedReader reader = new BufferedReader(new InputStreamReader(input, java.nio.charset.StandardCharsets.UTF_8))
+            ) {
+                parsed = OpenAiStreamResponseParser.parse(reader, startedAt, System::nanoTime);
+            }
+            long totalLatencyMs = elapsedMs(startedAt);
+            return new LlmChatResult(
+                parsed.content(),
+                provider.getProviderName(),
+                provider.getPlatform(),
+                model,
+                characterCount(systemPrompt) + characterCount(userPrompt),
+                characterCount(parsed.content()),
+                parsed.firstTokenLatencyMs(),
+                parsed.firstContentLatencyMs(),
+                totalLatencyMs,
+                parsed.promptTokens(),
+                parsed.completionTokens(),
+                parsed.reasoningTokens(),
+                parsed.totalTokens(),
+                parsed.finishReason(),
+                true
+            );
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new BusinessException("LLM Provider调用被中断");
@@ -126,6 +238,41 @@ public class OpenAiCompatibleClient implements LlmClient {
             return false;
         }
         return "enabled".equalsIgnoreCase(String.valueOf(thinkingMap.get("type")));
+    }
+
+    private long elapsedMs(long startedAt) {
+        return Math.max(0, (System.nanoTime() - startedAt) / 1_000_000);
+    }
+
+    private long characterCount(String value) {
+        return value == null ? 0 : value.codePointCount(0, value.length());
+    }
+
+    private Long usageNumber(String body, String field) {
+        Object usageValue = JsonUtils.toMap(body).get("usage");
+        if (usageValue instanceof Map<?, ?> usage && usage.get(field) instanceof Number number) {
+            return number.longValue();
+        }
+        return null;
+    }
+
+    private Long reasoningTokenNumber(String body) {
+        Object usageValue = JsonUtils.toMap(body).get("usage");
+        if (usageValue instanceof Map<?, ?> usage
+            && usage.get("completion_tokens_details") instanceof Map<?, ?> details
+            && details.get("reasoning_tokens") instanceof Number number) {
+            return number.longValue();
+        }
+        return null;
+    }
+
+    private String extractFinishReason(String body) {
+        Object choicesValue = JsonUtils.toMap(body).get("choices");
+        if (choicesValue instanceof List<?> choices && !choices.isEmpty()
+            && choices.get(0) instanceof Map<?, ?> choice && choice.get("finish_reason") != null) {
+            return String.valueOf(choice.get("finish_reason"));
+        }
+        return null;
     }
 
     @SuppressWarnings("unchecked")

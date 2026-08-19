@@ -233,6 +233,35 @@ html[data-color-mode='light'] .notifications-list article.is-read {
   border-color: rgba(31, 41, 47, 0.12);
 }
 
+html[data-color-mode='light'] :where(
+  .notifications-header span,
+  .notifications-filters button.active,
+  .notifications-error > .anticon,
+  .notifications-error button,
+  .notifications-icon,
+  .notifications-content span.is-new
+) {
+  color: var(--theme-accent-ink, #246f2d);
+  -webkit-text-fill-color: var(--theme-accent-ink, #246f2d);
+}
+
+html[data-color-mode='light'] .notifications-content span:not(.is-new) {
+  background: #e9eef0;
+  color: #56636a;
+}
+
+html[data-color-mode='light'] .notifications-actions button,
+html[data-color-mode='light'] .notifications-filters button {
+  border-color: #d4dce0;
+  background: #fff;
+  color: #4f5c63;
+}
+
+html[data-color-mode='light'] .notifications-filters button.active {
+  border-color: #8bc392;
+  background: var(--theme-accent-soft, #eaf7ec);
+}
+
 @media (max-width: 760px) {
   .notifications-page { margin-left: 0; padding: 24px 16px 40px; }
   .notifications-header { align-items: stretch; flex-direction: column; }

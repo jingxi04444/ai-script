@@ -267,6 +267,100 @@
   background: var(--panel-soft);
 }
 
+.membership-subscription-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px 14px 0 0;
+  background: var(--panel-soft);
+}
+
+.membership-subscription-table {
+  width: 100%;
+  min-width: 1100px;
+  table-layout: fixed;
+  border-collapse: collapse;
+}
+
+.membership-subscription-table th:nth-child(1) { width: 17%; }
+.membership-subscription-table th:nth-child(2) { width: 20%; }
+.membership-subscription-table th:nth-child(3) { width: 10%; }
+.membership-subscription-table th:nth-child(4) { width: 12%; }
+.membership-subscription-table th:nth-child(5) { width: 27%; }
+.membership-subscription-table th:nth-child(6) { width: 14%; }
+
+.membership-subscription-table thead th {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 12px;
+  font-weight: 800;
+  text-align: left;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.membership-subscription-table tbody tr {
+  border-bottom: 1px solid var(--line);
+  transition: background 160ms ease;
+}
+
+.membership-subscription-table tbody tr:last-child { border-bottom: 0; }
+
+.membership-subscription-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.membership-subscription-table tbody td {
+  min-width: 0;
+  padding: 16px 18px;
+  color: var(--text-soft);
+  font-size: 14px;
+  vertical-align: middle;
+}
+
+.membership-subscription-cell {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+}
+
+.membership-subscription-cell strong,
+.membership-subscription-cell time,
+.membership-subscription-pending {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 800;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.membership-subscription-cell small {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.4;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.membership-subscription-purchase strong { font-weight: 700; }
+
+.membership-subscription-period time {
+  font-variant-numeric: tabular-nums;
+}
+
+.membership-subscription-pending {
+  display: block;
+}
+
+.membership-subscription-table-wrap + .pagination-bar {
+  margin-top: -1px;
+}
+
 .membership-point-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
@@ -275,6 +369,191 @@
 }
 
 .membership-point-page-stack { display: grid; gap: 18px; }
+
+.membership-point-tabs {
+  width: max-content;
+  max-width: 100%;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(9, 16, 20, 0.72);
+}
+
+.membership-point-tabs button {
+  min-width: 170px;
+  min-height: 58px;
+  display: grid;
+  align-content: center;
+  gap: 4px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: var(--text-muted);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.membership-point-tabs button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.membership-point-tabs button.is-active {
+  border-color: rgba(100, 240, 113, 0.28);
+  color: var(--green);
+  background: var(--green-soft);
+}
+
+.membership-point-tabs button:focus-visible {
+  outline: 2px solid rgba(100, 240, 113, 0.85);
+  outline-offset: 2px;
+}
+
+.membership-point-tabs strong {
+  color: inherit;
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.membership-point-tabs small {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.membership-point-tab-panel { min-width: 0; }
+
+.membership-point-cost-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel-soft);
+}
+
+.membership-point-cost-table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+}
+
+.membership-point-cost-table th,
+.membership-point-cost-table td {
+  padding: 14px 16px;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.membership-point-cost-table tr > :last-child { border-right: 0; }
+.membership-point-cost-table tbody tr:last-child > * { border-bottom: 0; }
+
+.membership-point-cost-table thead th {
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.025);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.membership-point-cost-table thead th:first-child,
+.membership-point-cost-table tbody th {
+  width: 230px;
+  min-width: 230px;
+}
+
+.membership-point-cost-table thead th strong,
+.membership-point-cost-table tbody th strong,
+.membership-point-cost-table thead th small,
+.membership-point-cost-table tbody th small {
+  display: block;
+}
+
+.membership-point-cost-table thead th strong,
+.membership-point-cost-table tbody th strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.membership-point-cost-table thead th small,
+.membership-point-cost-table tbody th small {
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: normal;
+}
+
+.membership-point-cost-input {
+  min-width: 120px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--green);
+  background: rgba(7, 17, 10, 0.36);
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+
+.membership-point-cost-input:focus-within {
+  border-color: var(--green);
+  box-shadow: 0 0 0 3px rgba(95, 220, 108, 0.1);
+}
+
+.membership-point-cost-input span { flex: 0 0 auto; font-size: 15px; }
+
+.membership-point-cost-input input {
+  width: 100%;
+  min-width: 64px;
+  border: 0;
+  outline: 0;
+  color: var(--text);
+  background: transparent;
+  font: inherit;
+  font-weight: 800;
+}
+
+.membership-point-cost-free {
+  display: block;
+  margin-top: 5px;
+  color: #87d98c;
+  font-size: 10px;
+}
+
+.membership-point-cost-unavailable {
+  min-width: 120px;
+  min-height: 42px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 11px;
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.membership-point-cost-unavailable strong {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.membership-point-cost-unavailable small {
+  color: rgba(157, 170, 177, 0.66);
+  font-size: 10px;
+  white-space: nowrap;
+}
 
 .membership-point-package-admin-grid {
   display: grid;
@@ -599,4 +878,8 @@
   .membership-preview-card { min-height: auto; }
   .membership-admin-sku-table thead th,
   .membership-admin-sku-table tbody td { padding: 12px 14px; }
+  .membership-subscription-table thead th,
+  .membership-subscription-table tbody td { padding: 13px 14px; }
+  .membership-point-tabs { width: 100%; }
+  .membership-point-tabs button { min-width: 150px; }
 }

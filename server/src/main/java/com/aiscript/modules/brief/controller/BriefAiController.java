@@ -5,6 +5,7 @@ import com.aiscript.modules.brief.dto.BriefDetectDTO;
 import com.aiscript.modules.brief.service.BriefAiService;
 import com.aiscript.modules.brief.vo.BriefAiResultVO;
 import com.aiscript.modules.brief.vo.BriefDetectionReportVO;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -21,7 +22,7 @@ public class BriefAiController {
     }
 
     @PostMapping("/detect")
-    public R<BriefDetectionReportVO> detect(@PathVariable Integer briefId, @RequestBody(required = false) BriefDetectDTO dto) {
+    public R<BriefDetectionReportVO> detect(@PathVariable Integer briefId, @Valid @RequestBody BriefDetectDTO dto) {
         return R.ok(briefAiService.detect(briefId, dto));
     }
 

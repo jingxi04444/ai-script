@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS sys_script_format_config (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='脚本格式配置表';
 
 INSERT INTO sys_script_format_config (code, name, format_requirement, sort_order, status)
-SELECT 'storyboard', '分镜脚本表', '请按分镜脚本表输出，至少包含镜号、时长、画面/镜头、人物动作、台词/旁白、字幕、音效/音乐、道具/备注等信息，便于拍摄执行。', 10, 1
+SELECT 'storyboard', '分镜脚本表', '第一行输出“标题：<创意标题>”，空一行后再按Markdown分镜脚本表输出；标题不得放入表格。表格至少包含镜号、时长、画面/镜头、人物动作、台词/旁白、字幕、音效/音乐、道具/备注等信息，便于拍摄执行。', 10, 1
 WHERE NOT EXISTS (SELECT 1 FROM sys_script_format_config WHERE code = 'storyboard');
 
 INSERT INTO sys_script_format_config (code, name, format_requirement, sort_order, status)

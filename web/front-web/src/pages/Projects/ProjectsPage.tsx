@@ -2,23 +2,40 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dropdown, Modal, message } from 'antd';
 import type { MenuProps } from 'antd';
-import { DownOutlined, ExportOutlined, MoreOutlined, PlusOutlined, SearchOutlined, ShareAltOutlined } from '@ant-design/icons';
+import { CopyOutlined, DownOutlined, LinkOutlined, MoreOutlined, PlusOutlined, SearchOutlined, ShareAltOutlined, TeamOutlined } from '@ant-design/icons';
 import HomeRail from '../../components/Layout/HomeRail';
+import { fileApi } from '../../api/asset';
+import { projectApi } from '../../api/project';
+import { config } from '../../config';
+import { useAuthStore } from '../../stores/authStore';
 import { useProjectStore } from '../../stores/projectStore';
 import { useWorkspaceStore } from '../../stores/workspaceStore';
-import type { Project } from '../../types/project';
+import type { Project, ProjectCollaborationOverview } from '../../types/project';
 import { formatDateTime } from '../../utils/format';
+import CreateProjectDialog, { type CreateProjectValues } from './CreateProjectDialog';
+import ProjectInviteDialog from './ProjectInviteDialog';
+import { projectAvatarToDataUrl } from './projectAvatar';
 import './projects-page.css';
 
 const ProjectsPage = () => {
   const navigate = useNavigate();
-  const { projects, fetchProjects, deleteProject, isLoading } = useProjectStore();
+  const { projects, fetchProjects, createProject, deleteProject, isLoading } = useProjectStore();
   const { setProject, reset } = useWorkspaceStore();
+  const user = useAuthStore((state) => state.user);
   const [detailProject, setDetailProject] = useState<Project | null>(null);
   const [keyword, setKeyword] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [sortBy, setSortBy] = useState<'updatedAt' | 'name'>('updatedAt');
   const [deletingProjectId, setDeletingProjectId] = useState<string | null>(null);
+  const [teamProject, setTeamProject] = useState<Project | null>(null);
+  const [teamOverview, setTeamOverview] = useState<ProjectCollaborationOverview | null>(null);
+  const [teamLoading, setTeamLoading] = useState(false);
+  const [inviteCreating, setInviteCreating] = useState(false);
+  const [latestInviteUrl, setLatestInviteUrl] = useState('');
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [inviteProject, setInviteProject] = useState<Project | null>(null);
+  const [quickInviteUrl, setQuickInviteUrl] = useState('');
+  const [quickInviteCreating, setQuickInviteCreating] = useState(false);
 
   useEffect(() => {
     fetchProjects();
@@ -40,8 +57,30 @@ const ProjectsPage = () => {
   }, [keyword, projects, sortBy, typeFilter]);
 
   const handleCreate = () => {
-    reset();
-    navigate('/workspace');
+    setCreateDialogOpen(true);
+  };
+
+  const confirmCreateProject = async ({ avatarFile, name, announcement }: CreateProjectValues) => {
+    try {
+      const avatarUrl = avatarFile
+        ? config.useMock
+          ? await projectAvatarToDataUrl(avatarFile)
+          : (await fileApi.upload(avatarFile, 'project-avatar')).url
+        : undefined;
+      const created = await createProject({
+        name,
+        announcement,
+        avatarUrl,
+        category: '产品介绍',
+        status: 'active',
+      });
+      reset();
+      setProject({ id: created.id, title: created.name });
+      message.success('项目创建成功');
+      navigate(`/workspace?projectId=${created.id}&step=selling-points`);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '项目创建失败，请稍后重试');
+    }
   };
 
   const handleOpen = (projectId: string, title: string) => {
@@ -49,13 +88,110 @@ const ProjectsPage = () => {
     navigate(`/workspace?projectId=${projectId}`);
   };
 
+  const isProjectOwner = (project: Project) => !project.userId || project.userId === user?.id;
+
+  const loadProjectTeam = async (project: Project) => {
+    setTeamLoading(true);
+    try {
+      setTeamOverview(await projectApi.getCollaboration(project.id));
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '项目团队加载失败');
+    } finally {
+      setTeamLoading(false);
+    }
+  };
+
+  const openProjectTeam = (project: Project) => {
+    setTeamProject(project);
+    setLatestInviteUrl('');
+    setTeamOverview(null);
+    void loadProjectTeam(project);
+  };
+
+  const openProjectInvite = (project: Project) => {
+    setInviteProject(project);
+    setQuickInviteUrl('');
+  };
+
+  const createQuickInvite = async () => {
+    if (!inviteProject) return;
+    setQuickInviteCreating(true);
+    try {
+      const invite = await projectApi.createCollaborationLink(inviteProject.id, { expiresInHours: 168 });
+      setQuickInviteUrl(new URL(invite.path, window.location.origin).toString());
+      message.success('项目邀请链接已生成');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '项目邀请生成失败');
+    } finally {
+      setQuickInviteCreating(false);
+    }
+  };
+
+  const copyText = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      message.success('邀请链接已复制');
+    } catch {
+      message.error('复制失败，请手动复制邀请链接');
+    }
+  };
+
+  const createTeamInvite = async () => {
+    if (!teamProject) return;
+    setInviteCreating(true);
+    try {
+      const invite = await projectApi.createCollaborationLink(teamProject.id, { expiresInHours: 168 });
+      const url = new URL(invite.path, window.location.origin).toString();
+      setLatestInviteUrl(url);
+      await copyText(url);
+      await loadProjectTeam(teamProject);
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '邀请链接创建失败');
+    } finally {
+      setInviteCreating(false);
+    }
+  };
+
+  const confirmRevokeInvite = (linkId: string) => {
+    if (!teamProject) return;
+    Modal.confirm({
+      centered: true,
+      title: '撤销这个邀请链接？',
+      content: '撤销后该链接不能再加入新成员，已经加入项目团队的成员不会被移出。',
+      okText: '撤销链接',
+      cancelText: '取消',
+      onOk: async () => {
+        await projectApi.revokeCollaborationLink(teamProject.id, linkId);
+        message.success('邀请链接已撤销');
+        await loadProjectTeam(teamProject);
+      },
+    });
+  };
+
+  const confirmRemoveMember = (memberUserId: string, memberName: string) => {
+    if (!teamProject) return;
+    Modal.confirm({
+      centered: true,
+      title: `移出成员“${memberName}”？`,
+      content: '移出后，该成员将不能继续访问共享 Brief，也不能查看或编辑这个项目的脚本。',
+      okText: '移出成员',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        await projectApi.removeCollaborator(teamProject.id, memberUserId);
+        message.success('成员已移出项目团队');
+        await loadProjectTeam(teamProject);
+      },
+    });
+  };
+
   const confirmDeleteProject = (project: Project) => {
     Modal.confirm({
       centered: true,
       className: 'project-delete-confirm-dialog',
-      title: '\u786e\u8ba4\u5220\u9664\u9879\u76ee\uff1f',
-      content: `\u5220\u9664\u201c${project.name || '\u672a\u547d\u540d\u9879\u76ee'}\u201d\u540e\u65e0\u6cd5\u6062\u590d\uff0c\u8bf7\u786e\u8ba4\u4e0d\u518d\u9700\u8981\u8be5\u9879\u76ee\u540e\u518d\u64cd\u4f5c\u3002`,
-      okText: '\u5220\u9664',
+      title: '将项目移入回收站？',
+      content: `“${project.name || '未命名项目'}”会在回收站保留 7 天，期间可完整恢复项目结构和关联内容。`,
+      okText: '移入回收站',
       cancelText: '\u53d6\u6d88',
       okButtonProps: { danger: true },
       onOk: async () => {
@@ -63,7 +199,7 @@ const ProjectsPage = () => {
         try {
           await deleteProject(project.id);
           if (detailProject?.id === project.id) setDetailProject(null);
-          message.success('\u9879\u76ee\u5df2\u5220\u9664');
+          message.success('项目已移入回收站');
         } finally {
           setDeletingProjectId(null);
         }
@@ -75,6 +211,10 @@ const ProjectsPage = () => {
     info.domEvent.stopPropagation();
     if (info.key === 'detail') {
       setDetailProject(project);
+      return;
+    }
+    if (info.key === 'team') {
+      openProjectTeam(project);
       return;
     }
     if (info.key === 'delete') confirmDeleteProject(project);
@@ -143,20 +283,25 @@ const ProjectsPage = () => {
                   aria-label={`打开项目：${item.name}`}
                   onClick={() => handleOpen(item.id, item.name)}
                 />
-                <div className="project-gallery-preview" aria-hidden="true">
-                  <ShareAltOutlined />
+                <div className={`project-gallery-preview ${item.avatarUrl ? 'has-avatar' : ''}`}>
+                  {item.avatarUrl
+                    ? <img src={item.avatarUrl} alt="" />
+                    : <span className="project-gallery-preview-fallback">{item.name.slice(0, 1)}</span>}
                 </div>
                 <h3>{item.name || '未命名项目'}</h3>
                 <footer>
                   <time>最后更新：{formatDateTime(item.updatedAt)}</time>
                   <div className="project-gallery-actions">
-                    <button
-                      type="button"
-                      aria-label={`进入项目：${item.name}`}
-                      onClick={() => handleOpen(item.id, item.name)}
-                    >
-                      <ExportOutlined />
-                    </button>
+                    {isProjectOwner(item) && (
+                      <button
+                        type="button"
+                        aria-label={`生成项目邀请：${item.name}`}
+                        title="生成项目邀请"
+                        onClick={() => openProjectInvite(item)}
+                      >
+                        <ShareAltOutlined />
+                      </button>
+                    )}
                     <Dropdown
                       trigger={['click']}
                       placement="topRight"
@@ -164,13 +309,16 @@ const ProjectsPage = () => {
                       menu={{
                         items: [
                           { key: 'detail', label: '\u67e5\u770b\u8be6\u60c5' },
-                          { type: 'divider' },
-                          {
-                            key: 'delete',
-                            danger: true,
-                            disabled: deletingProjectId === item.id,
-                            label: deletingProjectId === item.id ? '\u5220\u9664\u4e2d...' : '\u5220\u9664\u9879\u76ee',
-                          },
+                          ...(isProjectOwner(item) ? [
+                            { key: 'team', label: '项目团队' },
+                            { type: 'divider' as const },
+                            {
+                              key: 'delete',
+                              danger: true,
+                              disabled: deletingProjectId === item.id,
+                              label: deletingProjectId === item.id ? '\u5220\u9664\u4e2d...' : '\u5220\u9664\u9879\u76ee',
+                            },
+                          ] : []),
                         ],
                         onClick: (info) => handleProjectMenuClick(item, info),
                       }}
@@ -203,6 +351,7 @@ const ProjectsPage = () => {
             </header>
             <section className="project-detail-grid">
               <div><span>项目名称</span><strong>{detailProject.name}</strong></div>
+              <div><span>项目公告</span><strong>{detailProject.announcement || '-'}</strong></div>
               <div><span>分类</span><strong>{detailProject.category || '-'}</strong></div>
               <div><span>状态</span><strong>{getStatusLabel(detailProject.status)}</strong></div>
               <div><span>Brief 数量</span><strong>{detailProject.briefCount}</strong></div>
@@ -217,6 +366,86 @@ const ProjectsPage = () => {
             </footer>
           </article>
         </div>
+      )}
+      {teamProject && (
+        <div className="project-team-dialog-mask" role="dialog" aria-modal="true" aria-label="项目团队">
+          <article className="project-team-dialog">
+            <header>
+              <div>
+                <span>至尊版 · 企业协作能力</span>
+                <h2>项目团队</h2>
+                <p>{teamProject.name}</p>
+              </div>
+              <button type="button" onClick={() => setTeamProject(null)} aria-label="关闭">×</button>
+            </header>
+
+            <section className="project-team-permissions">
+              <h3>成员加入后可以做什么</h3>
+              <div className="project-team-permission-grid">
+                <div><strong>共享 Brief</strong><span>查看、使用和维护当前项目的 Brief</span></div>
+                <div><strong>编辑脚本</strong><span>查看脚本、继续润色并保存修改</span></div>
+                <div><strong>仅限当前项目</strong><span>不会获得其他项目、会员和支付权限</span></div>
+                <div><strong>管理权归创建者</strong><span>成员不能邀请他人、移出成员或删除项目</span></div>
+              </div>
+            </section>
+
+            <section className="project-team-section">
+              <div className="project-team-section-head">
+                <div><LinkOutlined /><span><strong>邀请团队成员</strong><small>邀请链接 7 天内有效</small></span></div>
+                <button className="primary" type="button" disabled={inviteCreating} onClick={() => void createTeamInvite()}>
+                  {inviteCreating ? '生成中…' : '生成邀请链接'}
+                </button>
+              </div>
+              {latestInviteUrl && (
+                <div className="project-team-invite-result">
+                  <input value={latestInviteUrl} readOnly aria-label="项目团队邀请链接" />
+                  <button type="button" onClick={() => void copyText(latestInviteUrl)}><CopyOutlined />复制</button>
+                </div>
+              )}
+              <div className="project-team-list">
+                {teamLoading && <div className="project-team-empty">团队信息加载中…</div>}
+                {!teamLoading && !teamOverview?.links.length && <div className="project-team-empty">暂无邀请链接</div>}
+                {!teamLoading && teamOverview?.links.map((link) => (
+                  <div className="project-team-row" key={link.id}>
+                    <span><strong>{link.status === 'active' ? '有效邀请链接' : link.status === 'expired' ? '已过期' : '已撤销'}</strong><small>已加入 {link.usedCount} 人{link.expiresAt ? ` · ${formatDateTime(link.expiresAt)} 到期` : ''}</small></span>
+                    {link.status === 'active' && <button type="button" onClick={() => confirmRevokeInvite(link.id)}>撤销</button>}
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="project-team-section">
+              <div className="project-team-section-head">
+                <div><TeamOutlined /><span><strong>已加入成员</strong><small>{teamOverview?.members.length || 0} 人</small></span></div>
+              </div>
+              <div className="project-team-list">
+                {!teamLoading && !teamOverview?.members.length && <div className="project-team-empty">暂时还没有成员加入</div>}
+                {teamOverview?.members.map((member) => (
+                  <div className="project-team-row member" key={member.id}>
+                    <span><strong>{member.name}</strong><small>{member.joinedAt ? `${formatDateTime(member.joinedAt)} 加入` : '项目团队成员'}</small></span>
+                    <button className="danger" type="button" onClick={() => confirmRemoveMember(member.userId, member.name)}>移出</button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </article>
+        </div>
+      )}
+      {createDialogOpen && (
+        <CreateProjectDialog
+          onClose={() => setCreateDialogOpen(false)}
+          onConfirm={confirmCreateProject}
+        />
+      )}
+      {inviteProject && (
+        <ProjectInviteDialog
+          project={inviteProject}
+          inviteUrl={quickInviteUrl}
+          creating={quickInviteCreating}
+          onClose={() => setInviteProject(null)}
+          onCreate={createQuickInvite}
+          onCopy={copyText}
+        />
       )}
     </main>
   );

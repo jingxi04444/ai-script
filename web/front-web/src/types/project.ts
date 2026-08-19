@@ -2,7 +2,10 @@ export type ProjectStatus = 'active' | 'published' | 'review' | 'idle';
 
 export interface Project {
   id: string;
+  userId?: string;
   name: string;
+  avatarUrl?: string;
+  announcement?: string;
   category?: string;
   status: ProjectStatus;
   briefCount: number;
@@ -36,4 +39,25 @@ export interface ProjectStepSaveParams {
   stepName: string;
   status?: string;
   draftData?: string;
+}
+
+export interface ProjectCollaborationLink {
+  id: string;
+  status: 'active' | 'revoked' | 'expired' | string;
+  expiresAt?: string;
+  usedCount: number;
+  maxUses?: number;
+}
+
+export interface ProjectCollaborator {
+  id: string;
+  userId: string;
+  name: string;
+  avatarUrl?: string;
+  joinedAt?: string;
+}
+
+export interface ProjectCollaborationOverview {
+  links: ProjectCollaborationLink[];
+  members: ProjectCollaborator[];
 }

@@ -24,6 +24,11 @@ interface PromptTemplatesPageProps {
   pageTitle?: string;
   pageDescription?: string;
   embedded?: boolean;
+  requireSystemPrompt?: boolean;
+  systemPromptLabel?: string;
+  userPromptLabel?: string;
+  systemPromptPlaceholder?: string;
+  userPromptPlaceholder?: string;
 }
 
 const PromptTemplatesPage = ({
@@ -32,6 +37,11 @@ const PromptTemplatesPage = ({
   pageTitle,
   pageDescription,
   embedded = false,
+  requireSystemPrompt = false,
+  systemPromptLabel = '系统提示词 systemPrompt',
+  userPromptLabel = '用户提示词 userPrompt',
+  systemPromptPlaceholder = '你是商业短视频产品 Brief 检测专家...',
+  userPromptPlaceholder = '请检测以下 Brief，并输出 JSON：{{briefContent}}',
 }: PromptTemplatesPageProps) => {
   const { notify } = useAdminShell();
   const fixedSceneCode = sceneCode || (briefMode ? 'brief_detect' : undefined);
@@ -93,8 +103,8 @@ const PromptTemplatesPage = ({
   };
 
   const save = async () => {
-    if (!form.templateName?.trim() || !form.sceneCode?.trim() || !form.userPrompt?.trim()) {
-      notify('请填写模板名称、场景编码和用户提示词');
+    if (!form.templateName?.trim() || !form.sceneCode?.trim() || !form.userPrompt?.trim() || (requireSystemPrompt && !form.systemPrompt?.trim())) {
+      notify(requireSystemPrompt ? '请填写模板名称、场景编码、首次生成规则和润色规则' : '请填写模板名称、场景编码和用户提示词');
       return;
     }
     try {
@@ -172,12 +182,12 @@ const PromptTemplatesPage = ({
           <label className="field"><span>Provider ID</span><input value={form.providerId || ''} onChange={(e) => setForm({ ...form, providerId: e.target.value })} placeholder="可选" /></label>
         </div>
         <label className="field" style={{ marginTop: 14 }}>
-          <span>系统提示词 systemPrompt</span>
-          <textarea value={form.systemPrompt || ''} onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })} placeholder="你是商业短视频产品 Brief 检测专家..." />
+          <span>{systemPromptLabel}</span>
+          <textarea value={form.systemPrompt || ''} onChange={(e) => setForm({ ...form, systemPrompt: e.target.value })} placeholder={systemPromptPlaceholder} />
         </label>
         <label className="field" style={{ marginTop: 14 }}>
-          <span>用户提示词 userPrompt</span>
-          <textarea value={form.userPrompt || ''} onChange={(e) => setForm({ ...form, userPrompt: e.target.value })} placeholder="请检测以下 Brief，并输出 JSON：{{briefContent}}" />
+          <span>{userPromptLabel}</span>
+          <textarea value={form.userPrompt || ''} onChange={(e) => setForm({ ...form, userPrompt: e.target.value })} placeholder={userPromptPlaceholder} />
         </label>
         <label className="field" style={{ marginTop: 14 }}>
           <span>响应 Schema responseSchema</span>

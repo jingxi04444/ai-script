@@ -10,4 +10,5 @@ public class PublicSiteConfigVO {
     public String scriptVisualConfig;
     public String userAgreementConfig;
     public String privacyPolicyConfig;
+    public String membershipServiceAgreementConfig;
 }

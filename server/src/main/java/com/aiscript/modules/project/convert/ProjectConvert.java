@@ -11,6 +11,8 @@ public final class ProjectConvert {
         ProjectVO vo = new ProjectVO();
         vo.setId(String.valueOf(project.getId()));
         vo.setName(project.getProjectName());
+        vo.setAvatarUrl(project.getAvatarUrl());
+        vo.setAnnouncement(project.getAnnouncement());
         vo.setUserId(project.getOwnerId() == null ? null : String.valueOf(project.getOwnerId()));
         vo.setUsername("demo");
         vo.setCategory(project.getCategory());

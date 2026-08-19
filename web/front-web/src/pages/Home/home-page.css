@@ -65,6 +65,37 @@
 .hot-thumb::after { background: linear-gradient(180deg, transparent, rgba(0,0,0,0.55)); }
 .hot-card strong { display: block; padding: 0 21px; color: #f4f4f4; font-size: 19px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+html[data-color-mode='light'] .home-stage .quick-actions button.primary {
+  border-color: #78c681;
+  background: #eaf7ec;
+  color: #1f6828;
+  box-shadow: 0 10px 28px rgba(44, 122, 54, 0.12);
+}
+
+html[data-color-mode='light'] .home-stage .quick-actions button.primary .quick-action-icon {
+  background: #d8efdb;
+  color: #246f2d;
+}
+
+html[data-color-mode='light'] .home-stage .hot-header > h2,
+html[data-color-mode='light'] .home-stage .hot-card,
+html[data-color-mode='light'] .home-stage .hot-card strong {
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text) !important;
+}
+
+html[data-color-mode='light'] .home-stage .hot-tabs button {
+  border-color: #d5dde0;
+  background: #fff;
+  color: #56636a;
+}
+
+html[data-color-mode='light'] .home-stage .hot-tabs button.active {
+  border-color: #96c99b;
+  background: #eaf7ec;
+  color: #246f2d;
+}
+
 .work-video-modal-backdrop {
   position: fixed;
   z-index: 1200;

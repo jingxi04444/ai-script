@@ -3,8 +3,8 @@ import { mockSourceApi } from '../mock/source';
 import api from './request';
 import type { SourceAnalysis } from '../types/source';
 
-type ParseParams = { projectId: string; url: string; mode?: 'simple' | 'deep' };
-type AnalyzeCopyParams = { projectId: string; copy: string; mode: 'simple' | 'deep' };
+type ParseParams = { projectId: string; url: string; mode?: 'simple' | 'deep'; requestNo: string; expectedPointCost: number };
+type AnalyzeCopyParams = { projectId: string; sourceAnalysisId: string; copy: string; mode: 'simple' | 'deep'; requestNo?: string };
 
 export const sourceApi = {
   list: (projectId: string): Promise<SourceAnalysis[]> =>

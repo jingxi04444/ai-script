@@ -136,6 +136,30 @@
 
 .membership-point-submit:disabled { opacity: .45; cursor: not-allowed; }
 
+html[data-color-mode='light'] :where(
+  .membership-points-balance strong,
+  .membership-points-section-head > span,
+  .membership-point-package-grid button b,
+  .membership-point-payment-method,
+  .membership-point-payment-state
+) {
+  color: var(--theme-accent-ink, #246f2d);
+  -webkit-text-fill-color: var(--theme-accent-ink, #246f2d);
+}
+
+html[data-color-mode='light'] .membership-point-package-grid button.active {
+  border-color: #78ba7f;
+  background: var(--theme-accent-soft, #eaf7ec);
+}
+
+html[data-color-mode='light'] .membership-point-submit:disabled {
+  border: 1px solid var(--disabled-border, #d3dade);
+  background: var(--disabled-bg, #eef1f3);
+  color: var(--disabled-text, #707c82);
+  -webkit-text-fill-color: var(--disabled-text, #707c82);
+  opacity: 1;
+}
+
 @media (max-width: 1080px) {
   .membership-points-content { grid-template-columns: 1fr; }
   .membership-point-checkout { width: min(440px, 100%); box-sizing: border-box; }

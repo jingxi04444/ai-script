@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import {
   FileTextOutlined,
@@ -16,34 +17,40 @@ import {
   DeleteOutlined,
   EditOutlined,
   DownloadOutlined,
-  SaveOutlined,
   SearchOutlined,
   SendOutlined,
   LeftOutlined,
   RightOutlined,
   LockOutlined,
-  DownOutlined,
   UploadOutlined,
   InfoCircleOutlined,
   MessageOutlined,
+  MoreOutlined,
   RobotOutlined,
   PlusOutlined,
   HistoryOutlined,
   CommentOutlined,
+  CloseOutlined,
 } from '@ant-design/icons';
-import { message, Modal, Popover, Select, Upload } from 'antd';
+import { Dropdown, message, Modal, Popover, Select, Upload } from 'antd';
 import { briefApi } from '../../../api/brief';
 import { assetApi } from '../../../api/asset';
 import { generationApi } from '../../../api/generation';
 import { scriptApi } from '../../../api/script';
 import { siteApi, type SiteConfig } from '../../../api/site';
 import { sourceApi } from '../../../api/source';
+import OperationCostLabel from '../../../components/Membership/OperationCostLabel';
+import { useAuthStore } from '../../../stores/authStore';
 import { useWorkspaceStore, type ScriptMode } from '../../../stores/workspaceStore';
 import type { Brief } from '../../../types/brief';
 import type { Asset } from '../../../types/asset';
 import { normalizeScriptStatus, scriptStatusOptions } from '../../../types/script';
-import type { Script, ScriptFormatOption, ScriptPolishMessage, ScriptStatus, ScriptTemplate, ScriptType, ScriptVersion } from '../../../types/script';
+import type { Script, ScriptAccess, ScriptFormatOption, ScriptPolishMessage, ScriptReviewComment, ScriptStatus, ScriptTemplate, ScriptType, ScriptVersion } from '../../../types/script';
 import type { AnalysisDimension } from '../../../types/source';
+import type { PointOperationCosts } from '../../../types/membership';
+import { getApiErrorMessage } from '../../../utils/apiError';
+import { createOperationRequestNo, isAmbiguousOperationError, notifyPointBalanceChanged, requestOperationCostRefresh } from '../../../utils/operationRequest';
+import { extractScriptContentTitle, replaceScriptContentTitle, withoutScriptContentTitle, withScriptContentTitle } from '../../../utils/scriptContent';
 import './script-generator-panel.css';
 
 interface ProductFrameUploadState {
@@ -68,6 +75,25 @@ interface ScriptAnnotation {
   content: string;
 }
 
+interface StoryboardCellSelection {
+  rowIndex: number;
+  columnIndex: number;
+  columnLabel: string;
+  originalText: string;
+}
+
+const TITLE_ROW_INDEX = -1;
+const TITLE_COLUMN_INDEX = -1;
+const TITLE_COLUMN_KEY = 'title';
+
+const isTitleReviewComment = (item: Pick<ScriptReviewComment, 'rowIndex' | 'columnKey'>) => (
+  item.rowIndex === TITLE_ROW_INDEX && item.columnKey === TITLE_COLUMN_KEY
+);
+
+const selectionColumnKey = (selection: StoryboardCellSelection) => (
+  selection.rowIndex === TITLE_ROW_INDEX ? TITLE_COLUMN_KEY : String(selection.columnIndex)
+);
+
 type TemplateCategory = '最新热点' | '产品介绍' | '创意剧情' | '活动福利' | '选购攻略';
 type TemplateFilter = '全部' | TemplateCategory;
 type TemplateSort = '综合排序' | '热度最高' | '最新模板';
@@ -89,7 +115,7 @@ interface OriginalScenarioCategory {
 }
 
 const fallbackFormatOptions: ScriptFormatOption[] = [
-  { code: 'storyboard', name: '分镜脚本表', formatRequirement: '按分镜表输出，包含镜头、画面内容、口播文案、字幕/花字、运镜、时长和备注。', sortOrder: 1, status: 1 },
+  { code: 'storyboard', name: '分镜脚本表', formatRequirement: '第一行输出“标题：<创意标题>”，空一行后按分镜表输出；标题放在表格外。表格包含镜头、画面内容、口播文案、字幕/花字、运镜、时长和备注。', sortOrder: 1, status: 1 },
   { code: 'oral', name: '口播脚本', formatRequirement: '按口播稿输出，重点保证开头钩子、口语表达、卖点展开和行动引导完整连贯。', sortOrder: 2, status: 1 },
   { code: 'shot', name: '拍摄脚本', formatRequirement: '按拍摄执行稿输出，明确场景、人物动作、镜头调度、道具、字幕和剪辑提示。', sortOrder: 3, status: 1 },
 ];
@@ -233,8 +259,6 @@ const parseOriginalScenarioPrompts = (value?: string): OriginalScenarioCategory[
     return fallbackOriginalScenarioCategories;
   }
 };
-
-const polishQuickPrompts = ['更口语一点', '压缩到 30 秒', '强化产品卖点', '开场更抓人', '结尾更强转化'];
 
 const templateCategories: TemplateFilter[] = ['全部', '最新热点', '产品介绍', '创意剧情', '活动福利', '选购攻略'];
 const templatePageSize = 10;
@@ -391,17 +415,89 @@ const getTemplateSpecFields = (card: TemplateCard): TemplateSpecFields => {
 interface ScriptGeneratorPanelProps {
   projectId: string | null;
   ensureProjectId: () => Promise<string>;
+  operationCosts: PointOperationCosts;
   dialogOnly?: boolean;
 }
 
-const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }: ScriptGeneratorPanelProps) => {
+interface PendingOperationRequest {
+  fingerprint: string;
+  requestNo: string;
+}
+
+interface VersionCompareTable {
+  headers: string[];
+  rows: string[][];
+}
+
+const decodeVersionCompareCell = (value: string) => value
+  .replace(/\*\*(.*?)\*\*/g, '$1')
+  .replace(/\s*(?:<br\s*\/?\s*>|&lt;br\s*\/?\s*&gt;)\s*/gi, '\n')
+  .replace(/\\r\\n|\\n|\\r/g, '\n')
+  .replace(/\r\n?|[\u2028\u2029]/g, '\n')
+  .trim();
+
+const splitVersionCompareRow = (line: string) => {
+  const source = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  const cells: string[] = [];
+  let cell = '';
+  for (let index = 0; index < source.length; index += 1) {
+    const character = source[index];
+    if (character === '\\' && source[index + 1] === '|') {
+      cell += '|';
+      index += 1;
+    } else if (character === '|') {
+      cells.push(decodeVersionCompareCell(cell));
+      cell = '';
+    } else {
+      cell += character;
+    }
+  }
+  cells.push(decodeVersionCompareCell(cell));
+  return cells;
+};
+
+const parseVersionCompareTable = (content = ''): VersionCompareTable => {
+  const tableLines = content
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('|') && line.endsWith('|'));
+  if (tableLines.length >= 2) {
+    const parsedRows = tableLines.map(splitVersionCompareRow);
+    const hasSeparator = parsedRows[1].every((cell) => /^:?-{3,}:?$/.test(cell));
+    return {
+      headers: parsedRows[0].map((header, index) => header || `字段 ${index + 1}`),
+      rows: parsedRows.slice(hasSeparator ? 2 : 1),
+    };
+  }
+  const rows = content
+    .split(/\n+/)
+    .map((line) => decodeVersionCompareCell(line))
+    .filter(Boolean)
+    .map((line) => [line]);
+  return { headers: ['脚本内容'], rows };
+};
+
+const operationRequestNo = (
+  pending: MutableRefObject<PendingOperationRequest | null>,
+  operation: string,
+  fingerprint: string,
+) => {
+  if (pending.current?.fingerprint === fingerprint) return pending.current.requestNo;
+  const requestNo = createOperationRequestNo(operation);
+  pending.current = { fingerprint, requestNo };
+  return requestNo;
+};
+
+const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dialogOnly = false }: ScriptGeneratorPanelProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const currentUserId = useAuthStore((state) => state.user?.id);
   const { setActiveStep, setScriptMode } = useWorkspaceStore();
   const activeModeParam = searchParams.get('scriptMode');
   const activeMode = isScriptMode(activeModeParam) ? activeModeParam : null;
   const editScriptId = searchParams.get('editScriptId');
   const briefIdParam = searchParams.get('briefId');
   const [analysisMode, setAnalysisMode] = useState<'simple' | 'deep'>('simple');
+  const [parsedAnalysisId, setParsedAnalysisId] = useState('');
   const [selectedTemplate, setSelectedTemplate] = useState(templateCards[0].id);
   const [category, setCategory] = useState<TemplateFilter>('全部');
   const [templateSort, setTemplateSort] = useState<TemplateSort>('综合排序');
@@ -431,18 +527,55 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
   const [polishMentionQuery, setPolishMentionQuery] = useState('');
   const [polishMentionRange, setPolishMentionRange] = useState<PolishMentionRange | null>(null);
   const [polishMessages, setPolishMessages] = useState<ScriptPolishMessage[]>([]);
+  const [sidePanelMode, setSidePanelMode] = useState<'ai' | 'review'>('ai');
+  const [sidePanelCollapsed, setSidePanelCollapsed] = useState(false);
+  const [scriptAccess, setScriptAccess] = useState<ScriptAccess>();
+  const [reviewComments, setReviewComments] = useState<ScriptReviewComment[]>([]);
+  const [reviewDraft, setReviewDraft] = useState('');
+  const [reviewReplyTo, setReviewReplyTo] = useState<string>();
+  const [reviewEditingId, setReviewEditingId] = useState<string>();
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [selectedStoryboardCell, setSelectedStoryboardCell] = useState<StoryboardCellSelection>();
+  const [reviewCommentScrollTarget, setReviewCommentScrollTarget] = useState<{ commentId: string; requestNo: number }>();
   const [scriptVersions, setScriptVersions] = useState<ScriptVersion[]>([]);
+  const currentScriptVersion = scriptVersions.find((item) => item.current);
+  const currentScriptVersionId = currentScriptVersion?.id;
+  const activeReviewVersionIds = new Set<string>();
+  if (currentScriptVersion) {
+    activeReviewVersionIds.add(currentScriptVersion.id);
+    const matchingContent = currentScriptVersion.content.trim();
+    scriptVersions.forEach((version) => {
+      if (matchingContent && version.content.trim() === matchingContent) activeReviewVersionIds.add(version.id);
+    });
+    let restoredFromVersionId = currentScriptVersion.restoredFromVersionId;
+    while (restoredFromVersionId && !activeReviewVersionIds.has(restoredFromVersionId)) {
+      activeReviewVersionIds.add(restoredFromVersionId);
+      restoredFromVersionId = scriptVersions.find((version) => version.id === restoredFromVersionId)?.restoredFromVersionId;
+    }
+  }
+  const isActiveReviewComment = (item: ScriptReviewComment) => !item.versionId || activeReviewVersionIds.has(item.versionId);
+  const actionableReviewComments = reviewComments.filter((item) =>
+    !item.parentId
+    && item.status !== 'resolved'
+    && isActiveReviewComment(item),
+  );
+  const commentsForStoryboardCell = (rowIndex: number, columnIndex: number) => reviewComments.filter((item) =>
+    item.rowIndex === rowIndex && item.columnKey === String(columnIndex)
+  );
+  const titleReviewComments = reviewComments.filter(isTitleReviewComment);
   const [versionHistoryOpen, setVersionHistoryOpen] = useState(false);
+  const [versionCompareOpen, setVersionCompareOpen] = useState(false);
+  const [compareBeforeVersionId, setCompareBeforeVersionId] = useState<string>();
+  const [compareAfterVersionId, setCompareAfterVersionId] = useState<string>();
   const [restoringVersionId, setRestoringVersionId] = useState<string>();
-  const [annotationMode, setAnnotationMode] = useState(false);
   const [scriptAnnotations, setScriptAnnotations] = useState<ScriptAnnotation[]>([]);
   const [annotationsLoadedFor, setAnnotationsLoadedFor] = useState<string>();
   const [annotationTarget, setAnnotationTarget] = useState<Omit<ScriptAnnotation, 'id' | 'content'> | null>(null);
   const [annotationDraft, setAnnotationDraft] = useState('');
   const [isPolishing, setIsPolishing] = useState(false);
   const [isStatusSaving, setIsStatusSaving] = useState(false);
+  const [isScriptContentSaving, setIsScriptContentSaving] = useState(false);
   const [generatingType, setGeneratingType] = useState<ScriptType | null>(null);
-  const [generationElapsed, setGenerationElapsed] = useState(0);
   const [templates, setTemplates] = useState<TemplateCard[]>(templateCards);
   const [briefs, setBriefs] = useState<Brief[]>([]);
   const [briefsLoading, setBriefsLoading] = useState(true);
@@ -458,6 +591,11 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
   const [frameLibraryLoaded, setFrameLibraryLoaded] = useState(false);
   const [frameLibraryAssets, setFrameLibraryAssets] = useState<Asset[]>([]);
   const polishInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const reviewInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const generationLockedRef = useRef(false);
+  const parseRequestRef = useRef<PendingOperationRequest | null>(null);
+  const generationRequestRef = useRef<PendingOperationRequest | null>(null);
+  const polishRequestRef = useRef<PendingOperationRequest | null>(null);
   const isDeepMode = analysisMode === 'deep';
   const scriptVisualConfig = parseScriptVisualConfig(siteConfig.scriptVisualConfig);
   const visualModeItems = new Map((scriptVisualConfig.modeItems || []).map((item) => [item.key, item]));
@@ -472,6 +610,25 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
   });
   const assistantTitle = scriptVisualConfig.assistantTitle?.trim() || '铼河AI脚本生成器';
   const assistantSubtitle = scriptVisualConfig.assistantSubtitle?.trim() || '你可以选择不同的创作方式，我来帮你完成脚本';
+  const compareBeforeVersion = scriptVersions.find((item) => item.id === compareBeforeVersionId);
+  const compareAfterVersion = scriptVersions.find((item) => item.id === compareAfterVersionId);
+  const compareBeforeTable = parseVersionCompareTable(compareBeforeVersion?.content);
+  const compareAfterTable = parseVersionCompareTable(compareAfterVersion?.content);
+  const versionCompareHeaders = [...compareBeforeTable.headers];
+  compareAfterTable.headers.forEach((header) => {
+    if (!versionCompareHeaders.includes(header)) versionCompareHeaders.push(header);
+  });
+  const versionCompareRowCount = Math.max(compareBeforeTable.rows.length, compareAfterTable.rows.length);
+  const versionCompareCell = (table: VersionCompareTable, rowIndex: number, header: string) => {
+    const columnIndex = table.headers.indexOf(header);
+    return columnIndex >= 0 ? table.rows[rowIndex]?.[columnIndex] || '' : '';
+  };
+  const versionCellChanged = (rowIndex: number, header: string) => (
+    versionCompareCell(compareBeforeTable, rowIndex, header) !== versionCompareCell(compareAfterTable, rowIndex, header)
+  );
+  const versionChangedCellCount = Array.from({ length: versionCompareRowCount }).reduce<number>((count, _, rowIndex) => (
+    count + versionCompareHeaders.filter((header) => versionCellChanged(rowIndex, header)).length
+  ), 0);
 
   const clearEditScriptParam = () => {
     if (!searchParams.has('editScriptId')) return;
@@ -497,6 +654,29 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
     clearEditScriptParam();
   };
 
+  const saveCurrentScriptAndClose = async () => {
+    if (!currentScript || isScriptContentSaving) return;
+    setIsScriptContentSaving(true);
+    try {
+      const saved = await scriptApi.update(currentScript.id, { content: currentScript.content });
+      setCurrentScript((script) => script ? {
+        ...script,
+        content: saved.content || script.content,
+        status: normalizeScriptStatus(saved.status),
+        updatedAt: saved.updatedAt || script.updatedAt,
+      } : script);
+      window.dispatchEvent(new CustomEvent('scripts:changed', {
+        detail: { scriptId: saved.id, projectId: saved.projectId, status: normalizeScriptStatus(saved.status) },
+      }));
+      message.success('脚本修改已保存');
+      closeResultDialog();
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '脚本保存失败，请稍后重试');
+    } finally {
+      setIsScriptContentSaving(false);
+    }
+  };
+
   const createPolishMessage = (role: ScriptPolishMessage['role'], content: string): ScriptPolishMessage => ({
     id: `${role}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     role,
@@ -506,7 +686,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
 
   const defaultPolishMessage = () => createPolishMessage(
     'assistant',
-    '我已读取原脚本。你可以直接告诉我“哪里不行、想怎么改”，也可以点击“批注修改”在具体单元格添加意见。我会保留每次修改记录，并返回完整修改稿。',
+    '我已读取原脚本。你可以直接告诉我“哪里不行、想怎么改”，也可以选中表格单元格后点击“评论”添加意见。我会保留每次修改记录，并返回完整修改稿。',
   );
 
   const loadScriptVersions = async (scriptId: string, fallbackContent = '') => {
@@ -521,6 +701,48 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
     setPolishMessages(messages.length ? messages : [defaultPolishMessage()]);
     return messages;
   };
+
+  const loadReviewWorkspace = async (scriptId: string) => {
+    const [access, comments] = await Promise.all([
+      scriptApi.getAccess(scriptId),
+      scriptApi.getReviewComments(scriptId),
+    ]);
+    setScriptAccess(access);
+    setReviewComments(comments);
+  };
+
+  useEffect(() => {
+    if (!resultDialogOpen || !currentScript?.id) return;
+    void loadReviewWorkspace(currentScript.id).catch(() => {
+      setScriptAccess(undefined);
+      message.warning('评论记录暂时加载失败，已保留当前页面中的评论');
+    });
+  }, [resultDialogOpen, currentScript?.id]);
+
+  useEffect(() => {
+    if (sidePanelMode !== 'review' || sidePanelCollapsed || !reviewCommentScrollTarget) return;
+    const frameId = window.requestAnimationFrame(() => {
+      document.getElementById(`polish-review-comment-${reviewCommentScrollTarget.commentId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest',
+      });
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [reviewCommentScrollTarget, reviewComments, sidePanelCollapsed, sidePanelMode]);
+
+  useEffect(() => {
+    if (!versionCompareOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setVersionCompareOpen(false);
+    };
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [versionCompareOpen]);
 
   useEffect(() => {
     scriptApi.getTemplates().then((list) => {
@@ -555,18 +777,6 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
       window.removeEventListener('focus', loadSiteConfig);
     };
   }, [activeMode]);
-
-  useEffect(() => {
-    if (!generatingType) {
-      setGenerationElapsed(0);
-      return undefined;
-    }
-    const startedAt = Date.now();
-    const timer = window.setInterval(() => {
-      setGenerationElapsed(Math.floor((Date.now() - startedAt) / 1000));
-    }, 1000);
-    return () => window.clearInterval(timer);
-  }, [generatingType]);
 
   useEffect(() => {
     scriptApi.getFormats().then((list) => {
@@ -737,14 +947,20 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
     || originalScenarioCategories[0];
   const originalScenarioSelectOptions = (currentOriginalCategory?.children || [])
     .map((item) => ({ value: item.id, label: item.title }));
-  const generationStage = generationElapsed < 10
-    ? '正在整理产品 Brief、模板和创作要求'
-    : generationElapsed < 30
-      ? '正在生成脚本结构、镜头和口播文案'
-      : '正在完善脚本细节并整理输出格式';
+  const currentOriginalScenario = currentOriginalCategory?.children.find((item) => item.id === selectedOriginalScenario)
+    || currentOriginalCategory?.children[0];
   const selectedScriptFormat = scriptFormats.find((item) => item.code === scriptFormat);
+  const currentScriptLeadingMeta = currentScript?.type === 'template'
+    ? [currentScript.templateName]
+    : currentScript?.type === 'original'
+      ? [currentScript.originalCategoryName]
+      : [];
+  const currentScriptTrailingMeta = currentScript?.type === 'original'
+    ? [currentScript.originalScenarioName]
+    : [];
   const scriptOutputText = currentScript?.content?.trim() || '暂无脚本内容';
-  const scriptOutputParagraphs = scriptOutputText
+  const scriptContentTitle = extractScriptContentTitle(scriptOutputText, currentScript?.name || '未命名脚本');
+  const scriptOutputParagraphs = withoutScriptContentTitle(scriptOutputText)
     .split(/\n+|(?<=[。！？!?])\s*/)
     .map((line) => line.replace(/^[-·\d.、\s]+/, '').trim())
     .filter(Boolean);
@@ -778,7 +994,21 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
     }
     return { ...row, cells };
   });
-  const visibleStoryboardHeaders = storyboardRows.length ? storyboardHeaders : ['镜头', '画面内容', '口播/摘要', '作用'];
+  const storyboardSummaryRow = storyboardRows.find((row) => row.cells.some((cell) => /总计|总时长|总时间/.test(cell)));
+  const storyboardDurationSeconds = storyboardDurationColumnIndex >= 0
+    ? storyboardSummaryRow
+      ? Number.parseFloat(storyboardSummaryRow.cells[storyboardDurationColumnIndex]) || 0
+      : storyboardRows.reduce((total, row) => total + (Number.parseFloat(row.cells[storyboardDurationColumnIndex]) || 0), 0)
+    : 0;
+  const currentScriptDurationLabel = currentScript?.duration?.trim()
+    || (storyboardDurationSeconds > 0 ? `${Number(storyboardDurationSeconds.toFixed(2))} 秒` : '时长未记录');
+  const currentScriptFormatLabel = currentScript?.formatName?.trim()
+    || scriptFormats.find((item) => item.code === currentScript?.format)?.name
+    || '分镜脚本表';
+  const visibleStoryboardColumns = storyboardRows.length
+    ? storyboardHeaders
+      .map((header, index) => ({ header, index }))
+    : ['镜头', '画面内容', '口播/摘要', '作用'].map((header, index) => ({ header, index }));
   const storyboardColumnClass = (header: string) => {
     if (/镜号|镜头编号|^镜头$/.test(header)) return 'storyboard-column-shot';
     if (/景别/.test(header)) return 'storyboard-column-scene';
@@ -794,20 +1024,22 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
   const storyboardCellText = (cell: string | undefined, index: number) => {
     const normalized = (cell || '-')
       .replace(/\*\*(.*?)\*\*/g, '$1')
-      .replace(/\s*(?:<br\s*\/?\s*>|&lt;br\s*\/?\s*&gt;)\s*/gi, ' ')
-      .replace(/(?:\\[rn]|[\r\n\u2028\u2029])+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .replace(/([\u3400-\u9fff，。！？；：、“”‘’（）])\s+(?=[\u3400-\u9fff，。！？；：、“”‘’（）])/g, '$1')
+      .replace(/\s*(?:<br\s*\/?\s*>|&lt;br\s*\/?\s*&gt;)\s*/gi, '\n')
+      .replace(/(?:\\[rn]|[\r\n\u2028\u2029])+/g, '\n')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/ *\n */g, '\n')
+      .replace(/([\u3400-\u9fff，。！？；：、“”‘’（）])[ \t]+(?=[\u3400-\u9fff，。！？；：、“”‘’（）])/g, '$1')
       .trim();
     return index === storyboardDurationColumnIndex ? normalized.replace(/\s*(?:s|秒)\s*$/i, '').trim() : normalized;
   };
   const storyboardCellEditorText = (cell: string | undefined, index: number) => {
     const normalized = (cell ?? '')
       .replace(/\*\*(.*?)\*\*/g, '$1')
-      .replace(/\s*(?:<br\s*\/?\s*>|&lt;br\s*\/?\s*&gt;)\s*/gi, ' ')
-      .replace(/(?:\\[rn]|[\r\n\u2028\u2029])+/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+      .replace(/\s*(?:<br\s*\/?\s*>|&lt;br\s*\/?\s*&gt;)\s*/gi, '\n')
+      .replace(/\\r\\n|\\n|\\r/g, '\n')
+      .replace(/\r\n?|[\u2028\u2029]/g, '\n')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/ *\n */g, '\n');
     return index === storyboardDurationColumnIndex ? normalized.replace(/\s*(?:s|秒)\s*$/i, '').trim() : normalized;
   };
   const scriptSegmentSources = structureLines.length ? structureLines : scriptOutputParagraphs;
@@ -864,10 +1096,25 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
     return (
       <div className="template-spec-popover">
         <strong>{card.name} 模板说明</strong>
-        {card.referenceUrl ? <p><b>参考链接：</b><a href={card.referenceUrl} target="_blank" rel="noreferrer">{card.referenceUrl}</a></p> : null}
+        {card.previewVideoUrl ? (
+          <div className="template-preview-video">
+            <span>前 5 秒示例</span>
+            <video
+              src={card.previewVideoUrl}
+              controls
+              controlsList="nodownload noplaybackrate"
+              disablePictureInPicture
+              playsInline
+              preload="metadata"
+              onContextMenu={(event) => event.preventDefault()}
+            >
+              当前浏览器无法播放此视频。
+            </video>
+          </div>
+        ) : null}
         {spec.firstFiveSecondsHook ? <p className="template-spec-line"><b>前5秒钩子</b><span>：{spec.firstFiveSecondsHook}</span></p> : null}
         {spec.modelFormula ? <p className="template-spec-line"><b>模型公式</b><span>：{spec.modelFormula}</span></p> : null}
-        {!card.referenceUrl && !hasTemplateSpec ? <p>后台暂未维护参考链接、前5秒钩子或模型公式</p> : null}
+        {!card.previewVideoUrl && !hasTemplateSpec ? <p>后台暂未维护 5 秒预览视频、前5秒钩子或模型公式</p> : null}
       </div>
     );
   };
@@ -1031,19 +1278,40 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
   };
 
   const parseReference = async () => {
+    const parseCost = analysisMode === 'deep' ? operationCosts.viralDeep : operationCosts.viralSimple;
+    if (!Number.isFinite(parseCost)) return message.warning('水滴费用尚未加载，请刷新页面重试');
     if (!referenceUrl.trim()) return message.warning('请先输入参考视频链接');
     setIsParsing(true);
     try {
       const currentProjectId = await ensureProjectId();
-      const result = await sourceApi.createParseTask({ projectId: currentProjectId, url: referenceUrl, mode: analysisMode });
+      const parsePayload = {
+        projectId: currentProjectId,
+        url: referenceUrl.trim(),
+        mode: analysisMode,
+        expectedPointCost: parseCost,
+      } as const;
+      const requestNo = operationRequestNo(
+        parseRequestRef,
+        analysisMode === 'deep' ? 'viral_deep' : 'viral_simple',
+        JSON.stringify(parsePayload),
+      );
+      const result = await sourceApi.createParseTask({
+        ...parsePayload,
+        requestNo,
+      });
+      parseRequestRef.current = null;
+      setParsedAnalysisId(result.id);
       setAnalysisText(formatParsedCopy(result.editableCopy || result.title || '解析完成，但暂无可编辑文案。'));
       setStructureText('');
       setStructureDimensions([]);
       setCopyAnalyzed(false);
       setIsAnalysisEditing(false);
-      message.success('链接解析完成，请选择分析方式后确认分析');
+      notifyPointBalanceChanged();
+      message.success(`已按${analysisMode === 'deep' ? '深度拉片拆解' : '简易文案解析'}模式完成解析`);
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '参考视频解析失败');
+      if (!isAmbiguousOperationError(error)) parseRequestRef.current = null;
+      requestOperationCostRefresh();
+      message.error(getApiErrorMessage(error, '参考视频解析失败'));
     } finally {
       setIsParsing(false);
     }
@@ -1069,6 +1337,14 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
     setCurrentScript((script) => script ? {
       ...script,
       content: contentLines.join('\n'),
+      updatedAt: new Date().toISOString(),
+    } : script);
+  };
+
+  const updateScriptContentTitle = (value: string) => {
+    setCurrentScript((script) => script ? {
+      ...script,
+      content: replaceScriptContentTitle(script.content, value),
       updatedAt: new Date().toISOString(),
     } : script);
   };
@@ -1150,15 +1426,81 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
     message.success(`已删除第 ${rowIndex + 1} 行，可点击“恢复原稿”撤销`);
   };
 
-  const openCellAnnotation = (rowIndex: number, columnIndex: number, columnLabel: string, originalText: string) => {
-    const existing = scriptAnnotations.find((item) => item.rowIndex === rowIndex && item.columnIndex === columnIndex);
-    setAnnotationTarget({ rowIndex, columnIndex, columnLabel, originalText });
-    setAnnotationDraft(existing?.content || '');
+  const selectStoryboardCell = (selection: StoryboardCellSelection) => {
+    setSelectedStoryboardCell(selection);
   };
 
-  const saveCellAnnotation = () => {
+  const selectScriptTitle = () => {
+    selectStoryboardCell({
+      rowIndex: TITLE_ROW_INDEX,
+      columnIndex: TITLE_COLUMN_INDEX,
+      columnLabel: '标题',
+      originalText: scriptContentTitle,
+    });
+  };
+
+  const revealReviewComment = (commentId: string) => {
+    setSidePanelMode('review');
+    setSidePanelCollapsed(false);
+    setReviewCommentScrollTarget((target) => ({
+      commentId,
+      requestNo: (target?.requestNo || 0) + 1,
+    }));
+  };
+
+  const openSelectedCellComment = () => {
+    if (!selectedStoryboardCell) {
+      message.info('请先点击需要评论的标题或表格单元格');
+      return;
+    }
+    setSidePanelMode('review');
+    setSidePanelCollapsed(false);
+    setReviewReplyTo(undefined);
+    setReviewEditingId(undefined);
+    setReviewDraft('');
+    window.setTimeout(() => reviewInputRef.current?.focus(), 0);
+  };
+
+  const locateReviewComment = (item: ScriptReviewComment) => {
+    if (item.rowIndex == null || item.columnKey == null) return;
+    if (isTitleReviewComment(item)) {
+      selectScriptTitle();
+      document.getElementById('script-title-comment-target')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+    const columnIndex = Number(item.columnKey);
+    setSelectedStoryboardCell({
+      rowIndex: item.rowIndex,
+      columnIndex,
+      columnLabel: storyboardHeaders[columnIndex] || `第 ${columnIndex + 1} 列`,
+      originalText: storyboardCellText(storyboardRows[item.rowIndex]?.cells[columnIndex] || '', columnIndex),
+    });
+    document.getElementById(`storyboard-cell-${item.rowIndex}-${columnIndex}`)?.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
+  };
+
+  const saveCellAnnotation = async () => {
     if (!annotationTarget || !annotationDraft.trim()) {
       message.warning('请输入具体的修改建议');
+      return;
+    }
+    if (sidePanelMode === 'review' && currentScript) {
+      setReviewSaving(true);
+      try {
+        const saved = await scriptApi.addInternalReviewComment(currentScript.id, {
+          content: annotationDraft.trim(),
+          versionId: currentScriptVersionId,
+          rowIndex: annotationTarget.rowIndex,
+          columnKey: annotationTarget.rowIndex === TITLE_ROW_INDEX ? TITLE_COLUMN_KEY : String(annotationTarget.columnIndex),
+        });
+        setReviewComments((items) => [...items, saved]);
+        setAnnotationTarget(null);
+        setAnnotationDraft('');
+        message.success('评论已保存');
+      } catch (error) {
+        message.error(error instanceof Error ? error.message : '批注保存失败');
+      } finally {
+        setReviewSaving(false);
+      }
       return;
     }
     setScriptAnnotations((annotations) => {
@@ -1178,6 +1520,60 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
     message.success('批注已添加，可继续标注其他单元格或直接发送给 AI');
   };
 
+  const submitInternalReviewComment = async () => {
+    if (!currentScript || !reviewDraft.trim()) return;
+    setReviewSaving(true);
+    try {
+      const saved = reviewEditingId
+        ? await scriptApi.updateReviewComment(reviewEditingId, reviewDraft.trim())
+        : await scriptApi.addInternalReviewComment(currentScript.id, {
+            content: reviewDraft.trim(),
+            parentId: reviewReplyTo,
+            versionId: currentScriptVersionId,
+            rowIndex: reviewReplyTo ? undefined : selectedStoryboardCell?.rowIndex,
+            columnKey: reviewReplyTo || selectedStoryboardCell == null ? undefined : selectionColumnKey(selectedStoryboardCell),
+          });
+      setReviewComments((items) => reviewEditingId
+        ? items.map((item) => item.id === saved.id ? saved : item)
+        : [...items, saved]);
+      setReviewDraft('');
+      setReviewReplyTo(undefined);
+      setReviewEditingId(undefined);
+      message.success(reviewEditingId ? '评论已更新' : '评论已保存');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '评论保存失败');
+    } finally {
+      setReviewSaving(false);
+    }
+  };
+
+  const applyReviewCommentsWithAi = () => {
+    if (!actionableReviewComments.length) {
+      message.info('暂无可交给 AI 修改的评论');
+      return;
+    }
+    const instruction = `请严格按照以下评审评论修改脚本，未被评论的结构、时长、格式和内容保持不变：\n${actionableReviewComments.map((item, index) => {
+      const location = item.rowIndex == null
+        ? '整篇脚本'
+        : isTitleReviewComment(item)
+          ? '标题'
+        : `第 ${item.rowIndex + 1} 行${item.columnKey == null ? '' : `「${storyboardHeaders[Number(item.columnKey)] || `第 ${Number(item.columnKey) + 1} 列`}」`}`;
+      return `${index + 1}. ${location}：${item.content}`;
+    }).join('\n')}`;
+    setSidePanelMode('ai');
+    void polishCurrentScript(instruction);
+  };
+
+  const deleteInternalReviewComment = async (commentId: string) => {
+    try {
+      await scriptApi.deleteReviewComment(commentId);
+      setReviewComments((items) => items.filter((item) => item.id !== commentId && item.parentId !== commentId));
+      message.success('批注已删除');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '批注删除失败');
+    }
+  };
+
   const removeCellAnnotation = () => {
     if (!annotationTarget) return;
     setScriptAnnotations((annotations) => annotations.filter(
@@ -1188,12 +1584,13 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
   };
 
   const polishCurrentScript = async (quickInstruction?: string) => {
+    if (!Number.isFinite(operationCosts.scriptPolish)) return message.warning('水滴费用尚未加载，请刷新页面重试');
     if (!currentScript) return message.warning('请先选择脚本');
     const inputInstruction = (quickInstruction || polishInput).trim();
     const annotationInstruction = scriptAnnotations.length
       ? `【逐格批注修改】\n${[...scriptAnnotations]
           .sort((a, b) => a.rowIndex - b.rowIndex || a.columnIndex - b.columnIndex)
-          .map((item) => `${item.rowIndex + 1}. 第 ${item.rowIndex + 1} 行「${item.columnLabel}」：原内容“${item.originalText}”；修改建议“${item.content}”`)
+          .map((item, index) => `${index + 1}. ${item.rowIndex === TITLE_ROW_INDEX ? '标题' : `第 ${item.rowIndex + 1} 行「${item.columnLabel}」`}：原内容“${item.originalText}”；修改建议“${item.content}”`)
           .join('\n')}`
       : '';
     const instruction = [inputInstruction, annotationInstruction].filter(Boolean).join('\n\n');
@@ -1205,7 +1602,8 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
     setPolishBriefId(undefined);
     setIsPolishing(true);
     try {
-      const result = await scriptApi.polish(currentScript.id, {
+      const polishPayload = {
+        expectedPointCost: operationCosts.scriptPolish,
         instruction,
         content: currentScript.content || originalScriptContent || '',
         briefId: recalledBriefId,
@@ -1213,21 +1611,41 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
         productImage: productFrame?.url,
         productFrameFileName: productFrame?.fileName,
         productFrameContent: productFrame?.extractedText,
-      });
-      setCurrentScript((script) => script ? { ...script, content: result.content, updatedAt: new Date().toISOString() } : script);
+      };
+      const requestNo = operationRequestNo(
+        polishRequestRef,
+        'script_polish',
+        JSON.stringify({ scriptId: currentScript.id, ...polishPayload }),
+      );
+      const result = await scriptApi.polish(currentScript.id, { ...polishPayload, requestNo });
+      polishRequestRef.current = null;
+      const nextStatus = normalizeScriptStatus(result.status || currentScript.status);
+      setCurrentScript((script) => script ? { ...script, content: result.content, status: nextStatus, updatedAt: new Date().toISOString() } : script);
+      if (nextStatus !== currentScript.status) {
+        window.dispatchEvent(new CustomEvent('scripts:changed', {
+          detail: { scriptId: currentScript.id, projectId: currentScript.projectId, status: nextStatus },
+        }));
+      }
       setIsManualEditing(false);
       setScriptAnnotations([]);
-      setAnnotationMode(false);
       await Promise.all([
         loadScriptVersions(currentScript.id, originalScriptContent),
         loadPolishMessages(currentScript.id),
+        loadReviewWorkspace(currentScript.id),
       ]);
+      notifyPointBalanceChanged();
       message.success('AI 已返回修改版，右侧已重新显示');
     } catch (error) {
+      if (isAmbiguousOperationError(error)) {
+        if (!quickInstruction) setPolishInput(inputInstruction);
+      } else {
+        polishRequestRef.current = null;
+      }
+      requestOperationCostRefresh();
       await loadPolishMessages(currentScript.id).catch(() => {
         setPolishMessages((messages) => [...messages, createPolishMessage('assistant', '这次润色没有成功，请稍后重试或换一种说法。')]);
       });
-      message.error(error instanceof Error ? error.message : '脚本润色失败');
+      message.error(getApiErrorMessage(error, '脚本润色失败'));
     } finally {
       setIsPolishing(false);
     }
@@ -1240,6 +1658,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
       const restored = await scriptApi.restoreVersion(currentScript.id, version.id);
       setCurrentScript({ ...restored, status: normalizeScriptStatus(restored.status) });
       await loadScriptVersions(currentScript.id, restored.content || '');
+      await loadReviewWorkspace(currentScript.id);
       setIsManualEditing(false);
       setVersionHistoryOpen(false);
       message.success(`已恢复到 V${version.versionNo}，恢复前内容仍保留在历史版本中`);
@@ -1250,6 +1669,16 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
     }
   };
 
+  const openVersionHistory = () => {
+    const currentIndex = scriptVersions.findIndex((item) => item.current);
+    const after = currentIndex >= 0 ? scriptVersions[currentIndex] : scriptVersions[scriptVersions.length - 1];
+    const before = scriptVersions[Math.max(0, (currentIndex >= 0 ? currentIndex : scriptVersions.length - 1) - 1)];
+    setCompareBeforeVersionId((value) => value && scriptVersions.some((item) => item.id === value) ? value : before?.id);
+    setCompareAfterVersionId((value) => value && scriptVersions.some((item) => item.id === value) ? value : after?.id);
+    setVersionCompareOpen(false);
+    setVersionHistoryOpen(true);
+  };
+
   const restoreOriginalScript = async () => {
     const originalVersion = scriptVersions[0];
     if (!currentScript || !originalVersion) return;
@@ -1257,6 +1686,10 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
   };
 
   const analyzeReferenceCopy = async (): Promise<string | null> => {
+    if (!parsedAnalysisId) {
+      message.warning('请先按当前模式确认解析爆款链接');
+      return null;
+    }
     const copy = analysisText.trim();
     if (!copy) {
       message.warning('请先解析链接并确认文案');
@@ -1265,7 +1698,13 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
     setIsAnalyzingCopy(true);
     try {
       const currentProjectId = await ensureProjectId();
-      const result = await sourceApi.analyzeCopy({ projectId: currentProjectId, copy, mode: analysisMode });
+      const result = await sourceApi.analyzeCopy({
+        projectId: currentProjectId,
+        sourceAnalysisId: parsedAnalysisId,
+        copy,
+        mode: analysisMode,
+        requestNo: createOperationRequestNo(analysisMode === 'deep' ? 'viral_deep' : 'viral_simple'),
+      });
       const dimensions = (result.dimensions || []).filter((item) => item.title && item.content);
       const nextStructureText = analysisMode === 'deep'
         ? (dimensions.length ? dimensionsToText(dimensions) : (result.structureSummary || defaultStructureText))
@@ -1274,10 +1713,11 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
       setStructureText(nextStructureText);
       setCopyAnalyzed(true);
       setIsStructureEditing(false);
+      notifyPointBalanceChanged();
       message.success(analysisMode === 'deep' ? '深度拉片拆解完成' : '简易文案分析完成');
       return nextStructureText;
     } catch (error) {
-      message.error(error instanceof Error ? error.message : '文案结构分析失败');
+      message.error(getApiErrorMessage(error, '文案结构分析失败'));
       return null;
     } finally {
       setIsAnalyzingCopy(false);
@@ -1301,24 +1741,33 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
   };
 
   const generateScript = async (type: ScriptType) => {
-    let resolvedStructureText = structureText.trim();
-    if (type === 'viral') {
-      if (!analysisText.trim()) {
-        return message.warning('请先解析链接，获取文案逐字稿');
-      }
-      if (!copyAnalyzed || !resolvedStructureText) {
-        const analyzedStructure = await analyzeReferenceCopy();
-        if (!analyzedStructure) return;
-        resolvedStructureText = analyzedStructure.trim();
-      }
-    }
+    if (!Number.isFinite(operationCosts.scriptGenerate)) return message.warning('水滴费用尚未加载，请刷新页面重试');
+    if (generationLockedRef.current) return;
+    generationLockedRef.current = true;
     setGeneratingType(type);
     try {
+      let resolvedStructureText = structureText.trim();
+      if (type === 'viral') {
+        if (!analysisText.trim()) {
+          message.warning('请先解析链接，获取文案逐字稿');
+          return;
+        }
+        if (!copyAnalyzed || !resolvedStructureText) {
+          const analyzedStructure = await analyzeReferenceCopy();
+          if (!analyzedStructure) return;
+          resolvedStructureText = analyzedStructure.trim();
+        }
+      }
       const currentProjectId = await ensureProjectId();
-      const script = await scriptApi.generate({
+      const generationPayload = {
+        expectedPointCost: operationCosts.scriptGenerate,
         projectId: currentProjectId,
         type,
         templateId: type === 'template' ? selectedTemplate : undefined,
+        originalCategoryId: type === 'original' ? currentOriginalCategory?.id : undefined,
+        originalCategoryName: type === 'original' ? currentOriginalCategory?.title : undefined,
+        originalScenarioId: type === 'original' ? currentOriginalScenario?.id : undefined,
+        originalScenarioName: type === 'original' ? currentOriginalScenario?.title : undefined,
         briefId: selectedBriefId,
         referenceUrl: type === 'viral' ? referenceUrl : undefined,
         duration: scriptDuration,
@@ -1332,34 +1781,24 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
         referenceCopy: type === 'viral' ? analysisText.trim() : undefined,
         structureAnalysis: type === 'viral' ? resolvedStructureText : undefined,
         prompt,
-      });
-      setCurrentScript(script);
-      setOriginalScriptContent(script.content || '');
-      setScriptVersions([]);
-      setPolishMessages([defaultPolishMessage()]);
-      loadScriptVersions(script.id, script.content || '').catch(() => undefined);
-      setPolishBriefId(undefined);
-      setIsManualEditing(false);
-      setResultDialogOpen(true);
-      message.success('脚本生成成功');
+      };
+      const requestNo = operationRequestNo(
+        generationRequestRef,
+        'script_generate',
+        JSON.stringify(generationPayload),
+      );
+      await scriptApi.enqueueGeneration({ ...generationPayload, requestNo });
+      generationRequestRef.current = null;
+      window.dispatchEvent(new Event('script-queue:changed'));
+      message.success('已加入后台生成队列，你可以继续提交下一条脚本');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : '脚本生成失败';
+      if (!isAmbiguousOperationError(error)) generationRequestRef.current = null;
+      requestOperationCostRefresh();
+      const errorMessage = getApiErrorMessage(error, '脚本生成失败');
       message.error(errorMessage || '脚本生成失败');
     } finally {
       setGeneratingType(null);
-    }
-  };
-
-  const saveCurrentScript = async () => {
-    if (!currentScript) return message.warning('请先生成脚本');
-    try {
-      const saved = await scriptApi.update(currentScript.id, currentScript);
-      setCurrentScript({ ...saved, status: normalizeScriptStatus(saved.status) });
-      await loadScriptVersions(saved.id, saved.content || '');
-      setIsManualEditing(false);
-      message.success('脚本已保存，并已生成可恢复的历史版本');
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : '脚本保存失败');
+      generationLockedRef.current = false;
     }
   };
 
@@ -1370,7 +1809,11 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
     setIsStatusSaving(true);
     try {
       const saved = await scriptApi.update(currentScript.id, { status });
-      setCurrentScript((script) => script ? { ...script, status: normalizeScriptStatus(saved.status) } : script);
+      const savedStatus = normalizeScriptStatus(saved.status);
+      setCurrentScript((script) => script ? { ...script, status: savedStatus } : script);
+      window.dispatchEvent(new CustomEvent('scripts:changed', {
+        detail: { scriptId: currentScript.id, projectId: currentScript.projectId, status: savedStatus },
+      }));
       message.success(`脚本状态已标记为“${scriptStatusOptions.find((item) => item.value === status)?.label}”`);
     } catch (error) {
       setCurrentScript((script) => script ? { ...script, status: previousStatus } : script);
@@ -1423,9 +1866,10 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
 
   const copyCurrentScriptLink = async () => {
     if (!currentScript) return message.warning('请先生成脚本');
-    const url = new URL(`/workspace?projectId=${currentScript.projectId}&step=storyboard`, window.location.origin).toString();
+    const share = await scriptApi.createReviewLink(currentScript.id, { expiresInHours: 168, versionScope: 'all' });
+    const url = new URL(share.path, window.location.origin).toString();
     if (navigator.clipboard) await navigator.clipboard.writeText(url);
-    message.success('脚本工作台链接已复制');
+    message.success('脚本评审链接已复制；访问者只能查看、批注和提交审核意见');
   };
 
   const renderBriefSelect = () => (
@@ -1440,7 +1884,6 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
       popupClassName="brief-select-dropdown"
       filterOption={filterBriefOption}
       autoClearSearchValue
-      suffixIcon={<DownOutlined />}
       options={briefOptions}
       onChange={setSelectedBriefId}
       notFoundContent={briefsLoading ? <LoadingOutlined spin /> : '当前项目暂无 Brief，请先在产品卖点步骤新增'}
@@ -1530,22 +1973,26 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
           <section className="reference-link-row">
             <label className="reference-link-input">
               <LinkOutlined />
-              <input value={referenceUrl} onChange={(e) => { setReferenceUrl(e.target.value); setCopyAnalyzed(false); setStructureDimensions([]); }} placeholder="请输入参考视频链接" />
+              <input value={referenceUrl} disabled={isParsing} onChange={(e) => { setReferenceUrl(e.target.value); setParsedAnalysisId(''); setAnalysisText(''); setStructureText(''); setCopyAnalyzed(false); setStructureDimensions([]); }} placeholder="请输入参考视频链接" />
               <small>支持抖音 / 小红书 / 视频号等链接；纯 BGM / 无字幕视频可能无法拆解。</small>
             </label>
-            <button onClick={parseReference} disabled={isParsing}>{isParsing ? <LoadingOutlined spin /> : <CheckCircleOutlined />}{isParsing ? '解析中' : '确认解析'}</button>
+            <button onClick={parseReference} disabled={isParsing || !Number.isFinite(analysisMode === 'deep' ? operationCosts.viralDeep : operationCosts.viralSimple)} title={!Number.isFinite(analysisMode === 'deep' ? operationCosts.viralDeep : operationCosts.viralSimple) ? '水滴费用加载中' : undefined}>
+              {isParsing ? <LoadingOutlined spin /> : <CheckCircleOutlined />}
+              {isParsing ? '解析中' : '确认解析'}
+              <OperationCostLabel cost={analysisMode === 'deep' ? operationCosts.viralDeep : operationCosts.viralSimple} />
+            </button>
           </section>
 
           <section className="analysis-mode-row">
             <div className="analysis-mode-groups">
               <div className="analysis-mode-option simple">
                 {renderAnalysisExample(siteConfig.viralSimpleAnalysisExample, '简易文案解析案例')}
-                <button className={analysisMode === 'simple' ? 'analysis-mode-card active' : 'analysis-mode-card'} onClick={() => { setAnalysisMode('simple'); setCopyAnalyzed(false); setStructureText(''); setStructureDimensions([]); }}>
+                <button disabled={isParsing} className={analysisMode === 'simple' ? 'analysis-mode-card active' : 'analysis-mode-card'} onClick={() => { if (analysisMode !== 'simple') { setParsedAnalysisId(''); setAnalysisText(''); } setAnalysisMode('simple'); setCopyAnalyzed(false); setStructureText(''); setStructureDimensions([]); }}>
                   <FileTextOutlined /><span>简易文案解析</span>
                 </button>
               </div>
               <div className="analysis-mode-option deep">
-                <button className={analysisMode === 'deep' ? 'analysis-mode-card active' : 'analysis-mode-card'} onClick={() => { setAnalysisMode('deep'); setCopyAnalyzed(false); setStructureText(''); setStructureDimensions([]); }}>
+                <button disabled={isParsing} className={analysisMode === 'deep' ? 'analysis-mode-card active' : 'analysis-mode-card'} onClick={() => { if (analysisMode !== 'deep') { setParsedAnalysisId(''); setAnalysisText(''); } setAnalysisMode('deep'); setCopyAnalyzed(false); setStructureText(''); setStructureDimensions([]); }}>
                   <ShareAltOutlined /><span>深度拉片拆解</span>
                 </button>
                 {renderAnalysisExample(siteConfig.viralDeepAnalysisExample, '深度拉片解析案例')}
@@ -1560,7 +2007,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
                 <header>
                   <div>
                     <button onClick={() => copyText(visibleAnalysisText)}><CopyOutlined />复制</button>
-                    <button onClick={() => { setAnalysisText(''); setStructureText(''); setStructureDimensions([]); setCopyAnalyzed(false); setIsAnalysisEditing(false); message.info('已清空拆解文案'); }}><DeleteOutlined />清空</button>
+                    <button onClick={() => { setParsedAnalysisId(''); setAnalysisText(''); setStructureText(''); setStructureDimensions([]); setCopyAnalyzed(false); setIsAnalysisEditing(false); message.info('已清空拆解文案'); }}><DeleteOutlined />清空</button>
                     <button onClick={() => setIsAnalysisEditing(true)}><EditOutlined />校验修改</button>
                     <button className="ok" onClick={() => {
                       if (!analysisText.trim()) return message.warning('请先解析或填写文案内容');
@@ -1586,9 +2033,9 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
               type="button"
               className="analysis-flow-arrow"
               onClick={confirmAnalyzeReferenceCopy}
-              disabled={!analysisText.trim() || isAnalyzingCopy}
+              disabled={!analysisText.trim() || !parsedAnalysisId || isAnalyzingCopy}
               aria-label={isAnalyzingCopy ? '正在生成文案结构分析' : '生成文案结构分析'}
-              title={analysisText.trim() ? '生成文案结构分析' : '请先解析或填写文案'}
+              title={parsedAnalysisId ? (analysisText.trim() ? '生成文案结构分析' : '请先确认解析链接') : '请先按当前模式确认解析链接'}
             >
               <span>{isAnalyzingCopy ? <LoadingOutlined spin /> : <RightOutlined />}</span>
             </button>
@@ -1690,14 +2137,17 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
               <p>设置脚本输出格式、时长、产品及素材等信息，生成更贴合需求的脚本。</p>
             </header>
             <div className="script-config-fields">
-              <label><span>脚本格式</span><Select value={scriptFormat} onChange={setScriptFormat} suffixIcon={<DownOutlined />} options={formatOptions} /></label>
-              <label><span>脚本时长</span><Select value={scriptDuration} onChange={setScriptDuration} suffixIcon={<DownOutlined />} options={durationOptions} /></label>
+              <label><span>脚本格式</span><Select value={scriptFormat} onChange={setScriptFormat} options={formatOptions} /></label>
+              <label><span>脚本时长</span><Select value={scriptDuration} onChange={setScriptDuration} options={durationOptions} /></label>
               <label><span>产品选择</span>{renderBriefSelect()}</label>
               {renderProductFrameUpload('product-frame-upload', '产品画面（非必填）', true)}
             </div>
           </section>
 
-          <button className="generate-script-button" onClick={() => generateScript('viral')} disabled={generatingType === 'viral'}><HighlightOutlined />{generatingType === 'viral' ? '生成中' : '生成脚本'}</button>
+          <button className="generate-script-button" onClick={() => generateScript('viral')} disabled={generatingType === 'viral' || !Number.isFinite(operationCosts.scriptGenerate)}>
+            <HighlightOutlined />{generatingType === 'viral' ? '生成中' : '生成脚本'}
+            <OperationCostLabel cost={operationCosts.scriptGenerate} />
+          </button>
         </>
       )}
 
@@ -1725,7 +2175,6 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
               <span className="template-page-status">{visibleTemplatePage} / {templatePageCount}</span>
               <Select
                 value={templateSort}
-                suffixIcon={<DownOutlined />}
                 onChange={(value) => {
                   setTemplateSort(value as TemplateSort);
                   setTemplatePage(1);
@@ -1815,15 +2264,18 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
 
           <section className="template-config-panel">
             <div className="template-config-grid">
-              <label><span>脚本格式</span><Select value={scriptFormat} onChange={setScriptFormat} suffixIcon={<DownOutlined />} options={formatOptions} /></label>
-              <label><span>脚本时长</span><Select value={scriptDuration} onChange={setScriptDuration} suffixIcon={<DownOutlined />} options={durationOptions} /></label>
+              <label><span>脚本格式</span><Select value={scriptFormat} onChange={setScriptFormat} options={formatOptions} /></label>
+              <label><span>脚本时长</span><Select value={scriptDuration} onChange={setScriptDuration} options={durationOptions} /></label>
               <label><span>产品选择</span>{renderBriefSelect()}</label>
               {renderProductFrameUpload('template-upload-field', '产品画面', true)}
             </div>
           </section>
 
           <section className="template-generate-panel">
-            <button className="template-generate-button" onClick={() => generateScript('template')} disabled={generatingType === 'template'}><HighlightOutlined />{generatingType === 'template' ? '生成中' : '生成脚本'}</button>
+            <button className="template-generate-button" onClick={() => generateScript('template')} disabled={generatingType === 'template' || !Number.isFinite(operationCosts.scriptGenerate)}>
+              <HighlightOutlined />{generatingType === 'template' ? '生成中' : '生成脚本'}
+              <OperationCostLabel cost={operationCosts.scriptGenerate} />
+            </button>
           </section>
         </section>
       )}
@@ -1870,7 +2322,6 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
                 <div className="original-scenario-select" aria-label="脚本类型选择">
                   <Select
                     value={selectedOriginalScenario}
-                    suffixIcon={<DownOutlined />}
                     options={originalScenarioSelectOptions}
                     onChange={applyPromptPreset}
                   />
@@ -1887,16 +2338,17 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
             <section className="original-config-section">
               <h3>脚本配置</h3>
               <div className="original-config-grid">
-                <label><span>脚本格式</span><Select value={scriptFormat} onChange={setScriptFormat} suffixIcon={<DownOutlined />} options={formatOptions} /></label>
-                <label><span>脚本时长</span><Select value={scriptDuration} onChange={setScriptDuration} suffixIcon={<DownOutlined />} options={durationOptions} /></label>
+                <label><span>脚本格式</span><Select value={scriptFormat} onChange={setScriptFormat} options={formatOptions} /></label>
+                <label><span>脚本时长</span><Select value={scriptDuration} onChange={setScriptDuration} options={durationOptions} /></label>
                 <label><span>选择产品</span>{renderBriefSelect()}</label>
                 {renderProductFrameUpload('original-upload-field', '上传通用画面', true)}
               </div>
             </section>
 
             <div className="original-generate-actions">
-              <button className="original-generate-button" disabled={!prompt.trim() || generatingType === 'original'} onClick={() => generateScript('original')}>
+              <button className="original-generate-button" disabled={!prompt.trim() || generatingType === 'original' || !Number.isFinite(operationCosts.scriptGenerate)} onClick={() => generateScript('original')}>
                 <HighlightOutlined />{generatingType === 'original' ? '生成中' : '生成脚本'}
+                <OperationCostLabel cost={operationCosts.scriptGenerate} />
               </button>
             </div>
           </section>
@@ -1916,24 +2368,6 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
             </div>
           </div>
         </section>
-      )}
-      {generatingType && (
-        <div className="script-generation-wait" role="status" aria-live="polite" aria-label="AI 正在生成脚本">
-          <section>
-            <div className="script-generation-spinner"><LoadingOutlined spin /></div>
-            <span className="script-generation-eyebrow">AI SCRIPT GENERATION</span>
-            <h2>正在生成脚本，请耐心等待</h2>
-            <p>{generationStage}</p>
-            <div className="script-generation-timeline" aria-hidden="true">
-              <i className="active" /><i className={generationElapsed >= 10 ? 'active' : ''} /><i className={generationElapsed >= 30 ? 'active' : ''} />
-            </div>
-            <div className="script-generation-meta">
-              <span>已等待 <strong>{generationElapsed}</strong> 秒</span>
-              <span>{generationElapsed < 90 ? '通常需要 30–90 秒' : '内容较复杂，生成时间可能稍长'}</span>
-            </div>
-            <small>生成期间请勿关闭页面或重复提交，完成后会自动展示结果。</small>
-          </section>
-        </div>
       )}
       <Modal
         open={frameLibraryOpen}
@@ -1992,58 +2426,71 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
           <section className="script-output-modal">
             <header className="script-output-head">
               <div className="script-output-heading">
-                <span>{currentScript.type === 'viral' ? '爆款复刻' : currentScript.type === 'template' ? '模板脚本' : '原创脚本'}</span>
-                <div className="script-output-title-control">
-                  {isEditingScriptName ? (
-                    <input
-                      autoFocus
-                      value={scriptNameDraft}
-                      maxLength={100}
-                      aria-label="修改脚本名称"
-                      onChange={(event) => setScriptNameDraft(event.target.value)}
-                      onBlur={saveScriptName}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') {
-                          event.preventDefault();
-                          event.currentTarget.blur();
-                        }
-                        if (event.key === 'Escape') {
-                          setIsEditingScriptName(false);
-                          setScriptNameDraft(currentScript.name);
-                        }
-                      }}
+                <div className="script-output-title-stack">
+                  <div className="script-output-title-row">
+                    <div className="script-output-title-control">
+                      {isEditingScriptName ? (
+                        <input
+                          autoFocus
+                          value={scriptNameDraft}
+                          maxLength={100}
+                          aria-label="修改脚本名称"
+                          onChange={(event) => setScriptNameDraft(event.target.value)}
+                          onBlur={saveScriptName}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              event.currentTarget.blur();
+                            }
+                            if (event.key === 'Escape') {
+                              setIsEditingScriptName(false);
+                              setScriptNameDraft(currentScript.name);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <>
+                          <h2 id="script-output-title">{currentScript.name}</h2>
+                          <button type="button" className="script-output-title-edit" aria-label="修改脚本名称" onClick={startEditingScriptName}><EditOutlined /></button>
+                        </>
+                      )}
+                    </div>
+                    <Select
+                      className={`script-status-select is-${currentScript.status}`}
+                      popupClassName="script-status-dropdown"
+                      aria-label="脚本状态"
+                      value={normalizeScriptStatus(currentScript.status)}
+                      disabled={isStatusSaving}
+                      loading={isStatusSaving}
+                      onChange={changeScriptStatus}
+                      options={scriptStatusOptions}
                     />
-                  ) : (
-                    <>
-                      <h2 id="script-output-title">{currentScript.name}</h2>
-                      <button type="button" className="script-output-title-edit" aria-label="修改脚本名称" onClick={startEditingScriptName}><EditOutlined /></button>
-                    </>
-                  )}
-                </div>
-                <div className="script-output-meta">
-                  <Select
-                    className={`script-status-select is-${currentScript.status}`}
-                    aria-label="脚本状态"
-                    value={normalizeScriptStatus(currentScript.status)}
-                    disabled={isStatusSaving}
-                    loading={isStatusSaving}
-                    onChange={changeScriptStatus}
-                    options={scriptStatusOptions}
-                    suffixIcon={<DownOutlined />}
-                  />
-                  <em>{currentScript.duration || scriptDuration}</em>
-                  <em>{currentScript.formatName || scriptFormats.find((item) => item.code === currentScript.format)?.name || selectedScriptFormat?.name || '分镜脚本表'}</em>
-                  <em>{scriptSegmentRows.length || storyboardRows.length || 1} 个镜头</em>
+                  </div>
+                  <div className="script-output-meta">
+                    {currentScriptLeadingMeta.filter(Boolean).map((label) => <em key={`leading-${label}`}>{label}</em>)}
+                    <em>{currentScriptDurationLabel}</em>
+                    <em>{currentScriptFormatLabel}</em>
+                    {currentScriptTrailingMeta.filter(Boolean).map((label) => <em key={`trailing-${label}`}>{label}</em>)}
+                  </div>
                 </div>
               </div>
-              <button type="button" aria-label="关闭生成结果" onClick={closeResultDialog}>×</button>
+              <div className="script-output-head-actions">
+                <button type="button" onClick={copyCurrentScriptLink}><ShareAltOutlined /><span>分享</span></button>
+                <button type="button" onClick={() => copyText(withScriptContentTitle(currentScript.content, currentScript.name))}><CopyOutlined /><span>复制</span></button>
+                <button type="button" onClick={createScriptExport}><DownloadOutlined /><span>下载</span></button>
+                <button type="button" className="script-output-confirm" disabled={isScriptContentSaving} onClick={() => void saveCurrentScriptAndClose()}>
+                  {isScriptContentSaving ? <LoadingOutlined spin /> : <CheckCircleOutlined />}
+                  <span>{isScriptContentSaving ? '保存中' : '确认OK'}</span>
+                </button>
+                <button type="button" className="script-output-close" aria-label="关闭生成结果" onClick={closeResultDialog}>×</button>
+              </div>
             </header>
-            <article className="script-output-content script-output-layout polish-workbench-layout">
+            <article className={`script-output-content script-output-layout polish-workbench-layout ${sidePanelCollapsed ? 'is-side-collapsed' : ''}`}>
               <section className="polish-preview-panel">
                 <header>
                   <div>
                     <span>{isManualEditing ? '人工编辑中' : '脚本预览'}</span>
-                    <strong>{isManualEditing ? '全部字段均可修改，也可以新增镜头行' : '默认完整展示，AI 返回后自动刷新'}</strong>
+                    <strong>{isManualEditing ? '全部字段均可修改，也可以新增镜头行' : '默认完整展示，返回后自动刷新'}</strong>
                   </div>
                   <div className="polish-preview-actions">
                     {isManualEditing && (
@@ -2061,13 +2508,12 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
                     </button>
                     <button
                       type="button"
-                      className={annotationMode ? 'active' : ''}
                       disabled={isPolishing || isManualEditing}
-                      onClick={() => setAnnotationMode((enabled) => !enabled)}
+                      onClick={openSelectedCellComment}
                     >
-                      <CommentOutlined />批注修改{scriptAnnotations.length ? `（${scriptAnnotations.length}）` : ''}
+                      <CommentOutlined />评论
                     </button>
-                    <button type="button" disabled={!scriptVersions.length || isPolishing} onClick={() => setVersionHistoryOpen(true)}>
+                    <button type="button" disabled={!scriptVersions.length || isPolishing} onClick={openVersionHistory}>
                       <HistoryOutlined />历史版本{scriptVersions.length ? `（${scriptVersions.length}）` : ''}
                     </button>
                     <button type="button" disabled={!originalScriptContent || isPolishing} onClick={restoreOriginalScript}>恢复原稿</button>
@@ -2076,14 +2522,53 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
                 <div className={`polish-preview-scroll ${isManualEditing ? 'is-manual-editing' : ''}`}>
                   <section className="script-output-block script-storyboard-block">
                     <div className="script-storyboard-table-wrap">
-                      <table className={`script-storyboard-table ${visibleStoryboardHeaders.length === 4 ? 'is-four-column' : ''} ${visibleStoryboardHeaders.length === 5 ? 'is-five-column' : ''}`}>
+                      <table className={`script-storyboard-table ${visibleStoryboardColumns.length === 4 ? 'is-four-column' : ''} ${visibleStoryboardColumns.length === 5 ? 'is-five-column' : ''}`}>
+                        <caption className="script-storyboard-caption">
+                          <div
+                            id="script-title-comment-target"
+                            className={`script-title-target ${selectedStoryboardCell?.rowIndex === TITLE_ROW_INDEX ? 'is-comment-selected' : ''}`}
+                          >
+                            <span>标题：</span>
+                            {isManualEditing ? (
+                              <input
+                                className="script-title-editor"
+                                aria-label="编辑脚本标题"
+                                value={scriptContentTitle}
+                                maxLength={100}
+                                onChange={(event) => updateScriptContentTitle(event.target.value)}
+                              />
+                            ) : (
+                              <button
+                                type="button"
+                                className="script-title-select"
+                                aria-label={`选择标题：${scriptContentTitle}`}
+                                onClick={selectScriptTitle}
+                              >
+                                {scriptContentTitle}
+                              </button>
+                            )}
+                            {!isManualEditing && titleReviewComments.length > 0 && (
+                              <button
+                                type="button"
+                                className={`script-title-annotation ${titleReviewComments.some(isActiveReviewComment) ? 'has-current' : 'is-historical'}`}
+                                aria-label={`查看标题的 ${titleReviewComments.length} 条评论`}
+                                title={`${titleReviewComments.length} 条标题评论${titleReviewComments.every((item) => !isActiveReviewComment(item)) ? '（来自历史版本）' : ''}`}
+                                onClick={() => {
+                                  selectScriptTitle();
+                                  const firstComment = titleReviewComments[0];
+                                  if (firstComment) revealReviewComment(firstComment.id);
+                                }}
+                              />
+                            )}
+                          </div>
+                        </caption>
                         <colgroup>
-                          {visibleStoryboardHeaders.map((header) => <col key={header} className={storyboardColumnClass(header)} />)}
+                          {visibleStoryboardColumns.map(({ header, index }) => <col key={`${header}-${index}`} className={storyboardColumnClass(header)} />)}
                         </colgroup>
                         <thead>
                           <tr>
-                            {visibleStoryboardHeaders.map((header, index) => (
-                              <th key={header} className={storyboardColumnClass(header)}>
+                            {visibleStoryboardColumns.map(({ header, index }) => (
+                              <th key={`${header}-${index}`} className={storyboardColumnClass(header)}>
                                 {index === storyboardDurationColumnIndex ? '时长(s)' : header}
                               </th>
                             ))}
@@ -2092,41 +2577,56 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
                         <tbody>
                           {storyboardRows.length ? storyboardRows.map((row, rowIndex) => (
                             <tr key={row.key}>
-                              {storyboardHeaders.map((header, index) => (
-                                <td key={`${row.key}-${header}`} className={storyboardColumnClass(header)}>
+                              {visibleStoryboardColumns.map(({ header, index }) => (
+                                <td
+                                  key={`${row.key}-${header}`}
+                                  id={`storyboard-cell-${rowIndex}-${index}`}
+                                  className={`${storyboardColumnClass(header)} ${selectedStoryboardCell?.rowIndex === rowIndex && selectedStoryboardCell.columnIndex === index ? 'is-comment-selected' : ''}`}
+                                >
                                   {isManualEditing ? (
                                     <textarea
                                       className="storyboard-cell-editor"
                                       aria-label={`编辑第 ${rowIndex + 1} 行${header}`}
                                       value={storyboardCellEditorText(row.cells[index], index)}
                                       onChange={(event) => updateStoryboardCell(rowIndex, index, event.target.value)}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter') event.stopPropagation();
+                                      }}
                                     />
                                   ) : (
-                                    <div className={`storyboard-cell-display ${annotationMode ? 'is-annotating' : ''}`}>
+                                    <div
+                                      className="storyboard-cell-display"
+                                      role="button"
+                                      tabIndex={0}
+                                      aria-label={`选择第 ${rowIndex + 1} 行${header}`}
+                                      onClick={() => selectStoryboardCell({ rowIndex, columnIndex: index, columnLabel: header, originalText: storyboardCellText(row.cells[index], index) })}
+                                      onKeyDown={(event) => {
+                                        if (event.key === 'Enter' || event.key === ' ') {
+                                          event.preventDefault();
+                                          selectStoryboardCell({ rowIndex, columnIndex: index, columnLabel: header, originalText: storyboardCellText(row.cells[index], index) });
+                                        }
+                                      }}
+                                    >
                                       <span className="storyboard-cell-content">{storyboardCellText(row.cells[index], index)}</span>
-                                      {scriptAnnotations.find((item) => item.rowIndex === rowIndex && item.columnIndex === index) ? (
+                                      {commentsForStoryboardCell(rowIndex, index).length > 0 && (
                                         <button
                                           type="button"
-                                          className="storyboard-cell-annotation"
-                                          aria-label={`编辑第 ${rowIndex + 1} 行${header}批注`}
-                                          title={scriptAnnotations.find((item) => item.rowIndex === rowIndex && item.columnIndex === index)?.content}
-                                          onClick={() => openCellAnnotation(rowIndex, index, header, storyboardCellText(row.cells[index], index))}
+                                          className={`storyboard-cell-annotation ${commentsForStoryboardCell(rowIndex, index).some(isActiveReviewComment) ? 'has-current' : 'is-historical'}`}
+                                          aria-label={`查看第 ${rowIndex + 1} 行${header}的 ${commentsForStoryboardCell(rowIndex, index).length} 条评论`}
+                                          title={`${commentsForStoryboardCell(rowIndex, index).length} 条评论${commentsForStoryboardCell(rowIndex, index).every((item) => !isActiveReviewComment(item)) ? '（来自历史版本）' : ''}`}
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            selectStoryboardCell({ rowIndex, columnIndex: index, columnLabel: header, originalText: storyboardCellText(row.cells[index], index) });
+                                            const firstComment = commentsForStoryboardCell(rowIndex, index)[0];
+                                            if (firstComment) revealReviewComment(firstComment.id);
+                                          }}
                                         >
-                                          <CommentOutlined />
                                         </button>
-                                      ) : annotationMode ? (
-                                        <button
-                                          type="button"
-                                          className="storyboard-cell-comment-trigger"
-                                          aria-label={`添加第 ${rowIndex + 1} 行${header}批注`}
-                                          title={`批注第 ${rowIndex + 1} 行${header}`}
-                                          onClick={() => openCellAnnotation(rowIndex, index, header, storyboardCellText(row.cells[index], index))}
-                                        ><CommentOutlined /></button>
-                                      ) : null}
+                                      )}
                                     </div>
                                   )}
                                   {isManualEditing
-                                    && index === 0
+                                    && index === visibleStoryboardColumns[0]?.index
                                     && !row.cells.some((cell) => /总计|总时长|总时间/.test(cell))
                                     && (
                                       <>
@@ -2173,11 +2673,15 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
                 </div>
               </section>
 
-              <section className="polish-chat-panel">
+              {!sidePanelCollapsed && <section className="polish-chat-panel">
                 <div className="polish-chat-title">
-                  <div><MessageOutlined /><strong>AI 继续润色</strong></div>
-                  <span>{isPolishing ? '润色中' : '可继续提修改意见'}</span>
+                  <div className="polish-panel-switcher">
+                    {scriptAccess?.canUseAi !== false && <button type="button" className={sidePanelMode === 'ai' ? 'active' : ''} onClick={() => setSidePanelMode('ai')}><RobotOutlined />AI 助手</button>}
+                    <button type="button" className={sidePanelMode === 'review' ? 'active' : ''} onClick={() => setSidePanelMode('review')}><CommentOutlined />评论</button>
+                  </div>
+                  <button type="button" className="polish-panel-collapse" title="收起侧边栏" onClick={() => setSidePanelCollapsed(true)}><RightOutlined /></button>
                 </div>
+                {sidePanelMode === 'ai' ? <>
                 <div className="polish-chat-messages">
                   {polishMessages.map((item) => (
                     <div key={item.id} className={`polish-message ${item.role} ${item.status === 'failed' ? 'failed' : ''}`}>
@@ -2191,11 +2695,6 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
                       <p><LoadingOutlined spin /> 正在理解修改要求并重写脚本...</p>
                     </div>
                   )}
-                </div>
-                <div className="polish-quick-prompts">
-                  {polishQuickPrompts.map((item) => (
-                    <button key={item} type="button" disabled={isPolishing} onClick={() => polishCurrentScript(item)}>{item}</button>
-                  ))}
                 </div>
                 <div className="polish-input-box">
                   {scriptAnnotations.length > 0 && (
@@ -2229,38 +2728,51 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
                       </div>
                     </div>
                   )}
-                  <div className="polish-frame-reference">
+                  <div className="polish-reference-row">
                     <button
                       type="button"
-                      className={productFrame ? 'has-file' : ''}
-                      disabled={isPolishing || isProductFrameUploading}
-                      onClick={openFrameLibrary}
+                      className="polish-apply-comments"
+                      disabled={isPolishing || !actionableReviewComments.length || !Number.isFinite(operationCosts.scriptPolish)}
+                      title={actionableReviewComments.length ? `将自动按当前内容 ${actionableReviewComments.length} 条评论修改` : '当前内容暂无可处理评论'}
+                      onClick={applyReviewCommentsWithAi}
                     >
-                      {isProductFrameUploading ? <LoadingOutlined spin /> : <FolderOutlined />}
-                      <span>
-                        <strong title={productFrame?.fileName || undefined}>
-                          {isProductFrameUploading
-                            ? '上传并入库中…'
-                            : productFrame?.fileName || '上传 / 选择产品画面'}
-                        </strong>
-                        <small>{productFrame ? '已引用该文件用于本次润色' : 'JPG / PNG / XLS / XLSX / CSV'}</small>
-                      </span>
+                      <CommentOutlined />按评论修改
+                      {actionableReviewComments.length > 0 && <em>{actionableReviewComments.length}</em>}
+                      <OperationCostLabel cost={operationCosts.scriptPolish} />
                     </button>
-                    {productFrame && (
+                    <div className="polish-frame-reference">
                       <button
                         type="button"
-                        className="polish-frame-reference-remove"
-                        aria-label="移除当前产品画面"
-                        title="移除当前引用，文件库原文件仍会保留"
-                        disabled={isPolishing}
-                        onClick={() => {
-                          setProductFrame(null);
-                          message.success('已移除当前产品画面引用');
-                        }}
+                        className={productFrame ? 'has-file' : ''}
+                        disabled={isPolishing || isProductFrameUploading}
+                        onClick={openFrameLibrary}
                       >
-                        <DeleteOutlined />
+                        {isProductFrameUploading ? <LoadingOutlined spin /> : <FolderOutlined />}
+                        <span>
+                          <strong title={productFrame?.fileName || undefined}>
+                            {isProductFrameUploading
+                              ? '上传并入库中…'
+                              : productFrame?.fileName || '上传 / 选择产品画面'}
+                          </strong>
+                          <small>{productFrame ? '已引用该文件用于本次润色' : 'JPG / PNG / XLS / XLSX / CSV'}</small>
+                        </span>
                       </button>
-                    )}
+                      {productFrame && (
+                        <button
+                          type="button"
+                          className="polish-frame-reference-remove"
+                          aria-label="移除当前产品画面"
+                          title="移除当前引用，文件库原文件仍会保留"
+                          disabled={isPolishing}
+                          onClick={() => {
+                            setProductFrame(null);
+                            message.success('已移除当前产品画面引用');
+                          }}
+                        >
+                          <DeleteOutlined />
+                        </button>
+                      )}
+                    </div>
                   </div>
                   <textarea
                     ref={polishInputRef}
@@ -2293,25 +2805,90 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
                     }}
                     placeholder="输入修改要求；键入 @ 可调用产品 Brief，例如：@九号平衡车 只选两个特色卖点重写第 2、3 个镜头。"
                   />
-                  <button type="button" disabled={isPolishing || (!polishInput.trim() && !scriptAnnotations.length)} onClick={() => polishCurrentScript()}><SendOutlined />发送修改要求</button>
+                  <button type="button" disabled={isPolishing || (!polishInput.trim() && !scriptAnnotations.length) || !Number.isFinite(operationCosts.scriptPolish)} onClick={() => polishCurrentScript()}>
+                    <SendOutlined />发送修改要求
+                    <OperationCostLabel cost={operationCosts.scriptPolish} />
+                  </button>
                 </div>
-              </section>
+                </> : <>
+                  <div className="polish-review-comments">
+                    {reviewComments.map((item) => {
+                      const isHistorical = !isActiveReviewComment(item);
+                      const authorName = item.username?.trim() || '未知用户';
+                      const canEdit = item.mine || item.userId === currentUserId;
+                      const canDelete = item.deletable || canEdit;
+                      const location = item.rowIndex == null
+                        ? '整篇意见'
+                        : isTitleReviewComment(item)
+                          ? '标题'
+                          : `第 ${item.rowIndex + 1} 行${item.columnKey == null ? '' : ` · ${storyboardHeaders[Number(item.columnKey)] || `第 ${Number(item.columnKey) + 1} 列`}`}`;
+                      const menuItems = [
+                        { key: 'reply', icon: <CommentOutlined />, label: '回复' },
+                        ...(canEdit ? [
+                          { key: 'edit', icon: <EditOutlined />, label: '编辑' },
+                        ] : []),
+                        ...(canDelete ? [
+                          { key: 'delete', icon: <DeleteOutlined />, label: '删除', danger: true },
+                        ] : []),
+                      ];
+                      return (
+                      <article id={`polish-review-comment-${item.id}`} key={item.id} className={`${item.parentId ? 'is-reply' : ''} ${isHistorical ? 'is-historical' : ''} ${selectedStoryboardCell && selectedStoryboardCell.rowIndex === item.rowIndex && selectionColumnKey(selectedStoryboardCell) === item.columnKey ? 'is-active' : ''}`} onClick={() => locateReviewComment(item)}>
+                        <header className="polish-review-comment-head">
+                          <span className="polish-review-comment-avatar">{item.userAvatar ? <img src={item.userAvatar} alt="" /> : authorName.slice(0, 1).toUpperCase()}</span>
+                          <div className="polish-review-comment-meta">
+                            <div><strong>{authorName}</strong><time>{item.createdAt?.replace('T', ' ').replace(/\.\d+$/, '')}</time></div>
+                            <small>{item.versionId ? `V${scriptVersions.find((version) => version.id === item.versionId)?.versionNo || '?'} · ${location}` : location}{isHistorical ? ' · 历史评论' : ''}</small>
+                          </div>
+                          <Dropdown
+                            trigger={['click']}
+                            placement="bottomRight"
+                            menu={{
+                              items: menuItems,
+                              onClick: ({ key, domEvent }) => {
+                                domEvent.stopPropagation();
+                                if (key === 'reply') {
+                                  setReviewReplyTo(item.id);
+                                  setReviewEditingId(undefined);
+                                  setReviewDraft('');
+                                }
+                                if (key === 'edit') {
+                                  setReviewEditingId(item.id);
+                                  setReviewReplyTo(undefined);
+                                  setReviewDraft(item.content);
+                                }
+                                if (key === 'delete') void deleteInternalReviewComment(item.id);
+                                window.setTimeout(() => reviewInputRef.current?.focus(), 0);
+                              },
+                            }}
+                          >
+                            <button type="button" className="polish-review-comment-more" aria-label="评论操作" onClick={(event) => event.stopPropagation()}><MoreOutlined /></button>
+                          </Dropdown>
+                        </header>
+                        <p>{item.content}</p>
+                      </article>
+                    );})}
+                    {!reviewComments.length && <div className="polish-review-empty"><CommentOutlined /><span>暂无评论</span></div>}
+                  </div>
+                  <div className="polish-review-editor">
+                    {reviewEditingId && <span>正在编辑自己的批注 <button type="button" onClick={() => { setReviewEditingId(undefined); setReviewDraft(''); }}>取消</button></span>}
+                    {reviewReplyTo && <span>正在回复一条批注 <button type="button" onClick={() => { setReviewReplyTo(undefined); setReviewDraft(''); }}>取消</button></span>}
+                    {!reviewEditingId && !reviewReplyTo && selectedStoryboardCell && <span className="polish-review-target"><CommentOutlined />{selectedStoryboardCell.rowIndex === TITLE_ROW_INDEX ? '标题' : `第 ${selectedStoryboardCell.rowIndex + 1} 行 · ${selectedStoryboardCell.columnLabel}`}<button type="button" onClick={() => setSelectedStoryboardCell(undefined)}>取消定位</button></span>}
+                    <textarea ref={reviewInputRef} value={reviewDraft} onChange={(event) => setReviewDraft(event.target.value)} placeholder={selectedStoryboardCell ? `输入${selectedStoryboardCell.rowIndex === TITLE_ROW_INDEX ? '标题' : '该单元格'}的修改意见` : '请先点击左侧标题或单元格，再点击顶部“评论”'} />
+                    <button type="button" disabled={reviewSaving || !reviewDraft.trim() || (!reviewEditingId && !reviewReplyTo && !selectedStoryboardCell)} onClick={() => void submitInternalReviewComment()}><SendOutlined />{reviewEditingId ? '更新评论' : '发送评论'}</button>
+                  </div>
+                </>}
+              </section>}
+              {sidePanelCollapsed && <button type="button" className="polish-panel-expand" title="展开侧边栏" onClick={() => setSidePanelCollapsed(false)}><LeftOutlined /><MessageOutlined /></button>}
             </article>
-            <footer className="script-output-actions">
-              <button type="button" onClick={() => copyText(currentScript.content || '')}><CopyOutlined />复制</button>
-              <button type="button" onClick={createScriptExport}><DownloadOutlined />下载</button>
-              <button type="button" onClick={copyCurrentScriptLink}><ShareAltOutlined />分享</button>
-              <button type="button" onClick={saveCurrentScript}><SaveOutlined />保存脚本</button>
-              <button type="button" className="primary" onClick={closeResultDialog}><CheckCircleOutlined />确认OK</button>
-            </footer>
           </section>
         </div>
       )}
       <Modal
         open={Boolean(annotationTarget)}
-        title={annotationTarget ? `批注第 ${annotationTarget.rowIndex + 1} 行 · ${annotationTarget.columnLabel}` : '添加批注'}
+        title={annotationTarget ? (annotationTarget.rowIndex === TITLE_ROW_INDEX ? '批注标题' : `批注第 ${annotationTarget.rowIndex + 1} 行 · ${annotationTarget.columnLabel}`) : '添加批注'}
         className="script-annotation-modal"
         centered
+        confirmLoading={reviewSaving}
         okText="保存批注"
         cancelText="取消"
         onOk={saveCellAnnotation}
@@ -2349,11 +2926,19 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
         title="脚本历史版本"
         className="script-version-modal"
         centered
-        width={720}
+        width={760}
         footer={null}
-        onCancel={() => setVersionHistoryOpen(false)}
+        onCancel={() => {
+          setVersionCompareOpen(false);
+          setVersionHistoryOpen(false);
+        }}
       >
-        <p className="script-version-tip">每次 AI 润色、人工保存和历史恢复都会生成一个版本，可恢复到任意中间稿；恢复操作本身也会留痕。</p>
+        <div className="script-version-toolbar">
+          <p className="script-version-tip">每次 AI 润色、人工保存和历史恢复都会生成一个版本；评论会永久保留在对应版本中。</p>
+          <button type="button" disabled={scriptVersions.length < 2} onClick={() => setVersionCompareOpen(true)}>
+            <HistoryOutlined />全屏对比
+          </button>
+        </div>
         <div className="script-version-list">
           {[...scriptVersions].reverse().map((version) => (
             <article key={version.id} className={version.current ? 'is-current' : ''}>
@@ -2365,6 +2950,12 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
                 </header>
                 <time>{version.createdAt || '时间未记录'}</time>
                 {version.instruction && <p><span>修改要求：</span>{version.instruction}</p>}
+                {reviewComments.some((comment) => comment.versionId === version.id) && (
+                  <div className="script-version-comments">
+                    <span>评审记录 · {reviewComments.filter((comment) => comment.versionId === version.id).length} 条</span>
+                    {reviewComments.filter((comment) => comment.versionId === version.id).slice(0, 3).map((comment) => <blockquote key={comment.id}>{comment.content}</blockquote>)}
+                  </div>
+                )}
                 <small>{version.content.slice(0, 100) || '该版本暂无内容'}{version.content.length > 100 ? '…' : ''}</small>
               </div>
               <button
@@ -2380,6 +2971,81 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, dialogOnly = false }
           {!scriptVersions.length && <div className="script-version-empty">暂无历史版本</div>}
         </div>
       </Modal>
+      {versionCompareOpen && createPortal(
+        <div className="script-version-compare-overlay" role="dialog" aria-modal="true" aria-labelledby="script-version-compare-title">
+          <header className="script-version-compare-head">
+            <button type="button" className="script-version-compare-back" onClick={() => setVersionCompareOpen(false)}>
+              <LeftOutlined /><span>返回版本记录</span>
+            </button>
+            <div>
+              <h2 id="script-version-compare-title">脚本版本对比</h2>
+              <p>{currentScript?.name || '当前脚本'} · 左右表格已同步滚动</p>
+            </div>
+            <div className="script-version-compare-summary">
+              <span>{compareBeforeVersionId === compareAfterVersionId ? '请选择不同版本' : `${versionChangedCellCount} 处差异`}</span>
+              <button type="button" aria-label="关闭版本对比" title="关闭版本对比" onClick={() => setVersionCompareOpen(false)}><CloseOutlined /></button>
+            </div>
+          </header>
+          <main className="script-version-compare-stage">
+            {[{ version: compareBeforeVersion, side: 'before' as const }, { version: compareAfterVersion, side: 'after' as const }].map(({ version, side }, paneIndex) => {
+              const table = side === 'before' ? compareBeforeTable : compareAfterTable;
+              return (
+                <section key={side} className={`script-version-compare-pane is-${side}`}>
+                  <header>
+                    <div>
+                      <em>{side === 'before' ? '改前版本' : '改后版本'}</em>
+                      <strong>{version?.changeNote || version?.title || `版本 V${version?.versionNo || '-'}`}</strong>
+                    </div>
+                    <Select
+                      aria-label={side === 'before' ? '选择改前版本' : '选择改后版本'}
+                      value={side === 'before' ? compareBeforeVersionId : compareAfterVersionId}
+                      onChange={side === 'before' ? setCompareBeforeVersionId : setCompareAfterVersionId}
+                      options={scriptVersions.map((item) => ({ value: item.id, label: `V${item.versionNo}${item.current ? ' · 当前版本' : ''}` }))}
+                      classNames={{ popup: { root: 'script-version-compare-select-dropdown' } }}
+                    />
+                  </header>
+                  <div className="script-version-compare-table-scroll">
+                    <table className="script-version-compare-table">
+                      <colgroup>
+                        {versionCompareHeaders.map((header, index) => <col key={`${side}-${header}-${index}`} className={storyboardColumnClass(header)} />)}
+                      </colgroup>
+                      <thead>
+                        <tr>{versionCompareHeaders.map((header, index) => <th key={`${side}-${header}-${index}`}>{/时长/.test(header) ? '时长(s)' : header}</th>)}</tr>
+                      </thead>
+                      <tbody>
+                        {Array.from({ length: versionCompareRowCount }).map((_, rowIndex) => (
+                          <tr key={`${side}-${rowIndex}`}>
+                            {versionCompareHeaders.map((header, columnIndex) => {
+                              const value = versionCompareCell(table, rowIndex, header);
+                              const changed = compareBeforeVersionId !== compareAfterVersionId && versionCellChanged(rowIndex, header);
+                              return (
+                                <td key={`${side}-${rowIndex}-${header}-${columnIndex}`} className={changed ? 'is-changed' : ''} title={value || '—'}>
+                                  <span>{value || '—'}</span>
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                        {!versionCompareRowCount && <tr><td colSpan={versionCompareHeaders.length}>该版本暂无脚本内容</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                  <footer><span>V{version?.versionNo || '-'}</span><time>{version?.createdAt || '时间未记录'}</time><em>{table.rows.length} 行</em></footer>
+                  {paneIndex === 0 && (
+                    <aside className="script-version-compare-axis" aria-label="同步对比">
+                      <LinkOutlined />
+                      <span>同步</span>
+                      <strong>{compareBeforeVersionId === compareAfterVersionId ? '—' : versionChangedCellCount}</strong>
+                      <small>差异</small>
+                    </aside>
+                  )}
+                </section>
+              );
+            })}
+          </main>
+        </div>,
+        document.body,
+      )}
     </section>
   );
 };

@@ -18,4 +18,15 @@ public class ThreadPoolConfig {
         executor.initialize();
         return executor;
     }
+
+    @Bean("scriptQueueTaskExecutor")
+    public Executor scriptQueueTaskExecutor() {
+        ThreadPoolTaskExecutor executor = new ThreadPoolTaskExecutor();
+        executor.setCorePoolSize(16);
+        executor.setMaxPoolSize(16);
+        executor.setQueueCapacity(200);
+        executor.setThreadNamePrefix("script-queue-");
+        executor.initialize();
+        return executor;
+    }
 }

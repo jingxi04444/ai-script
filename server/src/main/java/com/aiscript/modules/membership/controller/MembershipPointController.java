@@ -8,6 +8,7 @@ import com.aiscript.common.pagination.PageQuery;
 import com.aiscript.modules.membership.service.MembershipPointService;
 import com.aiscript.modules.membership.vo.DailyPointRewardVO;
 import com.aiscript.modules.membership.vo.PointAccountVO;
+import com.aiscript.modules.membership.vo.PointOperationCostsVO;
 import com.aiscript.modules.membership.vo.PointTransactionVO;
 import com.aiscript.security.LoginUser;
 import jakarta.validation.Valid;
@@ -31,6 +32,12 @@ public class MembershipPointController {
     public R<PointAccountVO> account() {
         LoginUser user = currentUser();
         return R.ok(pointService.account(user.getTenantId(), user.getUserId()));
+    }
+
+    @GetMapping("/costs")
+    public R<PointOperationCostsVO> operationCosts() {
+        LoginUser user = currentUser();
+        return R.ok(pointService.operationCosts(user.getTenantId(), user.getUserId()));
     }
 
     @GetMapping("/transactions")

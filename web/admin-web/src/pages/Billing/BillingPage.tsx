@@ -19,7 +19,18 @@ import './billing-page.css';
 
 type BillingSection = 'plans' | 'subscriptions' | 'points' | 'refunds' | 'custom_requests';
 type PurchaseMode = 'once_month' | 'once_quarter' | 'once_year';
+type PointManagementTab = 'costs' | 'packages' | 'adjustment' | 'welcome';
 type PlanSku = MembershipPlan['skus'][number];
+type PointCostCode =
+  | 'BRIEF_DETECT_POINT_COST'
+  | 'VIRAL_SIMPLE_POINT_COST'
+  | 'VIRAL_DEEP_POINT_COST'
+  | 'SCRIPT_GENERATE_POINT_COST'
+  | 'SCRIPT_POLISH_POINT_COST';
+
+type PointCostDrafts = Record<string, Record<PointCostCode, string>>;
+const NEW_USER_WELCOME_POINT = 'NEW_USER_WELCOME_POINT';
+const MEMBERSHIP_TIER_CODES = ['free', 'light', 'pro', 'ultimate'] as const;
 
 interface PlanSkuCard {
   plan: MembershipPlan;
@@ -119,6 +130,47 @@ const purchaseModeOptions: Array<{ value: PurchaseMode; label: string; hint: str
   { value: 'once_year', label: '年卡', hint: '购买一年', badge: '限时优惠' },
 ];
 
+const pointCostRules: Array<{ code: PointCostCode; label: string; hint: string }> = [
+  { code: 'BRIEF_DETECT_POINT_COST', label: 'Brief 检测', hint: '每次执行 Brief 智能检测' },
+  { code: 'VIRAL_SIMPLE_POINT_COST', label: '爆款简易解析', hint: '每次确认生成简易文案分析' },
+  { code: 'VIRAL_DEEP_POINT_COST', label: '爆款深度解析', hint: '每次确认生成深度拉片拆解' },
+  { code: 'SCRIPT_GENERATE_POINT_COST', label: '脚本生成', hint: '每次提交生成脚本' },
+  { code: 'SCRIPT_POLISH_POINT_COST', label: '脚本润色', hint: '每次发送修改要求' },
+];
+
+const pointCostAccessCode: Partial<Record<PointCostCode, string>> = {
+  BRIEF_DETECT_POINT_COST: 'BRIEF_DETECT_ACCESS',
+  VIRAL_SIMPLE_POINT_COST: 'VIRAL_SIMPLE_ACCESS',
+  VIRAL_DEEP_POINT_COST: 'VIRAL_DEEP_ACCESS',
+};
+
+const isPointCostFeatureAvailable = (plan: MembershipPlan, code: PointCostCode) => {
+  const accessCode = pointCostAccessCode[code];
+  if (accessCode) {
+    const access = plan.benefits.find((benefit) => benefit.code === accessCode);
+    return Boolean(access?.enabled && access.value === 'true');
+  }
+  const scriptLimit = plan.benefits.find((benefit) => benefit.code === 'SCRIPT_MONTHLY_LIMIT');
+  return Boolean(scriptLimit?.enabled && scriptLimit.value !== '0');
+};
+
+const pointManagementTabs: Array<{ value: PointManagementTab; label: string; hint: string }> = [
+  { value: 'costs', label: '消耗规则', hint: '配置不同会员的单次操作消耗' },
+  { value: 'packages', label: '水滴包配置', hint: '维护前台可购买的水滴包' },
+  { value: 'adjustment', label: '人工调整', hint: '为指定用户增加或扣减水滴' },
+  { value: 'welcome', label: '新用户赠送', hint: '设置首次注册到账水滴' },
+];
+
+const createPointCostDrafts = (plans: MembershipPlan[]): PointCostDrafts => Object.fromEntries(
+  plans.map((plan) => [
+    plan.id,
+    Object.fromEntries(pointCostRules.map((rule) => [
+      rule.code,
+      String(plan.benefits.find((benefit) => benefit.code === rule.code)?.value ?? '0'),
+    ])) as Record<PointCostCode, string>,
+  ]),
+);
+
 const sectionByPath: Record<string, BillingSection> = {
   '/membership/plans': 'plans',
   '/membership/subscriptions': 'subscriptions',
@@ -130,7 +182,7 @@ const sectionByPath: Record<string, BillingSection> = {
 const sectionMeta: Record<BillingSection, { title: string; description: string }> = {
   plans: { title: '套餐权益', description: '以 SKU 为维度查看全部会员卡，通过弹窗完成前台预览与编辑。' },
   subscriptions: { title: '用户订阅', description: '查看用户当前会员、续费状态和待生效套餐。' },
-  points: { title: '积分管理', description: '维护用户端可售积分包，并支持人工调整用户积分。' },
+  points: { title: '水滴管理', description: '配置各会员等级的水滴消耗、可售水滴包，并支持人工调整用户水滴。' },
   refunds: { title: '退款审核', description: '审核会员退款申请，跟踪退款状态和权益回收结果。' },
   custom_requests: { title: '定制模板工单', description: '处理至尊会员提交的独家模板定制需求。' },
 };
@@ -142,6 +194,15 @@ const copyPlan = (plan: MembershipPlan): MembershipPlan => ({
 });
 
 const formatPrice = (value: number | undefined) => `¥${Number(value || 0).toFixed(2)}`;
+
+const subscriptionStatusMeta: Record<string, { label: string; tone: 'green' | 'orange' | 'gray' | 'red' }> = {
+  active: { label: '有效', tone: 'green' },
+  canceling: { label: '到期取消', tone: 'orange' },
+  past_due: { label: '待续费', tone: 'orange' },
+  canceled: { label: '已取消', tone: 'gray' },
+  expired: { label: '已过期', tone: 'gray' },
+  suspended: { label: '已暂停', tone: 'red' },
+};
 
 const inferPurchaseMode = (sku: PlanSku): PurchaseMode => purchaseModeOptions.find((option) => matchesPurchaseMode(sku, option.value))?.value || 'once_month';
 
@@ -245,6 +306,7 @@ const BillingPage = () => {
   const [subscriptions, setSubscriptions] = useState<AdminSubscription[]>([]);
   const [refunds, setRefunds] = useState<RefundOrder[]>([]);
   const [pointPackages, setPointPackages] = useState<PointPackage[]>([]);
+  const [pointCostDrafts, setPointCostDrafts] = useState<PointCostDrafts>({});
   const [customRequests, setCustomRequests] = useState<TemplateCustomRequest[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -266,6 +328,16 @@ const BillingPage = () => {
   const [skuCreateForm, setSkuCreateForm] = useState<SkuCreateFormState>(createSkuFormState());
   const [benefitCreateOpen, setBenefitCreateOpen] = useState(false);
   const [benefitCreateForm, setBenefitCreateForm] = useState<BenefitCreateFormState>(createBenefitFormState());
+  const [welcomePointDraft, setWelcomePointDraft] = useState('0');
+  const [pointManagementTab, setPointManagementTab] = useState<PointManagementTab>('costs');
+
+  const pointCostPlans = useMemo(
+    () => MEMBERSHIP_TIER_CODES.flatMap((code) => {
+      const plan = plans.find((item) => item.code === code);
+      return plan ? [plan] : [];
+    }),
+    [plans],
+  );
 
   const skuCards = useMemo<PlanSkuCard[]>(() => plans.flatMap((plan) => (plan.skus || []).map((sku) => ({
     plan,
@@ -362,8 +434,20 @@ const BillingPage = () => {
 
   const loadPointPackages = async () => {
     setLoading(true);
-    try { setPointPackages(await membershipApi.pointPackages()); }
-    catch { notify('积分包配置加载失败'); }
+    try {
+      const [packages, planList] = await Promise.all([
+        membershipApi.pointPackages(),
+        membershipApi.getPlans(),
+      ]);
+      setPointPackages(packages);
+      setPlans(planList);
+      setPointCostDrafts(createPointCostDrafts(planList));
+      const freePlan = planList.find((plan) => plan.free);
+      setWelcomePointDraft(String(
+        freePlan?.benefits.find((benefit) => benefit.code === NEW_USER_WELCOME_POINT)?.value ?? '0',
+      ));
+    }
+    catch { notify('水滴配置加载失败'); }
     finally { setLoading(false); }
   };
 
@@ -581,23 +665,95 @@ const BillingPage = () => {
   const adjustPoints = async () => {
     const changePoints = Number(pointForm.changePoints);
     if (!pointForm.userId.trim() || !Number.isFinite(changePoints) || changePoints === 0) {
-      notify('请填写用户 ID 和非 0 的积分调整数量');
+      notify('请填写用户 ID 和非 0 的水滴调整数量');
       return;
     }
     setLoading(true);
     try {
       await membershipApi.adjustPoints({ userId: pointForm.userId.trim(), changePoints, remark: pointForm.remark });
-      notify('积分已调整并写入流水');
+      notify('水滴已调整并写入流水');
       setPointForm({ userId: '', changePoints: '', remark: '' });
-    } catch { notify('积分调整失败'); }
+    } catch { notify('水滴调整失败'); }
     finally { setLoading(false); }
+  };
+
+  const patchPointCost = (planId: string, code: PointCostCode, value: string) => {
+    setPointCostDrafts((current) => ({
+      ...current,
+      [planId]: {
+        ...(current[planId] || Object.fromEntries(pointCostRules.map((rule) => [rule.code, '0'])) as Record<PointCostCode, string>),
+        [code]: value,
+      },
+    }));
+  };
+
+  const savePointCosts = async () => {
+    if (!pointCostPlans.length) {
+      notify('暂无可配置的会员等级');
+      return;
+    }
+    const invalid = pointCostPlans.some((plan) => pointCostRules.some((rule) => {
+      const value = pointCostDrafts[plan.id]?.[rule.code]?.trim() ?? '';
+      const numericValue = Number(value);
+      return !/^\d+$/.test(value) || !Number.isSafeInteger(numericValue) || numericValue > 1_000_000;
+    }));
+    if (invalid) {
+      notify('水滴消耗必须填写 0–1,000,000 的整数');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const updatedPlans = await membershipApi.updatePointCosts(pointCostPlans.flatMap((plan) => pointCostRules.map((rule) => ({
+        planId: plan.id,
+        benefitCode: rule.code,
+        value: Number(pointCostDrafts[plan.id][rule.code]),
+      }))));
+      setPlans(updatedPlans);
+      setPointCostDrafts(createPointCostDrafts(updatedPlans));
+      notify('💧消耗规则已更新');
+    } catch {
+      notify('水滴消耗规则保存失败，请确认已执行最新数据库迁移');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveWelcomePoints = async () => {
+    const freePlan = plans.find((plan) => plan.free);
+    const numericValue = Number(welcomePointDraft.trim());
+    if (!freePlan) {
+      notify('未找到新用户免费套餐');
+      return;
+    }
+    if (!/^\d+$/.test(welcomePointDraft.trim()) || !Number.isSafeInteger(numericValue) || numericValue > 1_000_000) {
+      notify('新用户初始水滴必须填写 0–1,000,000 的整数');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const updatedPlan = await membershipApi.updateBenefit(freePlan.id, NEW_USER_WELCOME_POINT, {
+        value: String(numericValue),
+        enabled: true,
+      });
+      setPlans((current) => current.map((plan) => plan.id === updatedPlan.id ? updatedPlan : plan));
+      setWelcomePointDraft(String(
+        updatedPlan.benefits.find((benefit) => benefit.code === NEW_USER_WELCOME_POINT)?.value ?? numericValue,
+      ));
+      notify('新用户初始💧已更新');
+    } catch {
+      notify('初始水滴保存失败，请确认已执行最新数据库迁移');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const savePointPackage = async () => {
     const price = Number(pointPackageForm.price);
     const points = Number(pointPackageForm.points);
     if (!pointPackageForm.name.trim() || (!pointPackageForm.id && !pointPackageForm.code.trim()) || price <= 0 || !Number.isInteger(points) || points <= 0) {
-      notify('请完整填写积分包编码、名称、有效价格和积分数量');
+      notify('请完整填写水滴包编码、名称、有效价格和水滴数量');
       return;
     }
     const payload = {
@@ -615,10 +771,10 @@ const BillingPage = () => {
       } else {
         await membershipApi.createPointPackage({ ...payload, code: pointPackageForm.code.trim() });
       }
-      notify(pointPackageForm.id ? '积分包已更新' : '积分包已创建');
+      notify(pointPackageForm.id ? '水滴包已更新' : '水滴包已创建');
       setPointPackageForm(createPointPackageFormState());
       await loadPointPackages();
-    } catch { notify('积分包保存失败，请检查编码和字段格式'); }
+    } catch { notify('水滴包保存失败，请检查编码和字段格式'); }
     finally { setLoading(false); }
   };
 
@@ -730,45 +886,184 @@ const BillingPage = () => {
 
       {section === 'subscriptions' && <SectionCard title="用户订阅列表" description="升级立即生效，待降级套餐会单独展示。">
         <div className="membership-admin-filter"><input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="用户名、账号或用户 ID" /><select value={status} onChange={(event) => setStatus(event.target.value)}><option value="">全部状态</option><option value="active">有效</option><option value="canceling">到期取消</option><option value="expired">已过期</option></select><button className="toolbar-btn primary" onClick={() => void loadSubscriptions(1)}>查询</button></div>
-        <div className="table-wrap"><table><thead><tr><th>用户</th><th>套餐 / SKU</th><th>状态</th><th>购买方式</th><th>当前周期</th><th>待生效套餐</th></tr></thead><tbody>{subscriptions.map((item) => <tr key={item.id}><td><strong>{item.username || item.account || item.userId}</strong><small>ID {item.userId}</small></td><td>{item.planName}<small>{item.skuName}</small></td><td><StatusBadge tone={item.status === 'active' ? 'green' : 'gray'}>{item.status}</StatusBadge></td><td>单次购买</td><td>{item.currentPeriodStart}<small>至 {item.currentPeriodEnd}</small></td><td>{item.pendingPlanName || '—'}</td></tr>)}</tbody></table></div>
+        <div className="membership-subscription-table-wrap">
+          <table className="membership-subscription-table">
+            <thead>
+              <tr>
+                <th>用户</th>
+                <th>套餐 / SKU</th>
+                <th>状态</th>
+                <th>购买方式</th>
+                <th>当前周期</th>
+                <th>待生效套餐</th>
+              </tr>
+            </thead>
+            <tbody>
+              {subscriptions.map((item) => {
+                const statusMeta = subscriptionStatusMeta[item.status] || { label: item.status || '未知', tone: 'gray' as const };
+                return (
+                  <tr key={item.id}>
+                    <td>
+                      <div className="membership-subscription-cell">
+                        <strong>{item.username || item.account || `用户 ${item.userId}`}</strong>
+                        <small>用户 ID：{item.userId}</small>
+                      </div>
+                    </td>
+                    <td>
+                      <div className="membership-subscription-cell">
+                        <strong>{item.planName || '未配置套餐'}</strong>
+                        <small>{item.skuName ? `SKU：${item.skuName}` : '未绑定 SKU'}</small>
+                      </div>
+                    </td>
+                    <td><StatusBadge tone={statusMeta.tone}>{statusMeta.label}</StatusBadge></td>
+                    <td>
+                      <div className="membership-subscription-cell membership-subscription-purchase">
+                        <strong>{item.autoRenew ? '自动续费' : '单次购买'}</strong>
+                        {item.cancelAtPeriodEnd ? <small>到期后取消</small> : null}
+                      </div>
+                    </td>
+                    <td>
+                      <div className="membership-subscription-cell membership-subscription-period">
+                        <time dateTime={item.currentPeriodStart}>{item.currentPeriodStart || '—'}</time>
+                        <small>{item.currentPeriodEnd ? <>至 <time dateTime={item.currentPeriodEnd}>{item.currentPeriodEnd}</time></> : '未设置结束时间'}</small>
+                      </div>
+                    </td>
+                    <td><span className="membership-subscription-pending">{item.pendingPlanName || '—'}</span></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         {!subscriptions.length && !loading ? <EmptyState title="暂无订阅记录" description="调整筛选条件后重新查询。" /> : null}
         <Pagination page={page} pageSize={10} total={total} onChange={(next) => void loadSubscriptions(next)} />
       </SectionCard>}
 
       {section === 'points' && <div className="membership-point-page-stack">
-        <SectionCard
-          title="积分包配置"
-          description="这里配置的价格和到账积分会直接展示在用户端“购买积分”页面。"
-          action={<button className="toolbar-btn primary" type="button" onClick={() => setPointPackageForm(createPointPackageFormState())}>新增积分包</button>}
+        <div className="membership-point-tabs" role="tablist" aria-label="水滴管理功能">
+          {pointManagementTabs.map((tab) => <button
+            key={tab.value}
+            id={`membership-point-tab-${tab.value}`}
+            className={pointManagementTab === tab.value ? 'is-active' : ''}
+            type="button"
+            role="tab"
+            aria-selected={pointManagementTab === tab.value}
+            aria-controls="membership-point-tab-panel"
+            onClick={() => setPointManagementTab(tab.value)}
+          >
+            <strong>{tab.label}</strong>
+            <small>{tab.hint}</small>
+          </button>)}
+        </div>
+
+        <div
+          id="membership-point-tab-panel"
+          className="membership-point-tab-panel"
+          role="tabpanel"
+          aria-labelledby={`membership-point-tab-${pointManagementTab}`}
+        >
+        {pointManagementTab === 'welcome' ? <SectionCard
+          title="新用户初始水滴"
+          description="首次创建免费用户账号时一次性到账；已经注册的用户不会补发，也不会重复赠送。"
+          action={<button className="toolbar-btn primary" type="button" onClick={() => void saveWelcomePoints()} disabled={loading}><Save size={16} />保存赠送值</button>}
+        >
+          <div className="membership-point-layout">
+            <div className="membership-point-form">
+              <label className="field">
+                <span>免费新用户初始赠送</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="1000000"
+                  step="1"
+                  inputMode="numeric"
+                  value={welcomePointDraft}
+                  onChange={(event) => setWelcomePointDraft(event.target.value)}
+                />
+                <small>默认示例值为 💧200，可覆盖多次基础体验；设为 0 即关闭赠送。</small>
+              </label>
+            </div>
+            <aside className="membership-point-note"><Coins size={22} /><h3>仅首次赠送</h3><p>赠送流水使用固定请求号防重。后台后续改值只影响新注册用户，不会追溯修改已有用户余额。</p></aside>
+          </div>
+        </SectionCard> : null}
+
+        {pointManagementTab === 'costs' ? <SectionCard
+          title="💧 消耗规则"
+          description="仅按四个会员等级设置；0 表示本次免费，不表示未开放。未开放的功能由套餐权益控制，并在表格中单独标记。"
+          action={<button className="toolbar-btn primary" type="button" onClick={() => void savePointCosts()} disabled={loading}><Save size={16} />保存规则</button>}
+        >
+          <div className="membership-point-cost-table-wrap">
+            <table className="membership-point-cost-table">
+              <thead>
+                <tr>
+                  <th>消耗场景</th>
+                  {pointCostPlans.map((plan) => <th key={plan.id}><strong>{plan.name}</strong><small>L{plan.level || 0} · {plan.code}</small></th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {pointCostRules.map((rule) => <tr key={rule.code}>
+                  <th scope="row"><strong>{rule.label}</strong><small>{rule.hint}</small></th>
+                  {pointCostPlans.map((plan) => {
+                    const available = isPointCostFeatureAvailable(plan, rule.code);
+                    return <td key={plan.id}>
+                      {available ? <>
+                        <label className="membership-point-cost-input">
+                          <span aria-hidden="true">💧</span>
+                          <input
+                            type="number"
+                            min="0"
+                            max="1000000"
+                            step="1"
+                            inputMode="numeric"
+                            aria-label={`${plan.name}${rule.label}水滴消耗`}
+                            value={pointCostDrafts[plan.id]?.[rule.code] ?? '0'}
+                            onChange={(event) => patchPointCost(plan.id, rule.code, event.target.value)}
+                          />
+                        </label>
+                        {pointCostDrafts[plan.id]?.[rule.code] === '0' ? <small className="membership-point-cost-free">本次免费</small> : null}
+                      </> : <div className="membership-point-cost-unavailable"><strong>未开放</strong><small>请到套餐权益中开启</small></div>}
+                    </td>;
+                  })}
+                </tr>)}
+              </tbody>
+            </table>
+          </div>
+          {!pointCostPlans.length && !loading ? <EmptyState title="暂无会员等级" description="请先初始化免费体验版、轻量版、专业版和至尊版。" /> : null}
+        </SectionCard> : null}
+
+        {pointManagementTab === 'packages' ? <SectionCard
+          title="水滴包配置"
+          description="这里配置的价格和到账水滴会直接展示在用户端“购买水滴”页面。"
+          action={<button className="toolbar-btn primary" type="button" onClick={() => setPointPackageForm(createPointPackageFormState())}>新增水滴包</button>}
         >
           <div className="membership-point-package-admin-grid">
             <div className="membership-point-package-list">
               {pointPackages.map((pointPackage) => <button key={pointPackage.id} className={pointPackageForm.id === pointPackage.id ? 'is-active' : ''} type="button" onClick={() => setPointPackageForm(createPointPackageFormState(pointPackage))}>
                 <div><strong>{pointPackage.name}</strong><small>{pointPackage.code}</small></div>
-                <span>{pointPackage.points.toLocaleString()} 积分</span>
+                <span>💧 {pointPackage.points.toLocaleString()}</span>
                 <b>{formatPrice(pointPackage.price)}</b>
                 <StatusBadge tone={pointPackage.status === 1 ? 'green' : 'gray'}>{pointPackage.status === 1 ? '启用' : '停用'}</StatusBadge>
               </button>)}
-              {!pointPackages.length && !loading ? <EmptyState title="暂无积分包" description="点击右上角新增第一个积分包。" /> : null}
+              {!pointPackages.length && !loading ? <EmptyState title="暂无水滴包" description="点击右上角新增第一个水滴包。" /> : null}
             </div>
             <div className="membership-point-package-form">
-              <div className="membership-point-package-form-head"><div><strong>{pointPackageForm.id ? '编辑积分包' : '新增积分包'}</strong><span>保存后用户端自动读取最新配置</span></div>{pointPackageForm.id ? <button type="button" onClick={() => setPointPackageForm(createPointPackageFormState())}>取消编辑</button> : null}</div>
+              <div className="membership-point-package-form-head"><div><strong>{pointPackageForm.id ? '编辑水滴包' : '新增水滴包'}</strong><span>保存后用户端自动读取最新配置</span></div>{pointPackageForm.id ? <button type="button" onClick={() => setPointPackageForm(createPointPackageFormState())}>取消编辑</button> : null}</div>
               <div className="field-grid">
-                <label className="field"><span>积分包编码</span><input value={pointPackageForm.code} disabled={Boolean(pointPackageForm.id)} onChange={(event) => setPointPackageForm({ ...pointPackageForm, code: event.target.value })} placeholder="例如 points_500" /></label>
-                <label className="field"><span>积分包名称</span><input value={pointPackageForm.name} onChange={(event) => setPointPackageForm({ ...pointPackageForm, name: event.target.value })} placeholder="例如 基础积分包" /></label>
+                <label className="field"><span>水滴包编码</span><input value={pointPackageForm.code} disabled={Boolean(pointPackageForm.id)} onChange={(event) => setPointPackageForm({ ...pointPackageForm, code: event.target.value })} placeholder="例如 drops_500" /></label>
+                <label className="field"><span>水滴包名称</span><input value={pointPackageForm.name} onChange={(event) => setPointPackageForm({ ...pointPackageForm, name: event.target.value })} placeholder="例如 基础水滴包" /></label>
                 <label className="field"><span>销售价格</span><input type="number" min="0.01" step="0.01" value={pointPackageForm.price} onChange={(event) => setPointPackageForm({ ...pointPackageForm, price: event.target.value })} /></label>
-                <label className="field"><span>轻量版基础积分</span><input type="number" min="1" step="1" value={pointPackageForm.points} onChange={(event) => setPointPackageForm({ ...pointPackageForm, points: event.target.value })} /><small>专业版按 550/500、至尊版按 600/500 自动加成</small></label>
+                <label className="field"><span>轻量版基础水滴</span><input type="number" min="1" step="1" value={pointPackageForm.points} onChange={(event) => setPointPackageForm({ ...pointPackageForm, points: event.target.value })} /><small>专业版按 550/500、至尊版按 600/500 自动加成</small></label>
                 <label className="field"><span>展示顺序</span><input type="number" value={pointPackageForm.displayOrder} onChange={(event) => setPointPackageForm({ ...pointPackageForm, displayOrder: event.target.value })} /></label>
                 <label className="field"><span>状态</span><select value={pointPackageForm.status} onChange={(event) => setPointPackageForm({ ...pointPackageForm, status: event.target.value as '1' | '0' })}><option value="1">启用</option><option value="0">停用</option></select></label>
                 <label className="field membership-editor-wide"><span>展示说明</span><textarea rows={3} value={pointPackageForm.description} onChange={(event) => setPointPackageForm({ ...pointPackageForm, description: event.target.value })} placeholder="用户端卡片上的简短说明" /></label>
               </div>
-              <button className="toolbar-btn primary membership-point-submit" disabled={loading} onClick={() => void savePointPackage()}><Save size={16} />保存积分包</button>
+              <button className="toolbar-btn primary membership-point-submit" disabled={loading} onClick={() => void savePointPackage()}><Save size={16} />保存水滴包</button>
             </div>
           </div>
-        </SectionCard>
+        </SectionCard> : null}
 
-        <div className="membership-point-layout">
-          <SectionCard title="人工调整积分" description="正数增加、负数扣减；每次操作都会写入不可重复的积分流水。">
+        {pointManagementTab === 'adjustment' ? <div className="membership-point-layout">
+          <SectionCard title="人工调整水滴" description="正数增加、负数扣减；每次操作都会写入不可重复的水滴流水。">
             <div className="membership-point-form">
               <label className="field"><span>用户 ID</span><input value={pointForm.userId} onChange={(event) => setPointForm({ ...pointForm, userId: event.target.value })} placeholder="请输入用户 ID" /></label>
               <label className="field"><span>调整数量</span><input type="number" value={pointForm.changePoints} onChange={(event) => setPointForm({ ...pointForm, changePoints: event.target.value })} placeholder="例如 500 或 -100" /></label>
@@ -776,7 +1071,8 @@ const BillingPage = () => {
             </div>
             <button className="toolbar-btn primary membership-point-submit" disabled={loading} onClick={() => void adjustPoints()}><Coins size={16} />确认调整</button>
           </SectionCard>
-          <aside className="membership-point-note"><Coins size={22} /><h3>操作提示</h3><p>增加积分填写正数，扣减积分填写负数。提交前请核对用户 ID，积分流水生成后不可重复提交。</p></aside>
+          <aside className="membership-point-note"><Coins size={22} /><h3>操作提示</h3><p>增加水滴填写正数，扣减水滴填写负数。提交前请核对用户 ID，水滴流水生成后不可重复提交。</p></aside>
+        </div> : null}
         </div>
       </div>}
 

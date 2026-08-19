@@ -1,7 +1,9 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import {
   AlipayCircleOutlined,
+  CheckSquareFilled,
   CheckOutlined,
+  CloseOutlined,
   CrownOutlined,
   QrcodeOutlined,
   ReloadOutlined,
@@ -20,10 +22,42 @@ import './membership-page.css';
 
 type PurchaseMode = MembershipPurchaseMode['value'];
 
+interface MembershipServiceAgreement {
+  title: string;
+  version: string;
+  effectiveAt: string;
+  content: string;
+  enabled: boolean;
+}
+
+const membershipServiceAgreementFallback: MembershipServiceAgreement = {
+  title: '会员服务协议',
+  version: '1.0',
+  effectiveAt: '',
+  content: '',
+  enabled: false,
+};
+
+const parseMembershipServiceAgreement = (value?: string): MembershipServiceAgreement => {
+  if (!value) return membershipServiceAgreementFallback;
+  try {
+    const parsed = JSON.parse(value) as Partial<MembershipServiceAgreement>;
+    return {
+      title: parsed.title || membershipServiceAgreementFallback.title,
+      version: parsed.version || membershipServiceAgreementFallback.version,
+      effectiveAt: parsed.effectiveAt || '',
+      content: parsed.content || '',
+      enabled: Boolean(parsed.enabled),
+    };
+  } catch {
+    return membershipServiceAgreementFallback;
+  }
+};
+
 const purchaseModeFallbacks: MembershipPurchaseMode[] = [
   { value: 'once_month', label: '单月购买', hint: '购买一个月', enabled: true, displayOrder: 10 },
   { value: 'once_quarter', label: '季卡', hint: '购买一个季度', enabled: true, displayOrder: 20 },
-  { value: 'once_year', label: '年卡', hint: '购买一年', badge: '限时优惠', enabled: true, displayOrder: 30 },
+  { value: 'once_year', label: '年卡', hint: '购买一年', badge: '限时5折', enabled: true, displayOrder: 30 },
 ];
 
 const purchaseModeVisualOrder: Record<PurchaseMode, number> = {
@@ -87,6 +121,33 @@ const isAvailableBenefit = (benefit: MembershipBenefit) => {
   return benefit.enabled && value !== '' && value !== 'false' && !zeroAmount;
 };
 
+const pointBenefitSummary = (benefit: MembershipBenefit) => {
+  const label = benefitLabel(benefit.value, benefit.unit);
+  if (benefit.code === 'DAILY_LOGIN_POINT') return `每日登录赠送 ${label}`;
+  if (benefit.code === 'POINTS_PER_10_YUAN') return `每10元可购买 ${label}`;
+  if (benefit.code === 'POINT_PURCHASE_ACCESS') return benefit.value === 'true' ? '支持购买水滴' : '';
+  return `${benefit.name} ${label}`;
+};
+
+const monthlyScriptSummary = (plan: MembershipPlan) => {
+  const benefit = (plan.benefits || []).find((item) => item.code === 'SCRIPT_MONTHLY_LIMIT');
+  const value = String(benefit?.value || '').trim().toLowerCase();
+  if (!benefit || !isAvailableBenefit(benefit)) return '脚本额度由后台配置';
+  if (value === 'unlimited') return '脚本不限/月';
+
+  const speed = plan.level && plan.level >= 30
+    ? '8h'
+    : plan.level && plan.level >= 20
+      ? '2h'
+      : plan.level && plan.level >= 10
+        ? '30分钟'
+        : '';
+  const period = plan.free ? '' : '/月';
+  return `脚本约${value}条${period}${speed ? `，快至${speed}` : ''}`;
+};
+
+const cardCapabilityLabels = ['brief管理', '爆款拆解', '脚本模板库', 'AI智能分镜脚本'];
+
 const resolveSku = (plan: MembershipPlan | undefined, mode: PurchaseMode) => {
   if (!plan?.skus?.length) return undefined;
   const candidates = plan.skus.filter((sku) => matchesPurchaseMode(sku, mode));
@@ -108,12 +169,23 @@ const formatPeriod = (sku?: MembershipPlanSku) => {
 
 type ComparisonCell = { enabled: boolean; label: string };
 
+const MEMBERSHIP_DESKTOP_CANVAS_WIDTH = 1920;
+const MEMBERSHIP_MOBILE_BREAKPOINT = 900;
+
+const resolveDesktopCanvasScale = () => {
+  if (typeof document === 'undefined') return 1;
+  const viewportWidth = document.documentElement.clientWidth;
+  return viewportWidth > MEMBERSHIP_MOBILE_BREAKPOINT
+    ? Math.min(1, viewportWidth / MEMBERSHIP_DESKTOP_CANVAS_WIDTH)
+    : 1;
+};
+
 const benefitCategoryMeta: Record<string, { label: string; order: number }> = {
   script: { label: '套餐额度', order: 5 },
   brief: { label: 'Brief 权益', order: 10 },
   template: { label: '模板库权益', order: 20 },
   viral: { label: '爆款复刻权益', order: 30 },
-  point: { label: '积分相关权益', order: 40 },
+  point: { label: '水滴相关权益', order: 40 },
   video: { label: '未来视频权益', order: 50 },
   common: { label: '通用基础权益', order: 60 },
 };
@@ -135,7 +207,33 @@ const MembershipHomePage = () => {
   const [submittingSku, setSubmittingSku] = useState<string | null>(null);
   const [order, setOrder] = useState<PaymentOrder | null>(null);
   const [membershipBanner, setMembershipBanner] = useState<HomeBanner | null>(null);
+  const [agreementAccepted, setAgreementAccepted] = useState(false);
+  const [agreementOpen, setAgreementOpen] = useState(false);
+  const [membershipAgreement, setMembershipAgreement] = useState<MembershipServiceAgreement>(membershipServiceAgreementFallback);
+  const [desktopCanvasScale, setDesktopCanvasScale] = useState(resolveDesktopCanvasScale);
   const user = useAuthStore((state) => state.user);
+
+  useEffect(() => {
+    const updateDesktopCanvasScale = () => {
+      const nextScale = resolveDesktopCanvasScale();
+      setDesktopCanvasScale((currentScale) => (
+        Math.abs(currentScale - nextScale) < 0.001 ? currentScale : nextScale
+      ));
+    };
+
+    updateDesktopCanvasScale();
+    window.addEventListener('resize', updateDesktopCanvasScale);
+    window.visualViewport?.addEventListener('resize', updateDesktopCanvasScale);
+    return () => {
+      window.removeEventListener('resize', updateDesktopCanvasScale);
+      window.visualViewport?.removeEventListener('resize', updateDesktopCanvasScale);
+    };
+  }, []);
+
+  const desktopCanvasStyle = useMemo(() => ({
+    '--membership-desktop-scale': desktopCanvasScale,
+    '--membership-desktop-canvas-width': `${MEMBERSHIP_DESKTOP_CANVAS_WIDTH}px`,
+  } as CSSProperties), [desktopCanvasScale]);
 
   const load = async () => {
     setLoading(true);
@@ -169,6 +267,9 @@ const MembershipHomePage = () => {
     siteApi.getHomeBanners()
       .then((items) => setMembershipBanner(items.find((item) => item.imageUrl) || items[0] || null))
       .catch(() => setMembershipBanner(null));
+    siteApi.getConfig()
+      .then((config) => setMembershipAgreement(parseMembershipServiceAgreement(config.membershipServiceAgreementConfig)))
+      .catch(() => setMembershipAgreement(membershipServiceAgreementFallback));
   }, []);
 
   useEffect(() => {
@@ -266,6 +367,10 @@ const MembershipHomePage = () => {
   };
 
   const handlePlanAction = async (plan: MembershipPlan) => {
+    if (!agreementAccepted) {
+      message.warning('请先勾选并同意《会员服务协议》');
+      return;
+    }
     if (plan.free) {
       const sku = plan.skus?.find((item) => item.id === selectedSkuIds[plan.id]) || resolveSku(plan, purchaseMode);
       if (!sku) {
@@ -295,6 +400,8 @@ const MembershipHomePage = () => {
       const quote = await membershipApi.quote(sku.id);
       if (quote.changeType === 'downgrade') {
         Modal.confirm({
+          className: 'app-permission-modal',
+          rootClassName: 'app-permission-modal-root',
           title: '确认降级套餐？',
           content: `降级将在当前周期结束后生效，现有权益可继续使用至 ${quote.effectiveTime || '周期结束'}。`,
           okText: '确认降级',
@@ -363,7 +470,10 @@ const MembershipHomePage = () => {
   };
 
   return (
-    <div className="membership-shell membership-shell-redesign">
+    <div
+      className={`membership-shell membership-shell-redesign${desktopCanvasScale < 0.999 ? ' is-scaled-desktop' : ''}`}
+      style={desktopCanvasStyle}
+    >
       <main className="membership-page membership-page-redesign">
         <header className="membership-design-header" aria-label="会员账户信息">
           <div className="membership-profile-identity">
@@ -372,22 +482,36 @@ const MembershipHomePage = () => {
             </span>
             <div>
               <strong>{user?.username || '会员用户'}</strong>
-              <span>{current?.planName || '尚未开通会员'}</span>
+              <div className="membership-profile-status-row">
+                <span>{current?.planName || '尚未开通会员'}</span>
+                <div className="membership-profile-meta">
+                  <span>套餐到期</span>
+                  <strong>{membershipExpiry ? formatDate(membershipExpiry, 'YYYY.MM.DD HH:mm') : '尚未开通'}</strong>
+                </div>
+                <div className="membership-profile-meta membership-profile-points">
+                  <span>铼河水滴</span>
+                  <strong>💧 {rewardPoints}</strong>
+                </div>
+              </div>
             </div>
           </div>
-          <div className="membership-profile-meta">
-            <span>套餐到期</span>
-            <strong>{membershipExpiry ? formatDate(membershipExpiry, 'YYYY.MM.DD HH:mm') : '尚未开通'}</strong>
-          </div>
-          <div className="membership-profile-meta membership-profile-points">
-            <span>积分详情</span>
-            <strong>{rewardPoints}</strong>
-          </div>
           <nav className="membership-design-nav" aria-label="会员中心导航">
-            <button type="button" onClick={() => navigate('/membership/points')}>购买积分</button>
+            <button type="button" onClick={() => navigate('/membership/points')}>购买水滴</button>
             <button type="button" onClick={() => navigate('/membership/orders')}>订阅管理</button>
             <button type="button" onClick={() => navigate('/membership/exchange')}>会员兑换</button>
           </nav>
+          <button
+            type="button"
+            className="membership-page-close"
+            aria-label="关闭会员中心并返回上一页"
+            title="关闭"
+            onClick={() => {
+              if (window.history.length > 1) navigate(-1);
+              else navigate('/home', { replace: true });
+            }}
+          >
+            <CloseOutlined />
+          </button>
         </header>
 
         {loading ? <div className="membership-loading"><Spin size="large" /></div> : (
@@ -405,8 +529,8 @@ const MembershipHomePage = () => {
                       setOrder(null);
                     }}
                   >
-                    {option.label}<small>{option.hint}</small>
-                    {option.badge && <em>{option.badge}</em>}
+                    <span>{option.label}</span>
+                    {option.value === 'once_year' && <em>限时5折</em>}
                   </button>
                 ))}
               </div>
@@ -421,9 +545,11 @@ const MembershipHomePage = () => {
                     const originalPrice = Number(sku?.originalPrice || sku?.price || 0);
                     const price = Number(sku?.price || 0);
                     const availableBenefits = (plan.benefits || []).filter(isAvailableBenefit);
-                    const cardBenefits = availableBenefits.slice(0, 6);
-                    const highlightBenefits = cardBenefits.slice(0, 2);
-                    const standardBenefits = cardBenefits.slice(2);
+                    const pointSummaries = availableBenefits
+                      .filter((benefit) => benefit.category === 'point')
+                      .map(pointBenefitSummary)
+                      .filter(Boolean)
+                      .slice(0, 2);
                     return (
                       <article
                         key={plan.id}
@@ -453,28 +579,32 @@ const MembershipHomePage = () => {
                             <small>¥</small><strong>{sku ? price.toFixed(0) : '—'}</strong><span>/{sku ? formatPeriod(sku) : '该周期未开放'}</span>
                             {originalPrice > price && <del>¥{originalPrice.toFixed(0)}</del>}
                           </div>
+                          {pointSummaries.length ? (
+                            <div className="membership-plan-point-summary" aria-label="套餐水滴说明">
+                              {pointSummaries.map((summary) => <span key={summary}>{summary}</span>)}
+                            </div>
+                          ) : null}
                         </div>
                         <div className="membership-plan-benefits">
-                          <ul className="membership-card-highlight-list">
-                            {highlightBenefits.map((benefit) => (
-                              <li key={benefit.code}>
-                                <CheckOutlined />
-                                <span>{benefit.name}</span>
-                                <b>{benefitLabel(benefit.value, benefit.unit)}</b>
+                          <ul className="membership-card-benefit-group membership-card-benefit-highlights">
+                            <li>
+                              <CheckSquareFilled className="membership-benefit-check" />
+                              <span>{monthlyScriptSummary(plan)}</span>
+                            </li>
+                            <li>
+                              <CheckSquareFilled className="membership-benefit-check" />
+                              <span>视频权益待上线中</span>
+                            </li>
+                          </ul>
+                          <div className="membership-card-benefit-divider" />
+                          <ul className="membership-card-benefit-group membership-card-benefit-capabilities">
+                            {cardCapabilityLabels.map((label) => (
+                              <li key={label}>
+                                <CheckSquareFilled className="membership-benefit-check" />
+                                <span>{label}</span>
                               </li>
                             ))}
                           </ul>
-                          {standardBenefits.length ? <div className="membership-card-benefit-divider" /> : null}
-                          <ul className="membership-card-standard-list">
-                            {standardBenefits.map((benefit) => (
-                              <li key={benefit.code}>
-                                <CheckOutlined />
-                                <span>{benefit.name}</span>
-                                <b>{benefitLabel(benefit.value, benefit.unit)}</b>
-                              </li>
-                            ))}
-                          </ul>
-                          {!availableBenefits.length ? <p className="membership-plan-empty-benefit">暂无已开放权益</p> : null}
                         </div>
                         <button className="membership-card-select" type="button" disabled={!sku}>
                           {!sku ? '该周期未开放' : isCurrent ? '续费' : '购买'}
@@ -487,22 +617,6 @@ const MembershipHomePage = () => {
                 <div className="membership-empty">暂无可订阅套餐，请先在管理端启用会员套餐。</div>
               )}
 
-              <section className="membership-inline-comparison">
-                <div className="membership-inline-comparison-heading">
-                  <h2>会员订阅，哪个更适合你？</h2>
-                  <button
-                    type="button"
-                    className="membership-comparison-toggle"
-                    aria-controls="membership-benefit-comparison"
-                    onClick={() => document.getElementById('membership-benefit-comparison')?.scrollIntoView({
-                      behavior: 'smooth',
-                      block: 'start',
-                    })}
-                  >
-                    查看会员对比
-                  </button>
-                </div>
-              </section>
             </div>
 
             <aside className="membership-checkout">
@@ -596,9 +710,43 @@ const MembershipHomePage = () => {
                         : '立即购买'}
                 </button>
               )}
-              <p className="membership-agreement">购买前请阅读并同意《会员服务协议》</p>
+              <label className="membership-agreement">
+                <input
+                  type="checkbox"
+                  checked={agreementAccepted}
+                  onChange={(event) => setAgreementAccepted(event.target.checked)}
+                  aria-label="同意会员服务协议"
+                />
+                <span>购买前请阅读并同意
+                  <button
+                    type="button"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setAgreementOpen(true);
+                    }}
+                  >《{membershipAgreement.title || '会员服务协议'}》</button>
+                </span>
+              </label>
               </div>
             </aside>
+
+            <section className="membership-inline-comparison">
+              <div className="membership-inline-comparison-heading">
+                <h2>会员订阅，哪个更适合你？</h2>
+                <button
+                  type="button"
+                  className="membership-comparison-toggle"
+                  aria-controls="membership-benefit-comparison"
+                  onClick={() => document.getElementById('membership-benefit-comparison')?.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'start',
+                  })}
+                >
+                  查看会员对比
+                </button>
+              </div>
+            </section>
           </section>
 
           <section
@@ -663,6 +811,37 @@ const MembershipHomePage = () => {
           </section>
           </Fragment>
         )}
+
+        <Modal
+          open={agreementOpen}
+          footer={null}
+          centered
+          width={760}
+          className="membership-service-agreement-modal"
+          rootClassName="membership-service-agreement-modal-root"
+          title={membershipAgreement.title || '会员服务协议'}
+          onCancel={() => setAgreementOpen(false)}
+        >
+          <div className="membership-service-agreement-meta">
+            <span>版本 {membershipAgreement.version || '1.0'}</span>
+            {membershipAgreement.effectiveAt ? <span>生效时间 {membershipAgreement.effectiveAt.replace('T', ' ')}</span> : null}
+          </div>
+          <article className="membership-service-agreement-content">
+            {membershipAgreement.enabled && membershipAgreement.content
+              ? membershipAgreement.content
+              : '会员服务协议暂未发布，请联系平台管理员在后台“协议管理”中维护并发布。'}
+          </article>
+          <button
+            className="membership-service-agreement-confirm"
+            type="button"
+            onClick={() => {
+              setAgreementAccepted(true);
+              setAgreementOpen(false);
+            }}
+          >
+            我已阅读并同意
+          </button>
+        </Modal>
 
       </main>
     </div>

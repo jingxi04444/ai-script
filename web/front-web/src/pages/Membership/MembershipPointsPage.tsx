@@ -61,7 +61,7 @@ const MembershipPointsPage = () => {
         ? previous
         : pointPackages[0]?.id || '');
     } catch (error) {
-      message.error((error as { message?: string })?.message || '积分购买信息加载失败');
+      message.error((error as { message?: string })?.message || '水滴购买信息加载失败');
     } finally {
       setLoading(false);
     }
@@ -81,7 +81,7 @@ const MembershipPointsPage = () => {
         setOrder(next);
         if (isPaidOrder(next)) {
           clearPolling();
-          message.success('积分包购买成功');
+          message.success('水滴包购买成功');
           void load();
         }
       } catch {
@@ -93,7 +93,7 @@ const MembershipPointsPage = () => {
 
   const submit = async () => {
     if (!selectedPackage) {
-      message.warning('请选择积分包');
+      message.warning('请选择水滴包');
       return;
     }
     setSubmitting(true);
@@ -109,9 +109,9 @@ const MembershipPointsPage = () => {
         submitFormHtml(next.payParams.formHtml);
         return;
       }
-      message.success(`积分包订单已创建：${next.orderNo}`);
+      message.success(`水滴包订单已创建：${next.orderNo}`);
     } catch (error) {
-      message.error((error as { message?: string })?.message || '积分包下单失败');
+      message.error((error as { message?: string })?.message || '水滴包下单失败');
     } finally {
       setSubmitting(false);
     }
@@ -123,7 +123,7 @@ const MembershipPointsPage = () => {
       const next = await paymentApi.queryProviderOrder(order.orderNo);
       setOrder(next);
       if (isPaidOrder(next)) {
-        message.success('支付已完成，积分已经到账');
+        message.success('支付已完成，水滴已经到账');
         await load();
       }
     } catch (error) {
@@ -143,13 +143,13 @@ const MembershipPointsPage = () => {
 
         <section className="membership-points-hero">
           <div>
-            <span className="membership-eyebrow">积分中心</span>
-            <h1>购买积分</h1>
-            <p>积分包由平台统一配置，会员等级越高，同一积分包到账积分越多。</p>
+            <span className="membership-eyebrow">铼河水滴</span>
+            <h1>购买水滴</h1>
+            <p>水滴包由平台统一配置，会员等级越高，同一水滴包到账数量越多。</p>
           </div>
           <div className="membership-points-balance">
-            <span>当前可用积分</span>
-            <strong>{account?.availablePoints ?? '--'}</strong>
+            <span>当前可用水滴</span>
+            <strong>💧 {account?.availablePoints ?? '--'}</strong>
             <small>当前套餐：{membership?.planName || '未开通会员'}</small>
           </div>
         </section>
@@ -157,7 +157,7 @@ const MembershipPointsPage = () => {
         <section className="membership-points-content">
           <div className="membership-point-package-panel">
             <div className="membership-points-section-head">
-              <div><h2>选择积分包</h2><p>当前等级兑换比例：每10元可得 {packages[0]?.pointsPer10Yuan || 0} 积分。</p></div>
+              <div><h2>选择水滴包</h2><p>当前等级兑换比例：每10元可得 💧{packages[0]?.pointsPer10Yuan || 0}。</p></div>
               <span>{packages.length} 个可售套餐</span>
             </div>
             {loading ? <div className="membership-loading"><span>加载中...</span></div> : packages.length ? (
@@ -170,7 +170,7 @@ const MembershipPointsPage = () => {
                     onClick={() => { setSelectedId(pointPackage.id); setOrder(null); }}
                   >
                     <span>{pointPackage.name}</span>
-                    <strong>{pointPackage.points.toLocaleString()}<small> 积分</small></strong>
+                    <strong>{pointPackage.points.toLocaleString()}<small> 💧</small></strong>
                     {pointPackage.basePoints && pointPackage.basePoints !== pointPackage.points
                       ? <small>基础 {pointPackage.basePoints.toLocaleString()} · 会员加成后到账</small>
                       : null}
@@ -179,7 +179,7 @@ const MembershipPointsPage = () => {
                   </button>
                 ))}
               </div>
-            ) : <div className="membership-empty">当前会员等级暂不支持购买积分，请先升级会员套餐。</div>}
+            ) : <div className="membership-empty">当前会员等级暂不支持购买水滴，请先升级会员套餐。</div>}
           </div>
 
           <aside className="membership-point-checkout">
@@ -203,8 +203,8 @@ const MembershipPointsPage = () => {
               <>
                 <div className="membership-point-payment-method"><AlipayCircleOutlined /><span>支付宝支付</span></div>
                 <dl>
-                  <div><dt>积分包</dt><dd>{selectedPackage?.name || '—'}</dd></div>
-                  <div><dt>到账积分</dt><dd>{selectedPackage?.points.toLocaleString() || '—'}</dd></div>
+                  <div><dt>水滴包</dt><dd>{selectedPackage?.name || '—'}</dd></div>
+                  <div><dt>到账水滴</dt><dd>{selectedPackage ? `💧 ${selectedPackage.points.toLocaleString()}` : '—'}</dd></div>
                   <div><dt>应付金额</dt><dd>¥{Number(selectedPackage?.price || 0).toFixed(2)}</dd></div>
                 </dl>
                 <button className="membership-point-submit" type="button" disabled={!selectedPackage || submitting} onClick={() => void submit()}>

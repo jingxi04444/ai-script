@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dropdown, message } from 'antd';
-import { BellOutlined, CheckOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
+import { BellOutlined, CheckOutlined, DeleteOutlined, MoonOutlined, SunOutlined } from '@ant-design/icons';
 import type { MenuProps } from 'antd';
 import { membershipApi } from '../../api/membership';
 import { siteApi } from '../../api/site';
@@ -101,6 +101,7 @@ const HomeRail = ({
   }, [themeMode]);
 
   useEffect(() => {
+    let active = true;
     if (initialMembershipName !== undefined) setMembershipName(initialMembershipName);
     if (initialPointBalance !== undefined) setPointBalance(initialPointBalance);
     const hasMembershipName = Boolean(initialMembershipName);
@@ -111,18 +112,41 @@ const HomeRail = ({
         membershipName: initialMembershipName || '免费体验版',
         pointBalance: initialPointBalance,
       };
-      return;
+    } else {
+      loadMembershipSummary()
+        .then((summary) => {
+          if (!active) return;
+          if (!hasMembershipName) setMembershipName(summary.membershipName);
+          if (!hasPointBalance) setPointBalance(summary.pointBalance);
+        })
+        .catch(() => {
+          if (!active) return;
+          setMembershipName('免费体验版');
+          setPointBalance(null);
+        });
     }
 
-    loadMembershipSummary()
-      .then((summary) => {
-        if (!hasMembershipName) setMembershipName(summary.membershipName);
-        if (!hasPointBalance) setPointBalance(summary.pointBalance);
-      })
-      .catch(() => {
-        setMembershipName('免费体验版');
-        setPointBalance(null);
-      });
+    const refreshPoints = () => {
+      const token = localStorage.getItem(TOKEN_KEY) || '';
+      Promise.all([membershipApi.current(), membershipApi.points()])
+        .then(([membership, account]) => {
+          if (!active) return;
+          const summary = {
+            token,
+            membershipName: membership?.planName || '未开通会员',
+            pointBalance: account?.availablePoints ?? 0,
+          };
+          cachedMembershipSummary = summary;
+          setMembershipName(summary.membershipName);
+          setPointBalance(summary.pointBalance);
+        })
+        .catch(() => undefined);
+    };
+    window.addEventListener('points:changed', refreshPoints);
+    return () => {
+      active = false;
+      window.removeEventListener('points:changed', refreshPoints);
+    };
   }, [initialMembershipName, initialPointBalance]);
 
   useEffect(() => {
@@ -244,11 +268,16 @@ const HomeRail = ({
       label: unreadNotifications > 0 ? `消息中心（${unreadNotifications}）` : '消息中心',
     },
     {
+      key: 'recycle-bin',
+      icon: <DeleteOutlined />,
+      label: '回收站',
+    },
+    {
       type: 'divider',
     },
     {
       key: 'orders',
-      label: '积分消耗记录',
+      label: '水滴消耗记录',
     },
     {
       type: 'divider',
@@ -275,6 +304,10 @@ const HomeRail = ({
     }
     if (key === 'notifications') {
       navigate('/notifications');
+      return;
+    }
+    if (key === 'recycle-bin') {
+      navigate('/recycle-bin');
       return;
     }
     if (key === 'logout') {
@@ -316,7 +349,7 @@ const HomeRail = ({
       </nav>
       <div className="rail-member">
         <button className={`rail-membership-card${activeLabel === '会员中心' ? ' active' : ''}`} type="button" onClick={openMembership}>
-          <span>✦ {pointBalance === null ? '--' : Math.floor(pointBalance)}积分</span>
+          <span aria-label={`铼河水滴余额 ${pointBalance === null ? '加载中' : Math.floor(pointBalance)}`}>💧 {pointBalance === null ? '--' : Math.floor(pointBalance)}</span>
           <strong>{membershipName || '免费体验版'}</strong>
         </button>
         <button className="rail-avatar rail-profile-trigger" type="button" aria-label="打开个人信息" onClick={() => setProfileOpen(true)}>🐣</button>
