@@ -18,4 +18,6 @@ public interface ProductionService {
     TimelineConfigVO getTimeline(Integer projectId);
     ExportJobVO createExport(ExportCreateDTO dto);
     PageResult<ExportJobVO> exportJobs(PageQuery query, String projectId);
+    ExportJobVO retryExport(Integer id);
+    void cancelExport(Integer id);
 }

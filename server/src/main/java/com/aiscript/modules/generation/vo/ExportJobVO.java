@@ -9,6 +9,13 @@ public class ExportJobVO {
     public String fileName;
     public String assetId;
     public String status;
+    public Integer sourceCount;
+    public Integer progress;
+    public Long fileSize;
+    public String errorMessage;
+    public String downloadUrl;
+    public String finishTime;
+    public String expireAt;
     public Boolean removeWatermark;
     public String createdAt;
 }

@@ -1,5 +1,6 @@
 import { config } from '../config';
 import { mockScriptApi } from '../mock/script';
+import { mockTaskCenterApi } from '../mock/taskCenter';
 import api from './request';
 import type { Script, ScriptAccess, ScriptFormatOption, ScriptPolishMessage, ScriptReviewComment, ScriptReviewContext, ScriptTemplate, ScriptVersion, ShareLinkResult, GenerateScriptParams, PolishScriptParams, PolishScriptResult } from '../types/script';
 import type { PaginatedResponse } from '../types/api';
@@ -88,17 +89,25 @@ export const scriptApi = {
     return api.post('/scripts/generate', params, { timeout: 180000 });
   },
 
-  enqueueGeneration: (params: GenerateScriptParams): Promise<ScriptQueueItem> =>
-    api.post('/scripts/generation-queue', params),
+  enqueueGeneration: (params: GenerateScriptParams): Promise<ScriptQueueItem> => {
+    if (config.useMock) return mockTaskCenterApi.enqueueGeneration(params);
+    return api.post('/scripts/generation-queue', params);
+  },
 
-  getGenerationQueue: (): Promise<ScriptQueueState> =>
-    api.get('/scripts/generation-queue'),
+  getGenerationQueue: (): Promise<ScriptQueueState> => {
+    if (config.useMock) return mockTaskCenterApi.generationQueue();
+    return api.get('/scripts/generation-queue');
+  },
 
-  updateGenerationConcurrency: (concurrency: number): Promise<ScriptQueueState> =>
-    api.put('/scripts/generation-queue/concurrency', { concurrency }),
+  updateGenerationConcurrency: (concurrency: number): Promise<ScriptQueueState> => {
+    if (config.useMock) return mockTaskCenterApi.updateConcurrency(concurrency);
+    return api.put('/scripts/generation-queue/concurrency', { concurrency });
+  },
 
-  cancelGeneration: (id: string): Promise<void> =>
-    api.delete(`/scripts/generation-queue/${id}`),
+  cancelGeneration: (id: string): Promise<void> => {
+    if (config.useMock) return mockTaskCenterApi.cancelGeneration(id);
+    return api.delete(`/scripts/generation-queue/${id}`);
+  },
 
   update: (id: string, data: Partial<Script>): Promise<Script> => {
     if (config.useMock) return mockScriptApi.update(id, data);

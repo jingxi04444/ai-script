@@ -3,6 +3,8 @@ package com.aiscript.modules.generation.service.impl;
 import com.aiscript.common.api.ResultCode;
 import com.aiscript.common.exception.BusinessException;
 import com.aiscript.framework.tenant.TenantContext;
+import com.aiscript.modules.brief.entity.AiBrief;
+import com.aiscript.modules.brief.mapper.AiBriefMapper;
 import com.aiscript.modules.generation.entity.AiScriptGenerationQueueItem;
 import com.aiscript.modules.generation.entity.AiScriptQueueSetting;
 import com.aiscript.modules.generation.mapper.AiScriptGenerationQueueItemMapper;
@@ -12,6 +14,8 @@ import com.aiscript.modules.generation.vo.ScriptQueueItemVO;
 import com.aiscript.modules.generation.vo.ScriptQueueStateVO;
 import com.aiscript.modules.membership.service.MembershipEntitlementService;
 import com.aiscript.modules.script.dto.GenerateScriptDTO;
+import com.aiscript.modules.script.entity.AiScriptTemplate;
+import com.aiscript.modules.script.mapper.AiScriptTemplateMapper;
 import com.aiscript.modules.script.service.ScriptReviewService;
 import com.aiscript.security.LoginUser;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
@@ -36,6 +40,8 @@ public class ScriptGenerationQueueServiceImpl implements ScriptGenerationQueueSe
 
     private final AiScriptGenerationQueueItemMapper queueMapper;
     private final AiScriptQueueSettingMapper settingMapper;
+    private final AiBriefMapper briefMapper;
+    private final AiScriptTemplateMapper templateMapper;
     private final MembershipEntitlementService entitlementService;
     private final ScriptReviewService scriptReviewService;
     private final ObjectMapper objectMapper;
@@ -43,12 +49,16 @@ public class ScriptGenerationQueueServiceImpl implements ScriptGenerationQueueSe
     public ScriptGenerationQueueServiceImpl(
         AiScriptGenerationQueueItemMapper queueMapper,
         AiScriptQueueSettingMapper settingMapper,
+        AiBriefMapper briefMapper,
+        AiScriptTemplateMapper templateMapper,
         MembershipEntitlementService entitlementService,
         ScriptReviewService scriptReviewService,
         ObjectMapper objectMapper
     ) {
         this.queueMapper = queueMapper;
         this.settingMapper = settingMapper;
+        this.briefMapper = briefMapper;
+        this.templateMapper = templateMapper;
         this.entitlementService = entitlementService;
         this.scriptReviewService = scriptReviewService;
         this.objectMapper = objectMapper;
@@ -80,7 +90,7 @@ public class ScriptGenerationQueueServiceImpl implements ScriptGenerationQueueSe
         item.setBatchNo(batchNo);
         item.setRequestNo(dto.getRequestNo());
         item.setScriptType(normalizeType(dto.getType()));
-        item.setTaskLabel(taskLabel(dto.getType()));
+        item.setTaskLabel(taskLabel(dto, projectId, user));
         item.setStatus("pending");
         item.setRequestPayload(writePayload(dto));
         try {
@@ -221,12 +231,40 @@ public class ScriptGenerationQueueServiceImpl implements ScriptGenerationQueueSe
         };
     }
 
-    private String taskLabel(String type) {
-        return switch (normalizeType(type)) {
+    private String taskLabel(GenerateScriptDTO dto, Integer projectId, LoginUser user) {
+        String scriptType = normalizeType(dto.getType());
+        String baseLabel = switch (scriptType) {
             case "viral" -> "爆款复刻脚本";
-            case "template" -> "模板脚本";
+            case "template" -> templateLabel(dto.getTemplateId());
             default -> "AI 原创脚本";
         };
+        if (!StringUtils.hasText(dto.getBriefId())) return baseLabel;
+        try {
+            AiBrief brief = briefMapper.selectAccessibleProjectBrief(
+                Integer.valueOf(dto.getBriefId()), projectId, user.getUserId(), user.getTenantId()
+            );
+            if (brief == null) return baseLabel;
+            String productLabel = StringUtils.hasText(brief.getProductName())
+                ? brief.getProductName()
+                : StringUtils.hasText(brief.getBriefName()) ? brief.getBriefName() : brief.getProductModel();
+            if (!StringUtils.hasText(productLabel)) return baseLabel;
+            String label = baseLabel + " · " + productLabel.trim();
+            return label.length() > 120 ? label.substring(0, 120) : label;
+        } catch (NumberFormatException ignored) {
+            return baseLabel;
+        }
+    }
+
+    private String templateLabel(String templateId) {
+        if (!StringUtils.hasText(templateId)) return "模板脚本";
+        try {
+            AiScriptTemplate template = templateMapper.selectById(Integer.valueOf(templateId));
+            return template != null && StringUtils.hasText(template.getTemplateName())
+                ? template.getTemplateName().trim()
+                : "模板脚本";
+        } catch (NumberFormatException ignored) {
+            return "模板脚本";
+        }
     }
 
     private LoginUser currentUser() {

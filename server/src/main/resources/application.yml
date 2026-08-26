@@ -52,3 +52,6 @@ aiscript:
   recycle-bin:
     retention-days: ${RECYCLE_BIN_RETENTION_DAYS:7}  # 回收站默认保留天数
     cleanup-cron: "${RECYCLE_BIN_CLEANUP_CRON:0 20 3 * * ?}"  # 每天 03:20 清理过期内容
+  exports:
+    retention-days: ${EXPORT_RETENTION_DAYS:7}  # 批量下载文件保留天数
+    cleanup-cron: "${EXPORT_CLEANUP_CRON:0 40 3 * * ?}"  # 每天 03:40 清理过期导出文件

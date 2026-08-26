@@ -4,3 +4,4 @@ export * from './brief';
 export * from './script';
 export * from './storyboard';
 export * from './recycleBin';
+export * from './taskCenter';

@@ -1302,12 +1302,21 @@ CREATE TABLE ai_export_job (
   resolution VARCHAR(20) DEFAULT NULL COMMENT '分辨率',
   file_name VARCHAR(240) DEFAULT NULL COMMENT '文件名',
   asset_id INT DEFAULT NULL COMMENT '导出产物素材ID',
+  storage_key VARCHAR(500) DEFAULT NULL COMMENT '导出产物存储Key',
   status VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT '状态',
+  source_count INT NOT NULL DEFAULT 0 COMMENT '包含的源内容数量',
+  progress INT NOT NULL DEFAULT 0 COMMENT '处理进度0-100',
+  file_size BIGINT DEFAULT NULL COMMENT '导出文件字节数',
+  error_message TEXT DEFAULT NULL COMMENT '失败原因',
+  finish_time DATETIME DEFAULT NULL COMMENT '完成时间',
+  expire_at DATETIME DEFAULT NULL COMMENT '下载过期时间',
   create_by INT DEFAULT NULL COMMENT '创建人',
   create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
   PRIMARY KEY (id),
   KEY idx_ai_export_job_project (project_id),
-  KEY idx_ai_export_job_tenant (tenant_id, create_time)
+  KEY idx_ai_export_job_tenant (tenant_id, create_time),
+  KEY idx_ai_export_job_owner_status (tenant_id, create_by, status, create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='导出任务表';
 
 -- =========================

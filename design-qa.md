@@ -61,6 +61,48 @@ final result: passed
 
 ---
 
+# Unified Task Center & Batch Script Download Design QA
+
+- Source visual truth: `/var/folders/2z/y_fszd8x3hd3lgcj2p196fjh0000gn/T/codex-clipboard-5b0cd3d1-e75d-4c73-9dd1-4daf39c95e63.jpg`
+- Browser-rendered implementation: `/private/tmp/ai-script-task-center-generation.png`, `/private/tmp/ai-script-task-center-downloads.png`, and `/private/tmp/ai-script-task-center-mobile.png`
+- Combined comparison evidence: `/private/tmp/ai-script-task-center-qa.png`
+- Browser viewports: 1440 × 900 desktop and 390 × 844 mobile CSS pixels.
+- States checked: generation queue, download queue, success/failure/pending/running export cards, script multi-selection, newly-created batch export, and mobile full-screen presentation.
+
+## Visual comparison
+
+The implementation carries over the source's defining layout: a persistent launcher, a wide panel anchored to the right edge, a clear two-tab task switcher, and vertically stacked task records. The panel intentionally keeps AI Script's existing dark Nano theme instead of copying the unrelated reference application's white transfer sheet.
+
+## Findings and iteration history
+
+1. P1 — the existing queue component was mounted only in an unused `MainLayout`, so the launcher was absent from the active router.
+   - Fix: mount the unified task center from `RequireAuth`, which is the actual wrapper for every authenticated route.
+   - Post-fix evidence: the launcher and task drawer render on the authenticated Assets page and persist while navigating its library views.
+2. P2 — the reference panel was too narrow for status-rich batch export cards if copied literally into the existing product shell.
+   - Fix: use a 560px desktop drawer with restrained card density and collapse it to a full-screen 390px mobile sheet.
+   - Post-fix evidence: ZIP name, count, progress, timestamps, expiry, error copy, and actions remain visible without horizontal clipping.
+3. P1 — batch selection originally had no visible handoff into the background queue.
+   - Fix: after creating an export, close selection mode, update the task count, open the panel directly on “下载任务”, and show a completion-notification promise.
+   - Post-fix evidence: selecting two scripts created a new pending ZIP card and increased the active-task count from three to four.
+
+## Primary interactions tested
+
+- Open and close the persistent task center launcher.
+- Switch between “生成任务” and “下载任务”.
+- Change generation concurrency controls in the panel.
+- Enter script batch-selection mode, select two scripts, and create an export task.
+- Verify automatic opening of the download tab and immediate pending-task feedback.
+- Render pending, running, success, failed, cancel, retry, download, progress, file-size, and expiry states.
+- Render the same task center at 390 × 844 as a full-screen, vertically scrolling mobile panel.
+
+## Console check
+
+No implementation-specific browser errors were observed. The only warnings are pre-existing React Router v7 future-flag notices from the development environment.
+
+final result: passed
+
+---
+
 # Script Source Metadata & Restore Comments Design QA
 
 - Source visual truth: the five annotated screenshots supplied in this task (`codex-clipboard-cb5e3f1b...png` through `codex-clipboard-24e10d0e...png`).

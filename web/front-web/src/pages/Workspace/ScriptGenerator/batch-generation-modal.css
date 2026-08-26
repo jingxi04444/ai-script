@@ -1,0 +1,350 @@
+.batch-generation-modal .ant-modal-content {
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #303735;
+  border-radius: 16px;
+  background: #111513;
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.55);
+}
+
+.batch-generation-modal .ant-modal-body {
+  color: #edf4f0;
+}
+
+.batch-generation-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 26px 28px 20px;
+  border-bottom: 1px solid #29302d;
+  background: linear-gradient(145deg, rgba(91, 213, 115, 0.08), transparent 48%);
+}
+
+.batch-generation-eyebrow {
+  display: block;
+  margin-bottom: 6px;
+  color: #8feaa3;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+}
+
+.batch-generation-header h2 {
+  margin: 0;
+  color: #f7fbf8;
+  font-family: "Songti SC", "STSong", serif;
+  font-size: 26px;
+  font-weight: 800;
+}
+
+.batch-generation-header p {
+  margin: 6px 0 0;
+  color: #909c96;
+  font-size: 12px;
+}
+
+.batch-generation-context {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 3px 14px;
+  margin: 18px 28px 0;
+  padding: 12px 14px;
+  border: 1px solid rgba(120, 222, 146, 0.26);
+  border-radius: 10px;
+  background: rgba(71, 137, 87, 0.1);
+}
+
+.batch-generation-context span {
+  grid-row: 1 / 3;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: #26332b;
+  color: #8ce7a1;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.batch-generation-context strong {
+  color: #eff8f1;
+  font-size: 13px;
+}
+
+.batch-generation-context small {
+  color: #829088;
+  font-size: 10px;
+}
+
+.batch-generation-close,
+.batch-generation-toolbar button,
+.batch-generation-actions button {
+  border: 1px solid #353d39;
+  border-radius: 8px;
+  background: #1a201d;
+  color: #ced8d2;
+}
+
+.batch-generation-close {
+  width: 34px;
+  height: 34px;
+  font-size: 15px;
+}
+
+.batch-generation-toolbar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  padding: 18px 28px 12px;
+}
+
+.batch-generation-toolbar .ant-input-affix-wrapper {
+  height: 38px;
+  border-color: #333c37;
+  background: #191e1b;
+  box-shadow: none;
+}
+
+.batch-generation-toolbar .ant-input,
+.batch-generation-toolbar .ant-input-prefix,
+.batch-generation-toolbar .ant-input-clear-icon {
+  color: #dbe6df;
+  background: transparent;
+}
+
+.batch-generation-toolbar button {
+  min-height: 38px;
+  padding: 0 14px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.batch-generation-list {
+  max-height: 310px;
+  display: grid;
+  gap: 8px;
+  margin: 0 28px;
+  padding: 2px 4px 4px 0;
+  overflow-y: auto;
+}
+
+.batch-generation-template {
+  width: 100%;
+  min-height: 62px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px solid #2d3531;
+  border-radius: 10px;
+  background: #181d1a;
+  color: #e7efea;
+  text-align: left;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.batch-generation-template:hover {
+  border-color: #52715d;
+  transform: translateY(-1px);
+}
+
+.batch-generation-template.is-selected {
+  border-color: #76d88e;
+  background: #19271e;
+  box-shadow: inset 3px 0 0 #75dc8d;
+}
+
+.batch-generation-check {
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #4b5650;
+  border-radius: 50%;
+  color: #0a180e;
+  background: #151a17;
+}
+
+.batch-generation-template.is-selected .batch-generation-check {
+  border-color: #8ee9a2;
+  background: #8ee9a2;
+}
+
+.batch-generation-template-copy {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.batch-generation-template-copy strong,
+.batch-generation-template-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.batch-generation-template-copy strong {
+  font-size: 13px;
+}
+
+.batch-generation-template-copy small,
+.batch-generation-template-category {
+  color: #87938d;
+  font-size: 10px;
+}
+
+.batch-generation-template-category {
+  padding: 4px 7px;
+  border-radius: 6px;
+  background: #222925;
+}
+
+.batch-generation-template.is-locked {
+  opacity: 0.48;
+}
+
+.batch-generation-template.is-locked .batch-generation-check {
+  color: #849089;
+}
+
+.batch-generation-empty {
+  min-height: 120px;
+  display: grid;
+  place-items: center;
+  color: #77817c;
+  font-size: 12px;
+}
+
+.batch-generation-settings {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  margin: 16px 28px 0;
+  padding: 14px 16px;
+  border: 1px solid #303833;
+  border-radius: 10px;
+  background: #171c19;
+}
+
+.batch-generation-settings > div {
+  display: grid;
+  gap: 4px;
+}
+
+.batch-generation-settings strong {
+  color: #ecf5ef;
+  font-size: 12px;
+}
+
+.batch-generation-settings small {
+  color: #839089;
+  font-size: 10px;
+}
+
+.batch-generation-settings .ant-input-number {
+  width: 92px;
+  border-color: #445048;
+  background: #202722;
+}
+
+.batch-generation-settings .ant-input-number-input,
+.batch-generation-settings .ant-input-number-handler {
+  color: #f1f7f3;
+}
+
+.batch-generation-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 20px;
+  padding: 18px 28px 22px;
+  border-top: 1px solid #29302d;
+  background: #0e1210;
+}
+
+.batch-generation-summary {
+  display: grid;
+  gap: 4px;
+}
+
+.batch-generation-summary strong {
+  color: #e8f2eb;
+  font-size: 12px;
+}
+
+.batch-generation-summary span {
+  color: #7f8a84;
+  font-size: 10px;
+}
+
+.batch-generation-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.batch-generation-actions button {
+  min-width: 76px;
+  height: 38px;
+  padding: 0 16px;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+.batch-generation-actions button.primary {
+  min-width: 140px;
+  border-color: #89e69e;
+  background: #89e69e;
+  color: #09140c;
+}
+
+.batch-generation-modal button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+@media (max-width: 680px) {
+  .batch-generation-modal {
+    width: calc(100vw - 20px) !important;
+    max-width: none;
+  }
+
+  .batch-generation-modal .ant-modal-content {
+    max-height: calc(100dvh - 20px);
+  }
+
+  .batch-generation-header,
+  .batch-generation-toolbar,
+  .batch-generation-footer {
+    padding-inline: 18px;
+  }
+
+  .batch-generation-toolbar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .batch-generation-toolbar .ant-input-affix-wrapper {
+    grid-column: 1 / -1;
+  }
+
+  .batch-generation-list,
+  .batch-generation-settings,
+  .batch-generation-context {
+    margin-inline: 18px;
+  }
+
+  .batch-generation-list {
+    max-height: 180px;
+  }
+
+  .batch-generation-footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .batch-generation-actions button {
+    flex: 1;
+  }
+}

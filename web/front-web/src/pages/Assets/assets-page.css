@@ -397,7 +397,9 @@
   color: #67db71;
 }
 .assets-brief-share-tools { display: flex; gap: 8px; margin: 16px 0; }
-.assets-brief-share-tools button { padding: 8px 12px; border: 1px solid #3b4544; border-radius: 8px; background: #1a2020; color: #e8eeee; }
+.assets-brief-share-tools button { display: inline-flex; align-items: center; gap: 6px; padding: 8px 12px; border: 1px solid #3b4544; border-radius: 8px; background: #1a2020; color: #e8eeee; }
+.assets-brief-share-tools button:disabled { cursor: not-allowed; opacity: .45; }
+.assets-script-download-tools button:last-child:not(:disabled) { border-color: rgba(103, 219, 113, .5); background: rgba(80, 208, 93, .12); color: #9af0a2; }
 .assets-brief-share-tools button.danger,
 .assets-brief-delete { border-color: rgba(255, 94, 94, .45); color: #ff8585; }
 .assets-brief-share-tools button.danger:hover,

@@ -4,6 +4,7 @@ import com.aiscript.common.api.PageResult;
 import com.aiscript.common.exception.BusinessException;
 import com.aiscript.common.pagination.PageQuery;
 import com.aiscript.common.util.JsonUtils;
+import com.aiscript.framework.storage.StorageClient;
 import com.aiscript.framework.tenant.TenantContext;
 import com.aiscript.modules.generation.dto.DubbingCreateDTO;
 import com.aiscript.modules.generation.dto.ExportCreateDTO;
@@ -27,15 +28,19 @@ import com.aiscript.modules.generation.vo.VideoSegmentVO;
 import com.aiscript.modules.membership.service.MembershipEntitlementService;
 import com.aiscript.modules.membership.service.MembershipTaskQuotaService;
 import com.aiscript.security.LoginUser;
+import com.aiscript.task.export.ExportTask;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.util.StringUtils;
 
 @Service
@@ -49,6 +54,8 @@ public class ProductionServiceImpl implements ProductionService {
     private final AiExportJobMapper exportJobMapper;
     private final MembershipEntitlementService entitlementService;
     private final MembershipTaskQuotaService taskQuotaService;
+    private final StorageClient storageClient;
+    private final ExportTask exportTask;
 
     public ProductionServiceImpl(
         AiGenerationTaskMapper taskMapper,
@@ -57,7 +64,9 @@ public class ProductionServiceImpl implements ProductionService {
         AiTimelineConfigMapper timelineConfigMapper,
         AiExportJobMapper exportJobMapper,
         MembershipEntitlementService entitlementService,
-        MembershipTaskQuotaService taskQuotaService
+        MembershipTaskQuotaService taskQuotaService,
+        StorageClient storageClient,
+        ExportTask exportTask
     ) {
         this.taskMapper = taskMapper;
         this.videoSegmentMapper = videoSegmentMapper;
@@ -66,6 +75,8 @@ public class ProductionServiceImpl implements ProductionService {
         this.exportJobMapper = exportJobMapper;
         this.entitlementService = entitlementService;
         this.taskQuotaService = taskQuotaService;
+        this.storageClient = storageClient;
+        this.exportTask = exportTask;
     }
 
     @Override
@@ -138,6 +149,15 @@ public class ProductionServiceImpl implements ProductionService {
     @Transactional(rollbackFor = Exception.class)
     public ExportJobVO createExport(ExportCreateDTO dto) {
         Integer projectId = StringUtils.hasText(dto.projectId) ? parseLong(dto.projectId, "项目ID格式不正确") : null;
+        List<String> scriptIds = dto.scriptIds == null
+            ? List.of()
+            : dto.scriptIds.stream().filter(StringUtils::hasText).distinct().toList();
+        if (scriptIds.size() > 200) throw new BusinessException("单次最多下载 200 条脚本");
+        boolean scriptExport = isScriptExport(dto.exportType);
+        if (scriptExport && scriptIds.isEmpty() && projectId == null) {
+            throw new BusinessException("请选择需要下载的脚本");
+        }
+        dto.scriptIds = scriptIds;
         if (Boolean.TRUE.equals(dto.removeWatermark)) {
             entitlementService.requireFeature(currentTenantId(), currentUserId(), "REMOVE_WATERMARK");
         }
@@ -150,20 +170,65 @@ public class ProductionServiceImpl implements ProductionService {
         job.setResolution(dto.resolution);
         job.setFileName(StringUtils.hasText(dto.fileName) ? dto.fileName : "export-" + task.getId());
         job.setStatus("pending");
-        job.setCreateBy(DEFAULT_USER_ID);
+        job.setSourceCount(scriptIds.size());
+        job.setProgress(0);
+        job.setCreateBy(currentUserId());
         exportJobMapper.insert(job);
+        if (scriptExport) launchAfterCommit(job.getId());
         return toExportJobVO(job);
     }
 
     @Override
     public PageResult<ExportJobVO> exportJobs(PageQuery query, String projectId) {
-        LambdaQueryWrapper<AiExportJob> wrapper = new LambdaQueryWrapper<>();
+        LambdaQueryWrapper<AiExportJob> wrapper = new LambdaQueryWrapper<AiExportJob>()
+            .eq(AiExportJob::getTenantId, currentTenantId())
+            .eq(AiExportJob::getCreateBy, currentUserId());
         if (StringUtils.hasText(projectId)) {
             wrapper.eq(AiExportJob::getProjectId, parseLong(projectId, "项目ID格式不正确"));
         }
         wrapper.orderByDesc(AiExportJob::getCreateTime);
         IPage<AiExportJob> page = exportJobMapper.selectPage(new Page<>(query.getPage(), query.getPageSize()), wrapper);
         return new PageResult<>(page.getRecords().stream().map(this::toExportJobVO).toList(), page.getTotal(), page.getCurrent(), page.getSize(), page.getPages());
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ExportJobVO retryExport(Integer id) {
+        AiExportJob job = ownedExportJob(id);
+        if (!"failed".equals(job.getStatus()) && !"canceled".equals(job.getStatus())) {
+            throw new BusinessException("当前下载任务不能重试");
+        }
+        if (!isScriptExport(job.getExportType())) throw new BusinessException("该导出类型暂不支持重新打包");
+        AiGenerationTask previousTask = job.getTaskId() == null ? null : taskMapper.selectById(job.getTaskId());
+        String inputPayload = previousTask == null ? "{}" : previousTask.getInputPayload();
+        AiGenerationTask retryTask = createTask(job.getProjectId(), "export", "批量下载重试", inputPayload);
+        int updated = exportJobMapper.resetForRetry(
+            job.getId(), currentTenantId(), currentUserId(), retryTask.getId()
+        );
+        if (updated != 1) {
+            taskQuotaService.release(retryTask.getQuotaRequestNo());
+            taskMapper.deleteById(retryTask.getId());
+            throw new BusinessException("下载任务状态已变化，请刷新后重试");
+        }
+        job = ownedExportJob(id);
+        launchAfterCommit(job.getId());
+        return toExportJobVO(job);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void cancelExport(Integer id) {
+        AiExportJob job = ownedExportJob(id);
+        if (exportJobMapper.cancelPending(id, currentTenantId(), currentUserId()) != 1) {
+            throw new BusinessException("任务已经开始处理，无法取消");
+        }
+        if (job.getTaskId() != null) {
+            AiGenerationTask task = taskMapper.selectById(job.getTaskId());
+            if (task != null) {
+                taskMapper.markFailed(task.getId(), currentTenantId(), currentUserId(), "CANCELED", "用户取消下载任务");
+                taskQuotaService.release(task.getQuotaRequestNo());
+            }
+        }
     }
 
     private AiGenerationTask createTask(Integer projectId, String type, String label, String inputPayload) {
@@ -246,6 +311,16 @@ public class ProductionServiceImpl implements ProductionService {
         vo.fileName = item.getFileName();
         vo.assetId = item.getAssetId() == null ? null : String.valueOf(item.getAssetId());
         vo.status = item.getStatus();
+        vo.sourceCount = item.getSourceCount();
+        vo.progress = item.getProgress();
+        vo.fileSize = item.getFileSize();
+        vo.errorMessage = item.getErrorMessage();
+        vo.finishTime = item.getFinishTime() == null ? null : item.getFinishTime().toString();
+        vo.expireAt = item.getExpireAt() == null ? null : item.getExpireAt().toString();
+        if ("success".equals(item.getStatus()) && StringUtils.hasText(item.getStorageKey())
+            && (item.getExpireAt() == null || item.getExpireAt().isAfter(LocalDateTime.now()))) {
+            vo.downloadUrl = storageClient.presignedUrl(item.getStorageKey());
+        }
         vo.removeWatermark = exportTaskRemoveWatermark(item.getTaskId());
         vo.createdAt = item.getCreateTime() == null ? null : item.getCreateTime().toString();
         return vo;
@@ -281,5 +356,28 @@ public class ProductionServiceImpl implements ProductionService {
         } catch (Exception ex) {
             throw new BusinessException(message);
         }
+    }
+
+    private AiExportJob ownedExportJob(Integer id) {
+        AiExportJob job = exportJobMapper.selectOwnedById(id, currentTenantId(), currentUserId());
+        if (job == null) throw new BusinessException("下载任务不存在");
+        return job;
+    }
+
+    private void launchAfterCommit(Integer exportJobId) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            exportTask.run(exportJobId);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                exportTask.run(exportJobId);
+            }
+        });
+    }
+
+    private boolean isScriptExport(String exportType) {
+        return "script".equalsIgnoreCase(exportType) || "script_batch".equalsIgnoreCase(exportType);
     }
 }

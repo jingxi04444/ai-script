@@ -40,6 +40,7 @@ import { scriptApi } from '../../../api/script';
 import { siteApi, type SiteConfig } from '../../../api/site';
 import { sourceApi } from '../../../api/source';
 import OperationCostLabel from '../../../components/Membership/OperationCostLabel';
+import TemplateBatchGenerationModal from './TemplateBatchGenerationModal';
 import { useAuthStore } from '../../../stores/authStore';
 import { useWorkspaceStore, type ScriptMode } from '../../../stores/workspaceStore';
 import type { Brief } from '../../../types/brief';
@@ -576,6 +577,8 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
   const [isStatusSaving, setIsStatusSaving] = useState(false);
   const [isScriptContentSaving, setIsScriptContentSaving] = useState(false);
   const [generatingType, setGeneratingType] = useState<ScriptType | null>(null);
+  const [batchGenerationOpen, setBatchGenerationOpen] = useState(false);
+  const [batchGenerating, setBatchGenerating] = useState(false);
   const [templates, setTemplates] = useState<TemplateCard[]>(templateCards);
   const [briefs, setBriefs] = useState<Brief[]>([]);
   const [briefsLoading, setBriefsLoading] = useState(true);
@@ -1740,48 +1743,69 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
     });
   };
 
+  const prepareGenerationContext = async (type: ScriptType) => {
+    let resolvedStructureText = structureText.trim();
+    if (type === 'viral') {
+      if (!analysisText.trim()) {
+        message.warning('请先解析链接，获取文案逐字稿');
+        return null;
+      }
+      if (!copyAnalyzed || !resolvedStructureText) {
+        const analyzedStructure = await analyzeReferenceCopy();
+        if (!analyzedStructure) return null;
+        resolvedStructureText = analyzedStructure.trim();
+      }
+    }
+    return {
+      currentProjectId: await ensureProjectId(),
+      resolvedStructureText,
+    };
+  };
+
+  const buildGenerationPayload = (
+    type: ScriptType,
+    currentProjectId: string,
+    briefId: string | undefined,
+    resolvedStructureText: string,
+    templateIdOverride?: string,
+  ) => ({
+    expectedPointCost: operationCosts.scriptGenerate,
+    projectId: currentProjectId,
+    type,
+    templateId: type === 'template' ? (templateIdOverride || selectedTemplate) : undefined,
+    originalCategoryId: type === 'original' ? currentOriginalCategory?.id : undefined,
+    originalCategoryName: type === 'original' ? currentOriginalCategory?.title : undefined,
+    originalScenarioId: type === 'original' ? currentOriginalScenario?.id : undefined,
+    originalScenarioName: type === 'original' ? currentOriginalScenario?.title : undefined,
+    briefId,
+    referenceUrl: type === 'viral' ? referenceUrl : undefined,
+    duration: scriptDuration,
+    format: scriptFormat,
+    formatRequirement: selectedScriptFormat?.formatRequirement,
+    productFrame: productFrame?.url || productFrame?.fileName,
+    productFrameAssetId: productFrame?.assetId,
+    productImage: productFrame?.url,
+    productFrameFileName: productFrame?.fileName,
+    productFrameContent: productFrame?.extractedText,
+    referenceCopy: type === 'viral' ? analysisText.trim() : undefined,
+    structureAnalysis: type === 'viral' ? resolvedStructureText : undefined,
+    prompt,
+  });
+
   const generateScript = async (type: ScriptType) => {
     if (!Number.isFinite(operationCosts.scriptGenerate)) return message.warning('水滴费用尚未加载，请刷新页面重试');
     if (generationLockedRef.current) return;
     generationLockedRef.current = true;
     setGeneratingType(type);
     try {
-      let resolvedStructureText = structureText.trim();
-      if (type === 'viral') {
-        if (!analysisText.trim()) {
-          message.warning('请先解析链接，获取文案逐字稿');
-          return;
-        }
-        if (!copyAnalyzed || !resolvedStructureText) {
-          const analyzedStructure = await analyzeReferenceCopy();
-          if (!analyzedStructure) return;
-          resolvedStructureText = analyzedStructure.trim();
-        }
-      }
-      const currentProjectId = await ensureProjectId();
-      const generationPayload = {
-        expectedPointCost: operationCosts.scriptGenerate,
-        projectId: currentProjectId,
+      const context = await prepareGenerationContext(type);
+      if (!context) return;
+      const generationPayload = buildGenerationPayload(
         type,
-        templateId: type === 'template' ? selectedTemplate : undefined,
-        originalCategoryId: type === 'original' ? currentOriginalCategory?.id : undefined,
-        originalCategoryName: type === 'original' ? currentOriginalCategory?.title : undefined,
-        originalScenarioId: type === 'original' ? currentOriginalScenario?.id : undefined,
-        originalScenarioName: type === 'original' ? currentOriginalScenario?.title : undefined,
-        briefId: selectedBriefId,
-        referenceUrl: type === 'viral' ? referenceUrl : undefined,
-        duration: scriptDuration,
-        format: scriptFormat,
-        formatRequirement: selectedScriptFormat?.formatRequirement,
-        productFrame: productFrame?.url || productFrame?.fileName,
-        productFrameAssetId: productFrame?.assetId,
-        productImage: productFrame?.url,
-        productFrameFileName: productFrame?.fileName,
-        productFrameContent: productFrame?.extractedText,
-        referenceCopy: type === 'viral' ? analysisText.trim() : undefined,
-        structureAnalysis: type === 'viral' ? resolvedStructureText : undefined,
-        prompt,
-      };
+        context.currentProjectId,
+        selectedBriefId,
+        context.resolvedStructureText,
+      );
       const requestNo = operationRequestNo(
         generationRequestRef,
         'script_generate',
@@ -1798,6 +1822,57 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
       message.error(errorMessage || '脚本生成失败');
     } finally {
       setGeneratingType(null);
+      generationLockedRef.current = false;
+    }
+  };
+
+  const openBatchGeneration = () => {
+    if (briefsLoading) return message.info('Brief 正在加载，请稍候');
+    if (!selectedBriefId) return message.warning('请先选择一个产品 Brief');
+    if (!templates.some((template) => !template.locked)) return message.warning('当前没有可用的脚本模板');
+    setBatchGenerationOpen(true);
+  };
+
+  const submitBatchGeneration = async (templateIds: string[], copiesPerTemplate: number) => {
+    if (!Number.isFinite(operationCosts.scriptGenerate)) {
+      message.warning('水滴费用尚未加载，请刷新页面重试');
+      return false;
+    }
+    if (generationLockedRef.current || !templateIds.length || !selectedBriefId) return false;
+    generationLockedRef.current = true;
+    setBatchGenerating(true);
+    try {
+      const context = await prepareGenerationContext('template');
+      if (!context) return false;
+      const payloads = templateIds.flatMap((templateId) => Array.from({ length: copiesPerTemplate }, () => ({
+        ...buildGenerationPayload(
+          'template',
+          context.currentProjectId,
+          selectedBriefId,
+          context.resolvedStructureText,
+          templateId,
+        ),
+        requestNo: createOperationRequestNo('script_generate'),
+      })));
+      const [firstPayload, ...remainingPayloads] = payloads;
+      await scriptApi.enqueueGeneration(firstPayload);
+      const results = await Promise.allSettled(
+        remainingPayloads.map((payload) => scriptApi.enqueueGeneration(payload)),
+      );
+      const failedCount = results.filter((result) => result.status === 'rejected').length;
+      const successCount = payloads.length - failedCount;
+      window.dispatchEvent(new Event('script-queue:changed'));
+      window.dispatchEvent(new CustomEvent('task-center:open', { detail: { tab: 'generation' } }));
+      requestOperationCostRefresh();
+      if (failedCount) message.warning(`已加入 ${successCount} 个模板任务，${failedCount} 个任务提交失败`);
+      else message.success(`已用 ${templateIds.length} 个模板创建 ${successCount} 个后台任务`);
+      return true;
+    } catch (error) {
+      requestOperationCostRefresh();
+      message.error(getApiErrorMessage(error, '批量生成任务提交失败'));
+      return false;
+    } finally {
+      setBatchGenerating(false);
       generationLockedRef.current = false;
     }
   };
@@ -1855,10 +1930,13 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
       const currentProjectId = await ensureProjectId();
       const job = await generationApi.createExport({
         projectId: currentProjectId,
-        exportType: 'script',
-        fileName: `${currentScript.name || 'script'}.txt`,
+        exportType: 'script_batch',
+        fileName: `${currentScript.name || 'script'}.zip`,
+        scriptIds: [currentScript.id],
       });
-      message.success(`脚本导出任务已创建：${job.id}`);
+      window.dispatchEvent(new Event('export-queue:changed'));
+      window.dispatchEvent(new CustomEvent('task-center:open', { detail: { tab: 'downloads' } }));
+      message.success(`下载任务已创建：${job.id}`);
     } catch {
       message.error('脚本导出任务创建失败');
     }
@@ -1881,7 +1959,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
       showSearch
       listHeight={360}
       virtual={false}
-      popupClassName="brief-select-dropdown"
+      classNames={{ popup: { root: 'brief-select-dropdown' } }}
       filterOption={filterBriefOption}
       autoClearSearchValue
       options={briefOptions}
@@ -2144,7 +2222,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
             </div>
           </section>
 
-          <button className="generate-script-button" onClick={() => generateScript('viral')} disabled={generatingType === 'viral' || !Number.isFinite(operationCosts.scriptGenerate)}>
+          <button className="generate-script-button" onClick={() => generateScript('viral')} disabled={generatingType === 'viral' || batchGenerating || !Number.isFinite(operationCosts.scriptGenerate)}>
             <HighlightOutlined />{generatingType === 'viral' ? '生成中' : '生成脚本'}
             <OperationCostLabel cost={operationCosts.scriptGenerate} />
           </button>
@@ -2272,10 +2350,15 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
           </section>
 
           <section className="template-generate-panel">
-            <button className="template-generate-button" onClick={() => generateScript('template')} disabled={generatingType === 'template' || !Number.isFinite(operationCosts.scriptGenerate)}>
-              <HighlightOutlined />{generatingType === 'template' ? '生成中' : '生成脚本'}
-              <OperationCostLabel cost={operationCosts.scriptGenerate} />
-            </button>
+            <div className="script-generation-actions">
+              <button className="template-generate-button" onClick={() => generateScript('template')} disabled={generatingType === 'template' || batchGenerating || !Number.isFinite(operationCosts.scriptGenerate)}>
+                <HighlightOutlined />{generatingType === 'template' ? '生成中' : '生成脚本'}
+                <OperationCostLabel cost={operationCosts.scriptGenerate} />
+              </button>
+              <button className="batch-generation-button" onClick={openBatchGeneration} disabled={Boolean(generatingType) || batchGenerating || briefsLoading || !selectedBriefId}>
+                <OrderedListOutlined />多模板生成
+              </button>
+            </div>
           </section>
         </section>
       )}
@@ -2346,7 +2429,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
             </section>
 
             <div className="original-generate-actions">
-              <button className="original-generate-button" disabled={!prompt.trim() || generatingType === 'original' || !Number.isFinite(operationCosts.scriptGenerate)} onClick={() => generateScript('original')}>
+              <button className="original-generate-button" disabled={!prompt.trim() || generatingType === 'original' || batchGenerating || !Number.isFinite(operationCosts.scriptGenerate)} onClick={() => generateScript('original')}>
                 <HighlightOutlined />{generatingType === 'original' ? '生成中' : '生成脚本'}
                 <OperationCostLabel cost={operationCosts.scriptGenerate} />
               </button>
@@ -2369,6 +2452,16 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
           </div>
         </section>
       )}
+      <TemplateBatchGenerationModal
+        open={batchGenerationOpen}
+        templates={templates}
+        initialTemplateId={selectedTemplate}
+        currentBriefLabel={briefOptions.find((option) => option.value === selectedBriefId)?.label || ''}
+        pointCost={operationCosts.scriptGenerate}
+        submitting={batchGenerating}
+        onClose={() => setBatchGenerationOpen(false)}
+        onSubmit={submitBatchGeneration}
+      />
       <Modal
         open={frameLibraryOpen}
         title="选择产品画面"

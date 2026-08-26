@@ -13,6 +13,7 @@ import com.aiscript.modules.generation.vo.ExportJobVO;
 import com.aiscript.modules.generation.vo.TimelineConfigVO;
 import com.aiscript.modules.generation.vo.VideoSegmentVO;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -58,5 +59,16 @@ public class ProductionController {
     @GetMapping("/exports")
     public R<PageResult<ExportJobVO>> exportJobs(PageQuery query, @RequestParam(required = false) String projectId) {
         return R.ok(productionService.exportJobs(query, projectId));
+    }
+
+    @PostMapping("/exports/{id}/retry")
+    public R<ExportJobVO> retryExport(@PathVariable Integer id) {
+        return R.ok(productionService.retryExport(id));
+    }
+
+    @DeleteMapping("/exports/{id}")
+    public R<Void> cancelExport(@PathVariable Integer id) {
+        productionService.cancelExport(id);
+        return R.ok();
     }
 }

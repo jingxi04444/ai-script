@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
+import ScriptGenerationQueue from '../GenerationQueue/ScriptGenerationQueue';
 
 interface RequireAuthProps {
   children: React.ReactNode;
@@ -48,7 +49,12 @@ const RequireAuth = ({ children }: RequireAuthProps) => {
     return <Navigate to={`/login?redirect=${encodeURIComponent(redirect)}`} replace state={{ from: location }} />;
   }
 
-  return children;
+  return (
+    <>
+      {children}
+      <ScriptGenerationQueue />
+    </>
+  );
 };
 
 export default RequireAuth;

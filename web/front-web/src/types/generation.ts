@@ -108,7 +108,14 @@ export interface ExportJob {
   resolution?: string;
   fileName?: string;
   assetId?: string;
-  status?: string;
+  status?: 'pending' | 'running' | 'success' | 'failed' | 'canceled' | 'expired';
+  sourceCount?: number;
+  progress?: number;
+  fileSize?: number;
+  errorMessage?: string;
+  downloadUrl?: string;
+  finishTime?: string;
+  expireAt?: string;
   createdAt?: string;
 }
 
@@ -117,6 +124,7 @@ export interface ExportCreateParams {
   exportType: string;
   resolution?: string;
   fileName?: string;
+  scriptIds?: string[];
 }
 
 export interface ExportQueryParams extends PaginationParams {

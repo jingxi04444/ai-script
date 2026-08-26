@@ -32,7 +32,7 @@ spring:
 # ------------------------------------------------------
 logging:
   level:
-    com.aiscript: debug  # HTTP 请求耗时与 traceId
+    com.aiscript: info  # HTTP 请求耗时与 traceId
 
 # ------------------------------------------------------
 # 支付模块配置（生产环境）

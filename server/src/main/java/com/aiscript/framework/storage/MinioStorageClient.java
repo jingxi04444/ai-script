@@ -4,6 +4,7 @@ import com.aiscript.common.exception.BusinessException;
 import io.minio.GetPresignedObjectUrlArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
 import io.minio.http.Method;
 import java.io.InputStream;
 import java.net.URI;
@@ -102,6 +103,31 @@ public class MinioStorageClient implements StorageClient {
         }
     }
 
+    @Override
+    public void deleteObject(String objectKey) {
+        if (!StringUtils.hasText(objectKey)) return;
+        if (useLocalStorage()) {
+            deleteLocalObject(objectKey);
+            return;
+        }
+        if (useAliyunOss()) {
+            deleteAliyunOssObject(effectiveObjectKey(objectKey));
+            return;
+        }
+        try {
+            MinioClient minioClient = MinioClient.builder()
+                .endpoint(storageProperties.getEndpoint())
+                .credentials(storageProperties.getAccessKey(), storageProperties.getSecretKey())
+                .build();
+            minioClient.removeObject(RemoveObjectArgs.builder()
+                .bucket(storageProperties.getBucket())
+                .object(objectKey)
+                .build());
+        } catch (Exception ex) {
+            throw new BusinessException("文件删除失败：" + ex.getMessage());
+        }
+    }
+
     private String putLocalObject(String objectKey, InputStream inputStream) {
         try {
             String normalizedObjectKey = normalizeObjectKey(objectKey);
@@ -118,6 +144,19 @@ public class MinioStorageClient implements StorageClient {
                 throw businessException;
             }
             throw new BusinessException("本地文件上传失败：" + ex.getMessage());
+        }
+    }
+
+    private void deleteLocalObject(String objectKey) {
+        try {
+            String normalizedObjectKey = normalizeObjectKey(objectKey);
+            Path root = Path.of(storageProperties.getLocalPath()).toAbsolutePath().normalize();
+            Path target = root.resolve(normalizedObjectKey).normalize();
+            if (!target.startsWith(root)) throw new BusinessException("文件路径非法");
+            Files.deleteIfExists(target);
+        } catch (Exception ex) {
+            if (ex instanceof BusinessException businessException) throw businessException;
+            throw new BusinessException("本地文件删除失败：" + ex.getMessage());
         }
     }
 
@@ -162,6 +201,32 @@ public class MinioStorageClient implements StorageClient {
                 throw businessException;
             }
             throw new BusinessException("阿里云OSS上传失败：" + ex.getMessage());
+        }
+    }
+
+    private void deleteAliyunOssObject(String objectKey) {
+        String endpoint = trimEnd(normalizeEndpoint(effectiveEndpoint()), "/");
+        String resourcePath = "/" + effectiveBucket() + "/" + objectKey;
+        String date = formatOssHttpDate(Instant.now());
+        String authorization = aliyunOssAuthorization("DELETE", resourcePath, date, "");
+        HttpRequest request = HttpRequest.newBuilder()
+            .uri(URI.create(aliyunOssObjectUrl(endpoint, objectKey)))
+            .timeout(Duration.ofSeconds(60))
+            .header("Date", date)
+            .header("Authorization", authorization)
+            .DELETE()
+            .build();
+        try {
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new BusinessException("阿里云OSS删除失败：" + response.statusCode() + " " + response.body());
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new BusinessException("阿里云OSS删除被中断");
+        } catch (Exception ex) {
+            if (ex instanceof BusinessException businessException) throw businessException;
+            throw new BusinessException("阿里云OSS删除失败：" + ex.getMessage());
         }
     }
 

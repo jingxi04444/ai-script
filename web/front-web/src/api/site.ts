@@ -1,4 +1,5 @@
 import api from './request';
+import { config } from '../config';
 
 export interface HomeBanner {
   id?: string;
@@ -30,6 +31,7 @@ let siteConfigRequest: Promise<SiteConfig> | null = null;
 export const siteApi = {
   getCachedConfig: (): SiteConfig | null => siteConfigCache,
   getConfig: (options?: { force?: boolean }): Promise<SiteConfig> => {
+    if (config.useMock) return Promise.resolve(siteConfigCache || {});
     const force = Boolean(options?.force);
     if (!force && siteConfigCache) return Promise.resolve(siteConfigCache);
     if (!force && siteConfigRequest) return siteConfigRequest;
@@ -49,5 +51,5 @@ export const siteApi = {
     siteConfigCache = null;
     siteConfigRequest = null;
   },
-  getHomeBanners: (): Promise<HomeBanner[]> => api.get('/home-banners'),
+  getHomeBanners: (): Promise<HomeBanner[]> => config.useMock ? Promise.resolve([]) : api.get('/home-banners'),
 };

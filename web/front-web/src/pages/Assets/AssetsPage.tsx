@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { message, Modal } from 'antd';
-import { CaretRightFilled, CheckOutlined, DeleteOutlined, FileTextOutlined, FolderFilled, FormOutlined, LeftOutlined, MenuFoldOutlined, PictureOutlined, RightOutlined, ShareAltOutlined } from '@ant-design/icons';
+import { CaretRightFilled, CheckOutlined, DeleteOutlined, DownloadOutlined, FileTextOutlined, FolderFilled, FormOutlined, LeftOutlined, LoadingOutlined, MenuFoldOutlined, PictureOutlined, RightOutlined, ShareAltOutlined } from '@ant-design/icons';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { assetApi } from '../../api/asset';
 import { briefApi } from '../../api/brief';
+import { generationApi } from '../../api/generation';
 
 import { scriptApi } from '../../api/script';
 import HomeRail from '../../components/Layout/HomeRail';
@@ -59,6 +60,9 @@ const AssetsPage = () => {
 
   const [scripts, setScripts] = useState<Script[]>([]);
   const [viralScriptCount, setViralScriptCount] = useState<number | null>(null);
+  const [isScriptDownloadMode, setIsScriptDownloadMode] = useState(false);
+  const [selectedScriptIds, setSelectedScriptIds] = useState<string[]>([]);
+  const [creatingScriptDownload, setCreatingScriptDownload] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -229,6 +233,27 @@ const AssetsPage = () => {
     navigate(`/workspace?${params.toString()}`);
   };
 
+  const createScriptBatchDownload = async () => {
+    if (!selectedScriptIds.length) return message.warning('请选择需要下载的脚本');
+    setCreatingScriptDownload(true);
+    try {
+      await generationApi.createExport({
+        exportType: 'script_batch',
+        fileName: `脚本批量下载-${new Date().toISOString().slice(0, 10)}.zip`,
+        scriptIds: selectedScriptIds,
+      });
+      setSelectedScriptIds([]);
+      setIsScriptDownloadMode(false);
+      window.dispatchEvent(new Event('export-queue:changed'));
+      window.dispatchEvent(new CustomEvent('task-center:open', { detail: { tab: 'downloads' } }));
+      message.success('已加入后台下载任务，打包完成后会通知你');
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : '批量下载任务创建失败');
+    } finally {
+      setCreatingScriptDownload(false);
+    }
+  };
+
   const renderFolderContents = () => {
     if (selectedFolderKey === 'mine-briefs' && !selectedBriefProjectId) {
       if (briefsLoading) return <p className="assets-record-empty">正在加载 Brief 项目…</p>;
@@ -274,17 +299,35 @@ const AssetsPage = () => {
     if (selectedFolderKey === 'mine-scripts') {
       return (
         <section className="assets-record-grid" aria-label="全部脚本">
-          {scripts.map((script) => (
-            <button className="assets-record-card" type="button" key={script.id} onClick={() => openScript(script)}>
+          {scripts.map((script) => {
+            const selected = selectedScriptIds.includes(script.id);
+            return (
+            <article
+              className={`assets-record-card ${isScriptDownloadMode && selected ? 'is-selected' : ''}`}
+              key={script.id}
+              role="button"
+              tabIndex={0}
+              onClick={() => isScriptDownloadMode
+                ? setSelectedScriptIds((current) => current.includes(script.id) ? current.filter((id) => id !== script.id) : [...current, script.id])
+                : openScript(script)}
+              onKeyDown={(event) => {
+                if (event.key !== 'Enter' && event.key !== ' ') return;
+                event.preventDefault();
+                if (isScriptDownloadMode) {
+                  setSelectedScriptIds((current) => current.includes(script.id) ? current.filter((id) => id !== script.id) : [...current, script.id]);
+                } else openScript(script);
+              }}
+            >
               <span className="assets-record-icon"><FileTextOutlined /></span>
               <span className="assets-record-copy">
                 <strong>{script.name || '未命名脚本'}</strong>
                 <small>{script.type} · {script.status}</small>
                 <em>更新于 {formatDateTime(script.updatedAt)}</em>
               </span>
-              <RightOutlined />
-            </button>
-          ))}
+              {isScriptDownloadMode ? <span className={`assets-brief-check ${selected ? 'is-checked' : ''}`}>{selected ? <CheckOutlined /> : null}</span> : <RightOutlined />}
+            </article>
+            );
+          })}
           {!scripts.length && <p className="assets-record-empty">暂无脚本</p>}
         </section>
       );
@@ -417,6 +460,18 @@ const AssetsPage = () => {
                   <button type="button" onClick={() => { const selectable = isAssetBriefDeleteMode ? visibleProjectBriefs.filter((brief) => brief.ownedByCurrentUser === true) : visibleProjectBriefs; setSelectedAssetBriefIds(selectedAssetBriefIds.length === selectable.length ? [] : selectable.map((brief) => brief.id)); }}>全选</button>
                   {isAssetBriefShareMode ? <button type="button" onClick={createAssetBriefSharePack} disabled={!selectedAssetBriefIds.length}>共享 {selectedAssetBriefIds.length} 份 Brief</button> : null}
                   {isAssetBriefDeleteMode ? <button type="button" className="danger" onClick={() => deleteAssetBriefs(visibleProjectBriefs.filter((brief) => selectedAssetBriefIds.includes(brief.id)))} disabled={!selectedAssetBriefIds.length}>删除 {selectedAssetBriefIds.length} 份 Brief</button> : null}
+                </> : null}
+              </div> : null}
+              {selectedFolderKey === 'mine-scripts' ? <div className="assets-brief-share-tools assets-script-download-tools">
+                <button type="button" onClick={() => { setIsScriptDownloadMode((current) => !current); setSelectedScriptIds([]); }}>
+                  <DownloadOutlined />{isScriptDownloadMode ? '取消选择' : '批量下载'}
+                </button>
+                {isScriptDownloadMode ? <>
+                  <button type="button" onClick={() => setSelectedScriptIds(selectedScriptIds.length === scripts.length ? [] : scripts.map((script) => script.id))}>全选</button>
+                  <button type="button" disabled={!selectedScriptIds.length || creatingScriptDownload} onClick={() => void createScriptBatchDownload()}>
+                    {creatingScriptDownload ? <LoadingOutlined spin /> : <DownloadOutlined />}
+                    {creatingScriptDownload ? '正在创建' : `下载 ${selectedScriptIds.length} 条`}
+                  </button>
                 </> : null}
               </div> : null}
             </div>

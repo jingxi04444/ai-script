@@ -19,7 +19,15 @@ public class AiExportJob {
     private String resolution;
     private String fileName;
     private Integer assetId;
+    private String storageKey;
     private String status;
+    private Integer sourceCount;
+    private Integer progress;
+    private Long fileSize;
+    private String errorMessage;
+    private LocalDateTime finishTime;
+    private LocalDateTime expireAt;
     private Integer createBy;
     private LocalDateTime createTime;
+    private LocalDateTime updateTime;
 }

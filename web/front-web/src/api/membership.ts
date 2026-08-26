@@ -1,4 +1,5 @@
 import api from './request';
+import { config } from '../config';
 import type { PaginatedResponse, PaginationParams } from '../types/api';
 import type {
   DailyPointReward,
@@ -17,7 +18,9 @@ export const membershipApi = {
   plans: (): Promise<MembershipPlan[]> => api.get('/membership/plans'),
   purchaseModes: (): Promise<MembershipPurchaseMode[]> => api.get('/membership/purchase-modes'),
   pointPackages: (): Promise<PointPackage[]> => api.get('/membership/point-packages'),
-  current: (): Promise<UserMembership | null> => api.get('/membership/current'),
+  current: (): Promise<UserMembership | null> => config.useMock
+    ? Promise.resolve({ planCode: 'free', planName: '免费体验版', status: 'active' })
+    : api.get('/membership/current'),
   activateFreeTrial: (skuId: string): Promise<UserMembership> => api.post('/membership/free-trial/activate', { skuId }),
   quote: (skuId: string): Promise<MembershipChangeQuote> =>
     api.get('/membership/subscription/quote', { params: { skuId } }),
@@ -27,8 +30,12 @@ export const membershipApi = {
     api.post('/membership/subscription/downgrade/revoke'),
   cancelRenewal: (): Promise<UserMembership> =>
     api.post('/membership/subscription/cancel-renewal'),
-  points: (): Promise<PointAccount> => api.get('/membership/points'),
-  pointOperationCosts: (): Promise<PointOperationCosts> => api.get('/membership/points/costs'),
+  points: (): Promise<PointAccount> => config.useMock
+    ? Promise.resolve({ availablePoints: 10000, frozenPoints: 0 })
+    : api.get('/membership/points'),
+  pointOperationCosts: (): Promise<PointOperationCosts> => config.useMock
+    ? Promise.resolve({ briefDetect: 5, viralSimple: 10, viralDeep: 20, scriptGenerate: 30, scriptPolish: 15 })
+    : api.get('/membership/points/costs'),
   pointTransactions: (params?: PaginationParams): Promise<PaginatedResponse<PointTransaction>> =>
     api.get('/membership/points/transactions', { params }),
   claimDailyReward: (): Promise<DailyPointReward> =>
