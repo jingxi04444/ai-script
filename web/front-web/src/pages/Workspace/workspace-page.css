@@ -534,6 +534,19 @@
   min-height: 0;
 }
 
+.visual-canvas-workspace-main .creation-topbar {
+  grid-template-columns: minmax(0, 1fr) max-content;
+}
+
+.visual-canvas-workspace-main .creation-topbar > .next-step-button {
+  grid-column: 2;
+}
+
+.visual-canvas-workspace-main .workbench-card.creation-panel {
+  overflow: hidden;
+  padding: 10px 12px 12px;
+}
+
 .step-panel {
   padding: 26px;
 }

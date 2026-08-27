@@ -32,6 +32,7 @@ import { createOperationRequestNo } from '../../utils/operationRequest';
 import ScriptGeneratorPanel from './ScriptGenerator/ScriptGeneratorPanel';
 import StoryboardPanel from './Storyboard/StoryboardPanel';
 import DevelopmentPanel from './Development/DevelopmentPanel';
+import VisualCanvasPanel from './VisualCanvas/VisualCanvasPanel';
 import './workspace-page.css';
 
 const isWorkspaceStep = (value: string | null): value is StepKey => !!value && steps.some((step) => step.id === value);
@@ -95,6 +96,7 @@ const WorkspacePage = () => {
     activeStep === 'script-generator' ? 'script-workspace-main' : '',
     activeStep === 'selling-points' ? 'selling-workspace-main' : '',
     activeStep === 'storyboard' ? 'storyboard-workspace-main' : '',
+    activeStep === 'visual' || activeStep === 'video' ? 'visual-canvas-workspace-main' : '',
   ].filter(Boolean).join(' ');
   const activeScriptModeVisual = scriptModeVisuals.find((item) => item.key === activeScriptMode);
 
@@ -285,9 +287,9 @@ const WorkspacePage = () => {
           </>
         );
       case 'visual':
-        return <DevelopmentPanel featureName="场景、角色与道具" />;
+        return <VisualCanvasPanel mode="image" projectId={projectId} ensureProjectId={ensureProjectId} />;
       case 'video':
-        return <DevelopmentPanel featureName="分镜视频" />;
+        return <VisualCanvasPanel mode="video" projectId={projectId} ensureProjectId={ensureProjectId} />;
       case 'preview':
         return <DevelopmentPanel featureName="视频预览" />;
       default:
