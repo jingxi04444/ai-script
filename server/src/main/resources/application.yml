@@ -16,8 +16,8 @@ spring:
     active: prod  # 默认激活的环境：prod=生产，dev=本地开发；启动时可用 --spring.profiles.active=dev 覆盖
   servlet:
     multipart:
-      max-file-size: 120MB   # 单个上传文件最大限制
-      max-request-size: 150MB  # 单次请求（含多个文件）最大限制
+      max-file-size: 300MB   # 单个上传文件最大限制
+      max-request-size: 300MB  # 单次请求（含多个文件）最大限制
 
 # MyBatis-Plus 持久层配置
 mybatis-plus:

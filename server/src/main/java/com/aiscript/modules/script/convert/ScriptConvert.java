@@ -49,7 +49,6 @@ public final class ScriptConvert {
         AdminScriptTemplateVO vo = new AdminScriptTemplateVO();
         fillTemplateVO(vo, template);
         vo.setReferenceUrl(template.getReferenceUrl());
-        vo.setReferenceDesc(template.getReferenceDesc());
         vo.setFullVideoUrl(template.getFullVideoUrl());
         return vo;
     }
@@ -67,7 +66,9 @@ public final class ScriptConvert {
         vo.setEmotionTurningPoints(template.getEmotionTurningPoints());
         vo.setFirstFiveSecondsHook(template.getFirstFiveSecondsHook());
         vo.setStructureFormula(template.getStructureFormula());
+        vo.setFormulaExecutionChecklist(template.getFormulaExecutionChecklist());
         vo.setScriptTemplateLibrary(template.getScriptTemplateLibrary());
+        vo.setReferenceDesc(template.getReferenceDesc());
         vo.setPreviewVideoUrl(template.getPreviewVideoUrl());
         vo.setSortOrder(template.getSortOrder());
         vo.setStatus(template.getStatus() != null && template.getStatus() == 1 ? "active" : "disabled");

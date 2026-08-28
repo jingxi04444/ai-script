@@ -33,6 +33,8 @@ public interface ScriptService {
 
     PolishScriptVO polish(Integer id, PolishScriptDTO dto);
 
+    void cancelPolish(Integer id, String requestNo);
+
     List<ScriptPolishMessageVO> polishMessages(Integer id);
 
     List<ScriptVersionVO> versions(Integer id);

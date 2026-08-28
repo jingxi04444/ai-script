@@ -105,6 +105,12 @@ public class ScriptController {
         return R.ok(scriptService.polish(id, payload));
     }
 
+    @DeleteMapping("/{id}/polish")
+    public R<Void> cancelPolish(@PathVariable Integer id, @RequestParam String requestNo) {
+        scriptService.cancelPolish(id, requestNo);
+        return R.ok();
+    }
+
     @GetMapping("/{id}/polish-messages")
     public R<List<ScriptPolishMessageVO>> polishMessages(@PathVariable Integer id) {
         return R.ok(scriptService.polishMessages(id));

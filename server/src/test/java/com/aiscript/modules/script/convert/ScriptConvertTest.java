@@ -16,23 +16,25 @@ class ScriptConvertTest {
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Test
-    void publicTemplateOnlyExposesPreviewVideo() throws Exception {
+    void publicTemplateExposesDescriptionAndChecklistButKeepsPrivateSourcesHidden() throws Exception {
         AiScriptTemplate template = new AiScriptTemplate();
         template.setId(9);
         template.setTemplateName("示例模板");
         template.setPreviewVideoUrl("https://cdn.example.com/preview.mp4");
         template.setFullVideoUrl("https://cdn.example.com/full.mp4");
         template.setReferenceUrl("https://source.example.com/original");
-        template.setReferenceDesc("仅后台可见");
+        template.setReferenceDesc("前台可见的来源内容描述");
+        template.setFormulaExecutionChecklist("| 步骤 | 执行内容 |\n| --- | --- |\n| 第1步 | 主题锚定 |");
 
         ScriptTemplateVO publicTemplate = ScriptConvert.toTemplateVO(template);
         String publicJson = objectMapper.writeValueAsString(publicTemplate);
 
         assertEquals("https://cdn.example.com/preview.mp4", publicTemplate.getPreviewVideoUrl());
         assertTrue(publicJson.contains("previewVideoUrl"));
+        assertEquals("前台可见的来源内容描述", publicTemplate.getReferenceDesc());
+        assertTrue(publicTemplate.getFormulaExecutionChecklist().contains("主题锚定"));
         assertFalse(publicJson.contains("fullVideoUrl"));
         assertFalse(publicJson.contains("referenceUrl"));
-        assertFalse(publicJson.contains("referenceDesc"));
 
         AdminScriptTemplateVO adminTemplate = ScriptConvert.toAdminTemplateVO(template);
         assertEquals("https://cdn.example.com/full.mp4", adminTemplate.getFullVideoUrl());

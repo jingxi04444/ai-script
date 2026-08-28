@@ -3,7 +3,7 @@
 ALTER TABLE ai_script_template
   ADD COLUMN IF NOT EXISTS paragraph_structure TEXT DEFAULT NULL COMMENT '段落结构拆解' AFTER difficulty,
   ADD COLUMN IF NOT EXISTS emotion_turning_points TEXT DEFAULT NULL COMMENT '情绪转折点' AFTER paragraph_structure,
-  ADD COLUMN IF NOT EXISTS first_five_seconds_hook TEXT DEFAULT NULL COMMENT '前5秒钩子话术提炼' AFTER emotion_turning_points,
+  ADD COLUMN IF NOT EXISTS first_five_seconds_hook TEXT DEFAULT NULL COMMENT '钩子提炼' AFTER emotion_turning_points,
   ADD COLUMN IF NOT EXISTS structure_formula TEXT DEFAULT NULL COMMENT '结构模型公式' AFTER first_five_seconds_hook;
 
 -- 2) 尽量保留旧数据：旧 prompt_text 迁入段落结构拆解，旧 structure_text 迁入结构模型公式。

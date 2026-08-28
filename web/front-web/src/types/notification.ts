@@ -6,6 +6,8 @@ export interface Notification {
   channel?: string;
   bizType?: string;
   bizId?: string;
+  targetProjectId?: string;
+  targetScriptId?: string;
   title: string;
   content?: string;
   status?: number;

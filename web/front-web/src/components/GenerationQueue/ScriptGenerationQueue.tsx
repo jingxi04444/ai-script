@@ -197,7 +197,13 @@ const ScriptGenerationQueue = () => {
   const openScript = (item: ScriptQueueItem) => {
     if (!item.scriptId) return;
     setOpen(false);
-    navigate(`/workspace?step=script&editScriptId=${encodeURIComponent(item.scriptId)}`);
+    const params = new URLSearchParams({
+      step: 'script-generator',
+      scriptMode: 'mine',
+      editScriptId: item.scriptId,
+    });
+    if (item.projectId) params.set('projectId', item.projectId);
+    navigate(`/workspace?${params.toString()}`);
   };
 
   const cancelExport = async (job: ExportJob) => {
@@ -318,7 +324,7 @@ const ScriptGenerationQueue = () => {
                   <TaskSectionHeader title="最近完成" meta={`最近 ${Math.min(recentGenerationItems.length, 12)} 条`} />
                   <section className="task-center-list is-history">
                     {recentGenerationItems.slice(0, 12).map((item) => (
-                      <GenerationCard key={item.id} item={item} detail={item.finishTime ? formatDateTime(item.finishTime) : ''} onOpen={() => openScript(item)} />
+                      <GenerationCard key={item.id} item={item} detail={historyTaskDetail(item)} onOpen={() => openScript(item)} />
                     ))}
                   </section>
                 </>
@@ -425,6 +431,12 @@ const formatFileSize = (size?: number) => {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
+};
+
+const historyTaskDetail = (item: ScriptQueueItem) => {
+  if (item.status === 'success') return '脚本已生成，可以打开查看';
+  if (item.status === 'canceled') return '任务已取消';
+  return '脚本生成失败';
 };
 
 export default ScriptGenerationQueue;

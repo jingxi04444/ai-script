@@ -128,4 +128,18 @@ public interface AiScriptGenerationQueueItemMapper extends BaseMapper<AiScriptGe
         WHERE batch_no = #{batchNo} AND deleted = 0 AND status = #{status}
         """)
     int countBatchStatus(@Param("batchNo") String batchNo, @Param("status") String status);
+
+    @Select("""
+        SELECT * FROM ai_script_generation_queue_item
+        WHERE tenant_id = #{tenantId} AND create_by = #{userId} AND batch_no = #{batchNo}
+          AND deleted = 0
+        ORDER BY CASE WHEN status = 'success' AND script_id IS NOT NULL THEN 0 ELSE 1 END,
+                 COALESCE(finish_time, update_time) DESC, id DESC
+        LIMIT 1
+        """)
+    AiScriptGenerationQueueItem selectBatchNavigationItem(
+        @Param("tenantId") Integer tenantId,
+        @Param("userId") Integer userId,
+        @Param("batchNo") String batchNo
+    );
 }

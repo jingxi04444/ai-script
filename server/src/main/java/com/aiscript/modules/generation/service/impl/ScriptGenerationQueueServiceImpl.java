@@ -21,8 +21,11 @@ import com.aiscript.security.LoginUser;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.core.Authentication;
@@ -37,6 +40,9 @@ public class ScriptGenerationQueueServiceImpl implements ScriptGenerationQueueSe
     public static final String CONCURRENCY_BENEFIT = "SCRIPT_QUEUE_CONCURRENCY_LIMIT";
     private static final int RECENT_ITEM_LIMIT = 40;
     private static final int ABSOLUTE_CONCURRENCY_LIMIT = 16;
+    private static final int TASK_LABEL_MAX_LENGTH = 120;
+    private static final DateTimeFormatter TASK_TIMESTAMP_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+    private static final Pattern TASK_TIMESTAMP_SUFFIX = Pattern.compile(" · \\d{14}$");
 
     private final AiScriptGenerationQueueItemMapper queueMapper;
     private final AiScriptQueueSettingMapper settingMapper;
@@ -206,7 +212,9 @@ public class ScriptGenerationQueueServiceImpl implements ScriptGenerationQueueSe
         vo.setProjectId(item.getProjectId() == null ? null : String.valueOf(item.getProjectId()));
         vo.setBatchNo(item.getBatchNo());
         vo.setScriptType(item.getScriptType());
-        vo.setTaskLabel(item.getTaskLabel());
+        vo.setTaskLabel(item.getCreateTime() == null
+            ? item.getTaskLabel()
+            : ensureTaskTimestamp(item.getTaskLabel(), item.getCreateTime()));
         vo.setStatus(item.getStatus());
         vo.setScriptId(item.getScriptId() == null ? null : String.valueOf(item.getScriptId()));
         vo.setErrorMessage(item.getErrorMessage());
@@ -238,21 +246,35 @@ public class ScriptGenerationQueueServiceImpl implements ScriptGenerationQueueSe
             case "template" -> templateLabel(dto.getTemplateId());
             default -> "AI 原创脚本";
         };
-        if (!StringUtils.hasText(dto.getBriefId())) return baseLabel;
+        String taskName = baseLabel;
+        if (!StringUtils.hasText(dto.getBriefId())) {
+            return ensureTaskTimestamp(taskName, LocalDateTime.now());
+        }
         try {
             AiBrief brief = briefMapper.selectAccessibleProjectBrief(
                 Integer.valueOf(dto.getBriefId()), projectId, user.getUserId(), user.getTenantId()
             );
-            if (brief == null) return baseLabel;
-            String productLabel = StringUtils.hasText(brief.getProductName())
-                ? brief.getProductName()
-                : StringUtils.hasText(brief.getBriefName()) ? brief.getBriefName() : brief.getProductModel();
-            if (!StringUtils.hasText(productLabel)) return baseLabel;
-            String label = baseLabel + " · " + productLabel.trim();
-            return label.length() > 120 ? label.substring(0, 120) : label;
+            if (brief != null) {
+                String productLabel = StringUtils.hasText(brief.getProductName())
+                    ? brief.getProductName()
+                    : StringUtils.hasText(brief.getBriefName()) ? brief.getBriefName() : brief.getProductModel();
+                if (StringUtils.hasText(productLabel)) taskName = baseLabel + " · " + productLabel.trim();
+            }
         } catch (NumberFormatException ignored) {
-            return baseLabel;
+            // Brief 参数异常时仍保留可识别的脚本类型名称。
         }
+        return ensureTaskTimestamp(taskName, LocalDateTime.now());
+    }
+
+    static String ensureTaskTimestamp(String taskName, LocalDateTime timestamp) {
+        String safeName = StringUtils.hasText(taskName) ? taskName.trim() : "脚本生成任务";
+        if (TASK_TIMESTAMP_SUFFIX.matcher(safeName).find()) return safeName;
+        String suffix = " · " + timestamp.format(TASK_TIMESTAMP_FORMATTER);
+        int maximumNameLength = TASK_LABEL_MAX_LENGTH - suffix.length();
+        String trimmedName = safeName.length() > maximumNameLength
+            ? safeName.substring(0, maximumNameLength).trim()
+            : safeName;
+        return trimmedName + suffix;
     }
 
     private String templateLabel(String templateId) {

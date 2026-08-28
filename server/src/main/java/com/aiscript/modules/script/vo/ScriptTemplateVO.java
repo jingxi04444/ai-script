@@ -16,7 +16,9 @@ public class ScriptTemplateVO {
     private String emotionTurningPoints;
     private String firstFiveSecondsHook;
     private String structureFormula;
+    private String formulaExecutionChecklist;
     private String scriptTemplateLibrary;
+    private String referenceDesc;
     private String previewVideoUrl;
     private Integer sortOrder;
     private String status;

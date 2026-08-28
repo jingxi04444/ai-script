@@ -1,6 +1,7 @@
 import { Component, useCallback, useEffect, useState, type ErrorInfo, type ReactNode } from 'react';
-import { BellOutlined, CheckCircleOutlined, InboxOutlined, ReloadOutlined } from '@ant-design/icons';
+import { ArrowRightOutlined, BellOutlined, CheckCircleOutlined, InboxOutlined, ReloadOutlined } from '@ant-design/icons';
 import { Empty, Pagination, Spin, message } from 'antd';
+import { useNavigate } from 'react-router-dom';
 import HomeRail from '../../components/Layout/HomeRail';
 import { notificationApi } from '../../api/notification';
 import type { Notification } from '../../types/notification';
@@ -39,6 +40,7 @@ class NotificationsErrorBoundary extends Component<{ children: ReactNode }, { fa
 }
 
 const NotificationsContent = () => {
+  const navigate = useNavigate();
   const [items, setItems] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<MessageFilter>('all');
   const [page, setPage] = useState(1);
@@ -69,17 +71,33 @@ const NotificationsContent = () => {
 
   useEffect(() => { void load(); }, [load]);
 
-  const markRead = async (item: Notification) => {
-    if (item.status === 1) return;
-    try {
-      await notificationApi.markRead(item.id);
-      setItems((current) => current.map((candidate) => (
-        candidate.id === item.id ? { ...candidate, status: 1, readTime: new Date().toISOString() } : candidate
-      )));
-      window.dispatchEvent(new Event('notifications:changed'));
-      if (filter === 'unread') await load();
-    } catch (error) {
-      message.error((error as { message?: string })?.message || '消息状态更新失败');
+  const notificationTarget = (item: Notification) => {
+    if (item.bizType !== 'script_queue_batch' || !item.targetProjectId) return null;
+    const params = new URLSearchParams({
+      projectId: item.targetProjectId,
+      step: 'script-generator',
+      scriptMode: 'mine',
+    });
+    if (item.targetScriptId) {
+      params.set('editScriptId', item.targetScriptId);
+    }
+    return `/workspace?${params.toString()}`;
+  };
+
+  const openNotification = async (item: Notification) => {
+    const target = notificationTarget(item);
+    if (target) navigate(target);
+    if (item.status !== 1) {
+      try {
+        await notificationApi.markRead(item.id);
+        setItems((current) => current.map((candidate) => (
+          candidate.id === item.id ? { ...candidate, status: 1, readTime: new Date().toISOString() } : candidate
+        )));
+        window.dispatchEvent(new Event('notifications:changed'));
+        if (!target && filter === 'unread') await load();
+      } catch (error) {
+        message.error((error as { message?: string })?.message || '消息状态更新失败');
+      }
     }
   };
 
@@ -128,12 +146,24 @@ const NotificationsContent = () => {
             <div className="notifications-loading"><Spin size="large" /></div>
           ) : items.length ? (
             <div className="notifications-list">
-              {items.map((item) => (
-                <article
-                  key={item.id}
-                  className={item.status === 1 ? 'is-read' : 'is-unread'}
-                  onClick={() => void markRead(item)}
-                >
+              {items.map((item) => {
+                const target = notificationTarget(item);
+                const targetLabel = item.targetScriptId ? '进入脚本润色' : '查看项目脚本';
+                return (
+                  <article
+                    key={item.id}
+                    className={`${item.status === 1 ? 'is-read' : 'is-unread'} ${target ? 'is-actionable' : ''}`}
+                    onClick={() => void openNotification(item)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        void openNotification(item);
+                      }
+                    }}
+                    role={target ? 'link' : 'button'}
+                    tabIndex={0}
+                    aria-label={target ? `${item.title}，${targetLabel}` : item.title}
+                  >
                   <div className="notifications-icon"><BellOutlined /></div>
                   <div className="notifications-content">
                     <div>
@@ -141,10 +171,14 @@ const NotificationsContent = () => {
                       {item.status === 1 ? <span>已读</span> : <span className="is-new">未读</span>}
                     </div>
                     <p>{item.content || '暂无详细内容'}</p>
-                    <time>{formatDateTime(item.createTime)}</time>
+                    <div className="notifications-meta">
+                      <time>{formatDateTime(item.createTime)}</time>
+                      {target ? <span className="notifications-link-hint">{targetLabel} <ArrowRightOutlined /></span> : null}
+                    </div>
                   </div>
                 </article>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <Empty image={<InboxOutlined />} description={filter === 'unread' ? '暂无未读消息' : '暂无平台消息'} />

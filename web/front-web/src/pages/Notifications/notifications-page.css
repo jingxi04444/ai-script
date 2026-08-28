@@ -149,7 +149,17 @@
   border-radius: 14px;
   background: var(--notifications-card-bg);
   cursor: pointer;
-  transition: border-color 160ms ease, background-color 160ms ease;
+  transition: border-color 160ms ease, background-color 160ms ease, transform 160ms ease;
+}
+
+.notifications-list article:focus-visible {
+  outline: 2px solid var(--theme-accent, #62e670);
+  outline-offset: 2px;
+}
+
+.notifications-list article.is-actionable:hover {
+  border-color: rgba(var(--theme-accent-rgb, 98, 230, 112), 0.7);
+  transform: translateY(-1px);
 }
 
 .notifications-list article.is-read {
@@ -204,6 +214,24 @@
 .notifications-content time {
   color: var(--muted, #777f82);
   font-size: 12px;
+}
+
+.notifications-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.notifications-content .notifications-link-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  background: transparent;
+  color: var(--theme-accent, #62e670);
+  font-size: 12px;
+  font-weight: 700;
 }
 
 .notifications-panel .ant-pagination {

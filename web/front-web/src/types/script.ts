@@ -53,8 +53,10 @@ export interface ScriptTemplate {
   emotionTurningPoints?: string;
   firstFiveSecondsHook?: string;
   structureFormula?: string;
+  formulaExecutionChecklist?: string;
   modelFormula?: string;
   scriptTemplateLibrary?: string;
+  referenceDesc?: string;
   previewVideoUrl?: string;
   sortOrder?: number;
   createdAt?: string;

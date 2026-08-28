@@ -114,9 +114,14 @@ export const scriptApi = {
     return api.put(`/scripts/${id}`, data);
   },
 
-  polish: (id: string, params: PolishScriptParams): Promise<PolishScriptResult> => {
-    if (config.useMock) return mockScriptApi.polish(id, params);
-    return api.post(`/scripts/${id}/polish`, params, { timeout: 180000 });
+  polish: (id: string, params: PolishScriptParams, signal?: AbortSignal): Promise<PolishScriptResult> => {
+    if (config.useMock) return mockScriptApi.polish(id, params, signal);
+    return api.post(`/scripts/${id}/polish`, params, { timeout: 180000, signal });
+  },
+
+  cancelPolish: (id: string, requestNo: string): Promise<void> => {
+    if (config.useMock) return Promise.resolve();
+    return api.delete(`/scripts/${id}/polish`, { params: { requestNo } });
   },
 
   getPolishMessages: (id: string): Promise<ScriptPolishMessage[]> => {

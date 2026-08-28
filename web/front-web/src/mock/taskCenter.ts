@@ -4,6 +4,11 @@ import type { GenerateScriptParams } from '../types/script';
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const now = new Date();
 const isoFromNow = (days: number) => new Date(now.getTime() + days * 86400000).toISOString();
+const taskTimestamp = (date = new Date()) => {
+  const value = date.toISOString().replace(/[-:T.Z]/g, '');
+  return value.slice(0, 14);
+};
+const taskName = (name: string, date = new Date()) => `${name} · ${taskTimestamp(date)}`;
 const mockBriefNames: Record<string, string> = {
   b1: 'JRFH-2026',
   b2: 'A60MAX',
@@ -26,15 +31,15 @@ let concurrency = 2;
 let queueItems: ScriptQueueState['items'] = [
   {
     id: 'queue-301', projectId: 'project-1', batchNo: 'B20260819001', scriptType: 'original',
-    taskLabel: '七夕香氛礼盒｜情绪口播版', status: 'running', createdAt: isoFromNow(0), startTime: isoFromNow(0),
+    taskLabel: taskName('七夕香氛礼盒｜情绪口播版', now), status: 'running', createdAt: isoFromNow(0), startTime: isoFromNow(0),
   },
   {
     id: 'queue-302', projectId: 'project-1', batchNo: 'B20260819001', scriptType: 'viral',
-    taskLabel: '便携咖啡机｜办公室反转版', status: 'pending', createdAt: isoFromNow(0),
+    taskLabel: taskName('便携咖啡机｜办公室反转版', now), status: 'pending', createdAt: isoFromNow(0),
   },
   {
     id: 'queue-299', projectId: 'project-1', batchNo: 'B20260818003', scriptType: 'original',
-    taskLabel: '宠物饮水机｜真实体验版', status: 'success', scriptId: 'script-3', finishTime: isoFromNow(-1),
+    taskLabel: taskName('宠物饮水机｜真实体验版', new Date(now.getTime() - 86400000)), status: 'success', scriptId: 'script-3', finishTime: isoFromNow(-1),
   },
 ];
 
@@ -86,7 +91,7 @@ export const mockTaskCenterApi = {
       projectId: params.projectId,
       batchNo: activeBatchNo,
       scriptType: params.type,
-      taskLabel: `${scriptLabel} · ${briefName}`,
+      taskLabel: taskName(`${scriptLabel} · ${briefName}`),
       status: 'pending',
       createdAt: new Date().toISOString(),
     };

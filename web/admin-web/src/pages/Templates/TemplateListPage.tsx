@@ -5,69 +5,19 @@ import { uploadApi } from '../../api/upload';
 import { DEFAULT_PAGE_SIZE, EmptyState, Modal, Pagination } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
 import { optionalNumberFromInput } from '../../utils/form';
+import EditableMatrixEditor from './EditableMatrixEditor';
+import {
+  createEmptyMatrix,
+  formulaChecklistColumns,
+  paragraphStructureColumns,
+  parseEditableMatrix,
+  serializeEditableMatrix,
+} from './editableMatrix';
 import './template-list.css';
 
 type TemplateForm = Partial<Template>;
 
-type ParagraphStructureState = { columns: string[]; rows: string[][] };
-
 const templateCategories = ['全部', '最新热点', '产品介绍', '创意剧情', '活动福利', '选购攻略'] as const;
-
-const defaultParagraphColumns = ['段落原文', '核心概括', '功能定位'];
-
-const createEmptyParagraphRow = (columnCount = defaultParagraphColumns.length): string[] => Array.from({ length: columnCount }, () => '');
-
-const defaultParagraphState = (): ParagraphStructureState => ({ columns: [...defaultParagraphColumns], rows: [createEmptyParagraphRow()] });
-
-const splitMarkdownRow = (line: string) =>
-  line
-    .trim()
-    .replace(/^\|/, '')
-    .replace(/\|$/, '')
-    .split(/(?<!\\)\|/)
-    .map((cell) => cell.replace(/\\\|/g, '|').replace(/<br\s*\/?\s*>/gi, '\n').trim());
-
-const isSeparatorRow = (cells: string[]) => cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell.trim()));
-
-const escapeMarkdownCell = (value: string) => value.trim().replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>');
-
-const normalizeRows = (rows: string[][], columnCount: number) =>
-  rows.map((row) => Array.from({ length: columnCount }, (_, index) => row[index] ?? ''));
-
-const parseParagraphStructure = (value?: string): ParagraphStructureState => {
-  if (!value?.trim()) return defaultParagraphState();
-
-  const tableRows = value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith('|') && line.endsWith('|'))
-    .map(splitMarkdownRow);
-
-  if (tableRows.length) {
-    const columns = tableRows[0].length ? tableRows[0] : [...defaultParagraphColumns];
-    const dataRows = tableRows.slice(1).filter((cells) => !isSeparatorRow(cells));
-    return { columns, rows: normalizeRows(dataRows.length ? dataRows : [createEmptyParagraphRow(columns.length)], columns.length) };
-  }
-
-  const rows = value
-    .split('\n')
-    .map((line) => line.trim())
-    .filter(Boolean)
-    .map((paragraphOriginal) => [paragraphOriginal, ...createEmptyParagraphRow(defaultParagraphColumns.length - 1)]);
-
-  return { columns: [...defaultParagraphColumns], rows: rows.length ? rows : [createEmptyParagraphRow()] };
-};
-
-const serializeParagraphStructure = ({ columns, rows }: ParagraphStructureState) => {
-  const safeColumns = columns.length ? columns.map((column, index) => column.trim() || `自定义列${index + 1}`) : ['段落原文'];
-  const serializedRows = normalizeRows(rows.length ? rows : [createEmptyParagraphRow(safeColumns.length)], safeColumns.length);
-
-  return [
-    `| ${safeColumns.map(escapeMarkdownCell).join(' | ')} |`,
-    `| ${safeColumns.map(() => '---').join(' | ')} |`,
-    ...serializedRows.map((row) => `| ${row.map(escapeMarkdownCell).join(' | ')} |`),
-  ].join('\n');
-};
 
 const emptyForm: TemplateForm = {
   name: '',
@@ -81,6 +31,7 @@ const emptyForm: TemplateForm = {
   emotionTurningPoints: '',
   firstFiveSecondsHook: '',
   structureFormula: '',
+  formulaExecutionChecklist: '',
   scriptTemplateLibrary: '',
   referenceUrl: '',
   referenceDesc: '',
@@ -111,7 +62,8 @@ const TemplateListPage = () => {
   const [editing, setEditing] = useState<Template | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [form, setForm] = useState<TemplateForm>(emptyForm);
-  const [paragraphStructure, setParagraphStructure] = useState<ParagraphStructureState>(defaultParagraphState);
+  const [paragraphStructure, setParagraphStructure] = useState(() => createEmptyMatrix(paragraphStructureColumns));
+  const [formulaExecutionChecklist, setFormulaExecutionChecklist] = useState(() => createEmptyMatrix(formulaChecklistColumns));
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [uploadingVideo, setUploadingVideo] = useState<'preview' | 'full' | null>(null);
 
@@ -146,7 +98,8 @@ const TemplateListPage = () => {
       category: activeCategory === '全部' ? '产品介绍' : activeCategory,
       sortOrder: total + 1,
     });
-    setParagraphStructure(defaultParagraphState());
+    setParagraphStructure(createEmptyMatrix(paragraphStructureColumns));
+    setFormulaExecutionChecklist(createEmptyMatrix(formulaChecklistColumns));
     setEditorOpen(true);
   };
 
@@ -156,42 +109,9 @@ const TemplateListPage = () => {
       ...template,
       category: template.category === '测评' || template.category === '教程' ? '选购攻略' : template.category,
     });
-    setParagraphStructure(parseParagraphStructure(template.paragraphStructure));
+    setParagraphStructure(parseEditableMatrix(template.paragraphStructure, paragraphStructureColumns));
+    setFormulaExecutionChecklist(parseEditableMatrix(template.formulaExecutionChecklist, formulaChecklistColumns));
     setEditorOpen(true);
-  };
-
-  const updateParagraphColumn = (index: number, value: string) => {
-    setParagraphStructure((current) => ({ ...current, columns: current.columns.map((column, columnIndex) => (columnIndex === index ? value : column)) }));
-  };
-
-  const addParagraphColumn = () => {
-    setParagraphStructure((current) => ({
-      columns: [...current.columns, `自定义列${current.columns.length + 1}`],
-      rows: current.rows.map((row) => [...row, '']),
-    }));
-  };
-
-  const removeParagraphColumn = (index: number) => {
-    setParagraphStructure((current) => {
-      if (current.columns.length <= 1) return current;
-      return {
-        columns: current.columns.filter((_, columnIndex) => columnIndex !== index),
-        rows: current.rows.map((row) => row.filter((_, columnIndex) => columnIndex !== index)),
-      };
-    });
-  };
-
-  const updateParagraphCell = (rowIndex: number, columnIndex: number, value: string) => {
-    setParagraphStructure((current) => ({
-      ...current,
-      rows: current.rows.map((row, currentRowIndex) => (currentRowIndex === rowIndex ? row.map((cell, currentColumnIndex) => (currentColumnIndex === columnIndex ? value : cell)) : row)),
-    }));
-  };
-
-  const addParagraphRow = () => setParagraphStructure((current) => ({ ...current, rows: [...current.rows, createEmptyParagraphRow(current.columns.length)] }));
-
-  const removeParagraphRow = (index: number) => {
-    setParagraphStructure((current) => ({ ...current, rows: current.rows.length <= 1 ? [createEmptyParagraphRow(current.columns.length)] : current.rows.filter((_, rowIndex) => rowIndex !== index) }));
   };
 
   const save = async () => {
@@ -199,7 +119,13 @@ const TemplateListPage = () => {
       notify('请填写模板名称');
       return;
     }
-    const payload = { ...form, paragraphStructure: serializeParagraphStructure(paragraphStructure) };
+    const payload = {
+      ...form,
+      paragraphStructure: serializeEditableMatrix(paragraphStructure),
+      formulaExecutionChecklist: formulaExecutionChecklist.rows.some((row) => row.some((cell) => cell.trim()))
+        ? serializeEditableMatrix(formulaExecutionChecklist)
+        : '',
+    };
     try {
       if (editing) {
         await templateApi.update(editing.id, payload);
@@ -221,8 +147,8 @@ const TemplateListPage = () => {
       notify('请选择视频文件');
       return;
     }
-    if (file.size > 120 * 1024 * 1024) {
-      notify('视频不能超过 120MB');
+    if (file.size > 300 * 1024 * 1024) {
+      notify('视频不能超过 300MB');
       return;
     }
     setUploadingVideo(kind);
@@ -460,52 +386,30 @@ const TemplateListPage = () => {
           {renderVideoField('full', '完整参考视频（仅后台）', '供后台查看和生成逻辑参考，用户端不会收到该地址。')}
         </div>
         <label className="field" style={{ marginTop: 14 }}>
-          <span>来源内容描述（仅后台）</span>
-          <textarea value={form.referenceDesc || ''} onChange={(e) => setForm({ ...form, referenceDesc: e.target.value })} placeholder="说明参考链接内容、使用场景或参考要点" />
+          <span>来源内容描述（前台可见）</span>
+          <textarea value={form.referenceDesc || ''} onChange={(e) => setForm({ ...form, referenceDesc: e.target.value })} placeholder="说明参考内容、使用场景或参考要点，前台模板说明会展示" />
         </label>
-        <div className="field paragraph-structure-editor" style={{ marginTop: 14 }}>
-          <div className="paragraph-structure-header">
-            <span>段落结构拆解</span>
-            <div className="paragraph-structure-actions">
-              <button className="table-btn" type="button" onClick={addParagraphColumn}><Plus size={15} />新增一列</button>
-              <button className="table-btn" type="button" onClick={addParagraphRow}><Plus size={15} />新增一行</button>
-            </div>
-          </div>
-          <div className="paragraph-structure-table">
-            <div className="paragraph-structure-row paragraph-structure-head" style={{ gridTemplateColumns: `repeat(${paragraphStructure.columns.length}, minmax(220px, 1fr)) 76px` }}>
-              {paragraphStructure.columns.map((column, columnIndex) => (
-                <div className="paragraph-structure-column-head" key={columnIndex}>
-                  <input value={column} onChange={(e) => updateParagraphColumn(columnIndex, e.target.value)} placeholder={`自定义列${columnIndex + 1}`} />
-                  <button className="table-btn danger" type="button" onClick={() => removeParagraphColumn(columnIndex)} disabled={paragraphStructure.columns.length <= 1}><Trash2 size={14} /></button>
-                </div>
-              ))}
-              <span className="paragraph-structure-operation-head">操作</span>
-            </div>
-            {paragraphStructure.rows.map((row, index) => (
-              <div className="paragraph-structure-row" style={{ gridTemplateColumns: `repeat(${paragraphStructure.columns.length}, minmax(220px, 1fr)) 76px` }} key={index}>
-                {paragraphStructure.columns.map((column, columnIndex) => (
-                  <textarea key={columnIndex} value={row[columnIndex] || ''} onChange={(e) => updateParagraphCell(index, columnIndex, e.target.value)} placeholder={column || `自定义列${columnIndex + 1}`} />
-                ))}
-                <button className="table-btn danger paragraph-structure-row-action" type="button" onClick={() => removeParagraphRow(index)}><Trash2 size={15} /></button>
-              </div>
-            ))}
-          </div>
+        <div className="template-matrix-section">
+          <EditableMatrixEditor label="段落结构拆解" state={paragraphStructure} setState={setParagraphStructure} />
         </div>
         <label className="field" style={{ marginTop: 14 }}>
           <span>情绪转折点</span>
           <textarea value={form.emotionTurningPoints || ''} onChange={(e) => setForm({ ...form, emotionTurningPoints: e.target.value })} placeholder="提炼情绪从痛点、共鸣、信任到行动的变化" />
         </label>
         <label className="field" style={{ marginTop: 14 }}>
-          <span>前5秒钩子</span>
+          <span>钩子提炼</span>
           <textarea value={form.firstFiveSecondsHook || ''} onChange={(e) => setForm({ ...form, firstFiveSecondsHook: e.target.value })} placeholder="提炼开头 5 秒吸引注意的话术模式" />
         </label>
         <label className="field" style={{ marginTop: 14 }}>
           <span>模型公式</span>
           <textarea value={form.structureFormula || ''} onChange={(e) => setForm({ ...form, structureFormula: e.target.value })} placeholder="例如：痛点开场 -> 场景放大 -> 产品解决 -> 效果展示 -> 行动引导" />
         </label>
+        <div className="template-matrix-section">
+          <EditableMatrixEditor label="公式执行清单" state={formulaExecutionChecklist} setState={setFormulaExecutionChecklist} />
+        </div>
         <label className="field" style={{ marginTop: 14 }}>
           <span>脚本模版库</span>
-          <textarea value={form.scriptTemplateLibrary || ''} onChange={(e) => setForm({ ...form, scriptTemplateLibrary: e.target.value })} placeholder="总结上面四个字段，告诉大模型如何按模板规范写脚本语句" />
+          <textarea value={form.scriptTemplateLibrary || ''} onChange={(e) => setForm({ ...form, scriptTemplateLibrary: e.target.value })} placeholder="总结以上结构、钩子和公式清单，告诉大模型如何按模板规范写脚本语句" />
         </label>
       </Modal>
 

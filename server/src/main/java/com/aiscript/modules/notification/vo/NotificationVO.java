@@ -8,6 +8,8 @@ public class NotificationVO {
     public String channel;
     public String bizType;
     public String bizId;
+    public String targetProjectId;
+    public String targetScriptId;
     public String title;
     public String content;
     public Integer status;

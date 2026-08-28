@@ -7,6 +7,5 @@ import lombok.EqualsAndHashCode;
 @EqualsAndHashCode(callSuper = true)
 public class AdminScriptTemplateVO extends ScriptTemplateVO {
     private String referenceUrl;
-    private String referenceDesc;
     private String fullVideoUrl;
 }

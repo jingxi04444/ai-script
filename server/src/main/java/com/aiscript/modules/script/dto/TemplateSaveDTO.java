@@ -15,6 +15,7 @@ public class TemplateSaveDTO {
     private String emotionTurningPoints;
     private String firstFiveSecondsHook;
     private String structureFormula;
+    private String formulaExecutionChecklist;
     private String scriptTemplateLibrary;
     private String referenceUrl;
     private String referenceDesc;

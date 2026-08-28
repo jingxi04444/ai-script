@@ -2,7 +2,9 @@ package com.aiscript.modules.script.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -59,6 +61,16 @@ class ScriptControllerTest {
                 .content("{\"requestNo\":\"script_polish:test-2\",\"expectedPointCost\":10,\"instruction\":\" \",\"content\":\"原脚本\"}"))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.code").value(40000));
+    }
+
+    @Test
+    void cancelPolishStopsTheMatchingRequest() throws Exception {
+        mockMvc.perform(delete("/api/scripts/17/polish")
+                .param("requestNo", "script_polish:test-3"))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.code").value(0));
+
+        verify(scriptService).cancelPolish(17, "script_polish:test-3");
     }
 
     @Test

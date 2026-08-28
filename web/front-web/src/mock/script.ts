@@ -1,7 +1,16 @@
 import type { PolishScriptParams, Script, ScriptTemplate, ScriptVersion } from '../types/script';
 import { createSuccessResponse, unwrapApiResponse } from '../types/api';
 
-const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const delay = (ms: number, signal?: AbortSignal) => new Promise<void>((resolve, reject) => {
+  const timeoutId = window.setTimeout(resolve, ms);
+  if (!signal) return;
+  const cancel = () => {
+    window.clearTimeout(timeoutId);
+    reject(new DOMException('请求已取消', 'AbortError'));
+  };
+  if (signal.aborted) cancel();
+  else signal.addEventListener('abort', cancel, { once: true });
+});
 
 const mockScripts: Script[] = [
   { id: 'script-1', name: '爆款复刻脚本_2026-05-30', projectId: 'project-1', briefId: 'b1', briefName: 'JRFH-2026', type: 'viral', status: 'approved', content: '熬夜累眼圈、毛孔粗大、胶原崩塌？别再拿美妆硬撑了！', createdAt: '2026-05-30', updatedAt: '2026-05-30 23:51:10' },
@@ -133,8 +142,8 @@ export const mockScriptApi = {
     return unwrapApiResponse(createSuccessResponse(nextScript));
   },
 
-  polish: async (_id: string, params: PolishScriptParams) => {
-    await delay(1100);
+  polish: async (_id: string, params: PolishScriptParams, signal?: AbortSignal) => {
+    await delay(1100, signal);
     const source = params.content.trim() || '暂无原脚本内容';
     const instruction = params.instruction.trim();
     const revised = `${source}\n\n【AI润色修改版】\n修改要求：${instruction}\n1. 开场更直接指出用户觉得“这个脚本不行”的核心问题，用一句更强的痛点钩子重新抓注意力。\n2. 中段把产品卖点改成更口语、更有画面感的表达，避免空泛描述。\n3. 结尾增加明确行动引导，让观众知道下一步要点击、咨询或下单。`;

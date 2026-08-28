@@ -3,6 +3,8 @@ package com.aiscript.modules.notification.service.impl;
 import com.aiscript.common.api.PageResult;
 import com.aiscript.common.pagination.PageQuery;
 import com.aiscript.framework.tenant.TenantContext;
+import com.aiscript.modules.generation.entity.AiScriptGenerationQueueItem;
+import com.aiscript.modules.generation.mapper.AiScriptGenerationQueueItemMapper;
 import com.aiscript.modules.notification.dto.NotificationSendDTO;
 import com.aiscript.modules.notification.entity.SysNotification;
 import com.aiscript.modules.notification.mapper.SysNotificationMapper;
@@ -27,9 +29,14 @@ import org.springframework.util.StringUtils;
 public class NotificationServiceImpl implements NotificationService {
     private static final Integer DEFAULT_TENANT_ID = 1;
     private final SysNotificationMapper notificationMapper;
+    private final AiScriptGenerationQueueItemMapper scriptQueueMapper;
 
-    public NotificationServiceImpl(SysNotificationMapper notificationMapper) {
+    public NotificationServiceImpl(
+        SysNotificationMapper notificationMapper,
+        AiScriptGenerationQueueItemMapper scriptQueueMapper
+    ) {
         this.notificationMapper = notificationMapper;
+        this.scriptQueueMapper = scriptQueueMapper;
     }
 
     @Override
@@ -124,12 +131,30 @@ public class NotificationServiceImpl implements NotificationService {
         vo.channel = entity.channel;
         vo.bizType = entity.bizType;
         vo.bizId = entity.bizId;
+        appendNavigationTarget(entity, vo);
         vo.title = entity.title;
         vo.content = entity.content;
         vo.status = entity.status;
         vo.readTime = entity.readTime;
         vo.createTime = entity.createTime;
         return vo;
+    }
+
+    private void appendNavigationTarget(SysNotification entity, NotificationVO vo) {
+        if (!"script_queue_batch".equals(entity.bizType)
+            || !StringUtils.hasText(entity.bizId)
+            || entity.tenantId == null
+            || entity.userId == null) {
+            return;
+        }
+        AiScriptGenerationQueueItem item = scriptQueueMapper.selectBatchNavigationItem(
+            entity.tenantId,
+            entity.userId,
+            entity.bizId
+        );
+        if (item == null) return;
+        vo.targetProjectId = item.getProjectId() == null ? null : String.valueOf(item.getProjectId());
+        vo.targetScriptId = item.getScriptId() == null ? null : String.valueOf(item.getScriptId());
     }
 
     private Integer currentTenantId() {

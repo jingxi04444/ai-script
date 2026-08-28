@@ -286,9 +286,9 @@
 
 .task-center-card-copy { min-width: 0; display: grid; gap: 4px; }
 .task-center-card-copy strong,
-.task-center-card-copy span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.task-center-card-copy > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .task-center-card-copy strong { font-size: 12px; }
-.task-center-card-copy span { color: #7e8a84; font-size: 11px; }
+.task-center-card-copy > span { color: #7e8a84; font-size: 11px; }
 
 .task-center-card-actions {
   display: grid;

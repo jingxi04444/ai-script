@@ -14,6 +14,7 @@ export interface Template {
   emotionTurningPoints?: string;
   firstFiveSecondsHook?: string;
   structureFormula?: string;
+  formulaExecutionChecklist?: string;
   scriptTemplateLibrary?: string;
   referenceUrl?: string;
   referenceDesc?: string;

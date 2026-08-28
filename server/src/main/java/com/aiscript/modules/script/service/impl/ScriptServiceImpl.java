@@ -29,6 +29,7 @@ import com.aiscript.modules.script.entity.AiScriptTemplate;
 import com.aiscript.modules.script.mapper.AiScriptPolishMessageMapper;
 import com.aiscript.modules.script.mapper.AiScriptTemplateMapper;
 import com.aiscript.modules.script.service.ScriptPolishMessagePersistenceService;
+import com.aiscript.modules.script.service.ScriptPolishCancellationRegistry;
 import com.aiscript.modules.script.service.ScriptReviewService;
 import com.aiscript.modules.script.service.ScriptService;
 import com.aiscript.modules.script.vo.AdminScriptTemplateVO;
@@ -108,6 +109,7 @@ public class ScriptServiceImpl implements ScriptService {
     private final PaidOperationCoordinator paidOperationCoordinator;
     private final PaidOperationFingerprint paidOperationFingerprint;
     private final ScriptPolishMessagePersistenceService polishMessagePersistenceService;
+    private final ScriptPolishCancellationRegistry polishCancellationRegistry;
     private final ScriptReviewService scriptReviewService;
     private final RecycleBinService recycleBinService;
     private final TransactionTemplate transactionTemplate;
@@ -127,6 +129,7 @@ public class ScriptServiceImpl implements ScriptService {
         PaidOperationCoordinator paidOperationCoordinator,
         PaidOperationFingerprint paidOperationFingerprint,
         ScriptPolishMessagePersistenceService polishMessagePersistenceService,
+        ScriptPolishCancellationRegistry polishCancellationRegistry,
         ScriptReviewService scriptReviewService,
         RecycleBinService recycleBinService,
         PlatformTransactionManager transactionManager
@@ -145,6 +148,7 @@ public class ScriptServiceImpl implements ScriptService {
         this.paidOperationCoordinator = paidOperationCoordinator;
         this.paidOperationFingerprint = paidOperationFingerprint;
         this.polishMessagePersistenceService = polishMessagePersistenceService;
+        this.polishCancellationRegistry = polishCancellationRegistry;
         this.scriptReviewService = scriptReviewService;
         this.recycleBinService = recycleBinService;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
@@ -506,6 +510,8 @@ public class ScriptServiceImpl implements ScriptService {
         AtomicReference<RuntimeException> failure = new AtomicReference<>();
         registerPaidOperationRollback(claim, tenantId, userId, failure);
         try {
+            polishCancellationRegistry.register(tenantId, userId, script.getId(), requestNo);
+            polishCancellationRegistry.throwIfCancelled(tenantId, userId, script.getId(), requestNo);
             hydrateProductFrame(dto);
             String briefContext = "";
         if (StringUtils.hasText(dto.getBriefId())) {
@@ -585,10 +591,12 @@ public class ScriptServiceImpl implements ScriptService {
                 "【此前完整润色对话】\n{{conversationHistory}}\n\n请按修改要求重写原脚本。\n\n【本次修改要求】\n{{instruction}}\n\n{{referenceContext}}\n\n【当前脚本】\n{{content}}",
                 variables
             );
+            polishCancellationRegistry.throwIfCancelled(tenantId, userId, script.getId(), requestNo);
             String polishedContent = llmClient.chat(
                 renderedPrompt.getSystemPrompt() + structureRequirement + titlePromptRules.polishRule(),
                 renderedPrompt.getUserPrompt() + titlePromptRules.polishRule()
             );
+            polishCancellationRegistry.throwIfCancelled(tenantId, userId, script.getId(), requestNo);
             if (!StringUtils.hasText(polishedContent) || "{}".equals(polishedContent.trim())) {
                 throw new BusinessException("AI 未返回有效的润色内容，请稍后重试");
             }
@@ -597,6 +605,7 @@ public class ScriptServiceImpl implements ScriptService {
                 String repairUserPrompt = "【原稿（结构与时长唯一标准）】\n" + sourceContent
                     + "\n\n【需要校正的候选稿】\n" + polishedContent;
                 polishedContent = llmClient.chat(repairSystemPrompt, repairUserPrompt);
+                polishCancellationRegistry.throwIfCancelled(tenantId, userId, script.getId(), requestNo);
                 if (!StringUtils.hasText(polishedContent) || !hasSameScriptStructure(sourceContent, polishedContent)) {
                     throw new BusinessException("AI 返回内容改变了原脚本的时长、镜头数或表格格式，系统已阻止覆盖，请重试");
                 }
@@ -609,6 +618,7 @@ public class ScriptServiceImpl implements ScriptService {
             String finalContent = requestsTitleChange(instruction)
                 ? ScriptContentTitleNormalizer.ensureTitle(polishedContent, titleFallback)
                 : ScriptContentTitleNormalizer.forceTitle(polishedContent, titleFallback);
+            polishCancellationRegistry.throwIfCancelled(tenantId, userId, script.getId(), requestNo);
             AiScriptVersion version = createVersion(
                 script,
                 finalContent,
@@ -635,6 +645,7 @@ public class ScriptServiceImpl implements ScriptService {
             ));
             return result;
         } catch (RuntimeException exception) {
+            polishCancellationRegistry.throwIfCancelled(tenantId, userId, script.getId(), requestNo);
             String errorMessage = StringUtils.hasText(exception.getMessage()) ? exception.getMessage() : "润色失败，请稍后重试";
             polishMessagePersistenceService.fail(polishMessageId, errorMessage);
             polishMessagePersistenceService.createAssistantMessage(
@@ -646,7 +657,18 @@ public class ScriptServiceImpl implements ScriptService {
         } catch (RuntimeException exception) {
             failure.set(exception);
             throw exception;
+        } finally {
+            polishCancellationRegistry.clear(tenantId, userId, script.getId(), requestNo);
         }
+    }
+
+    @Override
+    public void cancelPolish(Integer id, String requestNo) {
+        AiStoryboardScript script = ownedScript(id);
+        if (!StringUtils.hasText(requestNo)) {
+            throw new BusinessException("润色请求编号不能为空");
+        }
+        polishCancellationRegistry.cancel(currentTenantId(), currentUserId(), script.getId(), requestNo.trim());
     }
 
     @Override
@@ -1443,8 +1465,9 @@ public class ScriptServiceImpl implements ScriptService {
             + "；难度：" + nullToEmpty(template.getDifficulty()) + "。"
             + "\n段落结构拆解：" + nullToEmpty(template.getParagraphStructure())
             + "\n情绪转折点：" + nullToEmpty(template.getEmotionTurningPoints())
-            + "\n前5秒钩子话术提炼：" + nullToEmpty(template.getFirstFiveSecondsHook())
+            + "\n钩子提炼：" + nullToEmpty(template.getFirstFiveSecondsHook())
             + "\n结构模型公式：" + nullToEmpty(template.getStructureFormula())
+            + "\n公式执行清单：" + nullToEmpty(template.getFormulaExecutionChecklist())
             + "\n脚本模版库提示词：" + nullToEmpty(template.getScriptTemplateLibrary())
             + "\n完整参考视频（仅后台生成时使用）：" + nullToEmpty(firstText(template.getFullVideoUrl(), template.getReferenceUrl()))
             + "\n参考说明：" + nullToEmpty(template.getReferenceDesc());
@@ -1562,6 +1585,7 @@ public class ScriptServiceImpl implements ScriptService {
         template.setEmotionTurningPoints(dto.getEmotionTurningPoints());
         template.setFirstFiveSecondsHook(dto.getFirstFiveSecondsHook());
         template.setStructureFormula(dto.getStructureFormula());
+        template.setFormulaExecutionChecklist(dto.getFormulaExecutionChecklist());
         template.setScriptTemplateLibrary(dto.getScriptTemplateLibrary());
         template.setReferenceUrl(dto.getReferenceUrl());
         template.setReferenceDesc(dto.getReferenceDesc());

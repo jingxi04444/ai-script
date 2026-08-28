@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
+import axios from 'axios';
 import {
   FileTextOutlined,
   HighlightOutlined,
@@ -31,6 +32,7 @@ import {
   HistoryOutlined,
   CommentOutlined,
   CloseOutlined,
+  MinusOutlined,
 } from '@ant-design/icons';
 import { Dropdown, message, Modal, Popover, Select, Upload } from 'antd';
 import { briefApi } from '../../../api/brief';
@@ -402,15 +404,69 @@ const parseScriptVisualConfig = (value?: string): ScriptVisualConfig => {
 };
 
 interface TemplateSpecFields {
+  referenceDesc: string;
+  paragraphStructure: string;
   firstFiveSecondsHook: string;
   modelFormula: string;
+  formulaExecutionChecklist: string;
 }
 
 const getTemplateSpecFields = (card: TemplateCard): TemplateSpecFields => {
   return {
+    referenceDesc: card.referenceDesc?.trim() || '',
+    paragraphStructure: card.paragraphStructure?.trim() || '',
     firstFiveSecondsHook: card.firstFiveSecondsHook?.trim() || '',
     modelFormula: card.structureFormula?.trim() || card.modelFormula?.trim() || '',
+    formulaExecutionChecklist: card.formulaExecutionChecklist?.trim() || '',
   };
+};
+
+interface TemplatePreviewMatrix {
+  columns: string[];
+  rows: string[][];
+}
+
+const splitTemplateMatrixRow = (line: string) => line
+  .trim()
+  .replace(/^\|/, '')
+  .replace(/\|$/, '')
+  .split(/(?<!\\)\|/)
+  .map((cell) => cell.replace(/\\\|/g, '|').replace(/<br\s*\/?\s*>/gi, '\n').trim());
+
+const parseTemplatePreviewMatrix = (value: string): TemplatePreviewMatrix | null => {
+  const tableLines = value.split('\n').map((line) => line.trim()).filter((line) => line.includes('|'));
+  if (tableLines.length < 2) return null;
+  const parsedRows = tableLines.map(splitTemplateMatrixRow);
+  const columns = parsedRows[0];
+  const rows = parsedRows.slice(1).filter((row) => !row.every((cell) => /^:?-{3,}:?$/.test(cell)));
+  if (columns.length < 2 || !rows.length) return null;
+  return {
+    columns,
+    rows: rows.map((row) => Array.from({ length: columns.length }, (_, index) => row[index] || '')),
+  };
+};
+
+const renderTemplateMatrix = (title: string, value: string) => {
+  if (!value) return null;
+  const matrix = parseTemplatePreviewMatrix(value);
+  if (!matrix) {
+    return <p className="template-spec-line"><b>{title}</b><span>：{value}</span></p>;
+  }
+  return (
+    <section className="template-spec-matrix">
+      <b>{title}</b>
+      <div className="template-spec-matrix-scroll">
+        <table>
+          <thead><tr>{matrix.columns.map((column, index) => <th key={index}>{column}</th>)}</tr></thead>
+          <tbody>
+            {matrix.rows.map((row, rowIndex) => (
+              <tr key={rowIndex}>{row.map((cell, columnIndex) => <td key={columnIndex}>{cell}</td>)}</tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
 };
 
 interface ScriptGeneratorPanelProps {
@@ -520,6 +576,8 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
   const [isEditingScriptName, setIsEditingScriptName] = useState(false);
   const [scriptNameDraft, setScriptNameDraft] = useState('');
   const [resultDialogOpen, setResultDialogOpen] = useState(false);
+  const [resultDialogMinimized, setResultDialogMinimized] = useState(false);
+  const [minimizedPolishCompleted, setMinimizedPolishCompleted] = useState(false);
   const [originalScriptContent, setOriginalScriptContent] = useState('');
   const [polishInput, setPolishInput] = useState('');
   const [polishBriefId, setPolishBriefId] = useState<string>();
@@ -599,6 +657,8 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
   const parseRequestRef = useRef<PendingOperationRequest | null>(null);
   const generationRequestRef = useRef<PendingOperationRequest | null>(null);
   const polishRequestRef = useRef<PendingOperationRequest | null>(null);
+  const polishAbortControllerRef = useRef<AbortController | null>(null);
+  const resultDialogMinimizedRef = useRef(false);
   const isDeepMode = analysisMode === 'deep';
   const scriptVisualConfig = parseScriptVisualConfig(siteConfig.scriptVisualConfig);
   const visualModeItems = new Map((scriptVisualConfig.modeItems || []).map((item) => [item.key, item]));
@@ -641,6 +701,20 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
   };
 
   const closeResultDialog = () => {
+    const activePolishRequest = polishRequestRef.current;
+    if (isPolishing && currentScript && activePolishRequest) {
+      void scriptApi.cancelPolish(currentScript.id, activePolishRequest.requestNo).then(() => {
+        if (polishRequestRef.current?.requestNo === activePolishRequest.requestNo) {
+          polishRequestRef.current = null;
+        }
+        requestOperationCostRefresh();
+      });
+    }
+    polishAbortControllerRef.current?.abort();
+    polishAbortControllerRef.current = null;
+    resultDialogMinimizedRef.current = false;
+    setResultDialogMinimized(false);
+    setMinimizedPolishCompleted(false);
     setResultDialogOpen(false);
     setIsManualEditing(false);
     setPolishMentionOpen(false);
@@ -655,6 +729,21 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
       return;
     }
     clearEditScriptParam();
+  };
+
+  const minimizeResultDialog = () => {
+    resultDialogMinimizedRef.current = true;
+    setResultDialogMinimized(true);
+    setMinimizedPolishCompleted(false);
+    setResultDialogOpen(false);
+    message.info(isPolishing ? '已暂时收起，AI 将继续修改' : '润色工作台已暂时收起');
+  };
+
+  const restoreResultDialog = () => {
+    resultDialogMinimizedRef.current = false;
+    setResultDialogMinimized(false);
+    setMinimizedPolishCompleted(false);
+    setResultDialogOpen(true);
   };
 
   const saveCurrentScriptAndClose = async () => {
@@ -826,6 +915,9 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
       setIsManualEditing(false);
       setPolishInput('');
       setPolishBriefId(undefined);
+      resultDialogMinimizedRef.current = false;
+      setResultDialogMinimized(false);
+      setMinimizedPolishCompleted(false);
       Promise.all([
         loadScriptVersions(script.id, script.content || ''),
         loadPolishMessages(script.id),
@@ -1095,7 +1187,13 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
 
   const templateSpecContent = (card: TemplateCard) => {
     const spec = getTemplateSpecFields(card);
-    const hasTemplateSpec = Boolean(spec.firstFiveSecondsHook || spec.modelFormula);
+    const hasTemplateSpec = Boolean(
+      spec.referenceDesc
+      || spec.paragraphStructure
+      || spec.firstFiveSecondsHook
+      || spec.modelFormula
+      || spec.formulaExecutionChecklist,
+    );
     return (
       <div className="template-spec-popover">
         <strong>{card.name} 模板说明</strong>
@@ -1115,9 +1213,12 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
             </video>
           </div>
         ) : null}
-        {spec.firstFiveSecondsHook ? <p className="template-spec-line"><b>前5秒钩子</b><span>：{spec.firstFiveSecondsHook}</span></p> : null}
+        {spec.referenceDesc ? <p className="template-spec-line"><b>来源内容描述</b><span>：{spec.referenceDesc}</span></p> : null}
+        {renderTemplateMatrix('段落结构拆解', spec.paragraphStructure)}
+        {spec.firstFiveSecondsHook ? <p className="template-spec-line"><b>钩子提炼</b><span>：{spec.firstFiveSecondsHook}</span></p> : null}
         {spec.modelFormula ? <p className="template-spec-line"><b>模型公式</b><span>：{spec.modelFormula}</span></p> : null}
-        {!card.previewVideoUrl && !hasTemplateSpec ? <p>后台暂未维护 5 秒预览视频、前5秒钩子或模型公式</p> : null}
+        {renderTemplateMatrix('公式执行清单', spec.formulaExecutionChecklist)}
+        {!card.previewVideoUrl && !hasTemplateSpec ? <p>后台暂未维护模板说明、钩子提炼或公式清单</p> : null}
       </div>
     );
   };
@@ -1604,6 +1705,8 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
     setPolishInput('');
     setPolishBriefId(undefined);
     setIsPolishing(true);
+    const abortController = new AbortController();
+    polishAbortControllerRef.current = abortController;
     try {
       const polishPayload = {
         expectedPointCost: operationCosts.scriptPolish,
@@ -1620,7 +1723,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
         'script_polish',
         JSON.stringify({ scriptId: currentScript.id, ...polishPayload }),
       );
-      const result = await scriptApi.polish(currentScript.id, { ...polishPayload, requestNo });
+      const result = await scriptApi.polish(currentScript.id, { ...polishPayload, requestNo }, abortController.signal);
       polishRequestRef.current = null;
       const nextStatus = normalizeScriptStatus(result.status || currentScript.status);
       setCurrentScript((script) => script ? { ...script, content: result.content, status: nextStatus, updatedAt: new Date().toISOString() } : script);
@@ -1631,14 +1734,19 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
       }
       setIsManualEditing(false);
       setScriptAnnotations([]);
-      await Promise.all([
+      await Promise.allSettled([
         loadScriptVersions(currentScript.id, originalScriptContent),
         loadPolishMessages(currentScript.id),
         loadReviewWorkspace(currentScript.id),
       ]);
       notifyPointBalanceChanged();
-      message.success('AI 已返回修改版，右侧已重新显示');
+      if (resultDialogMinimizedRef.current) setMinimizedPolishCompleted(true);
+      message.success(resultDialogMinimizedRef.current ? 'AI 修改已完成，点击悬浮入口即可查看' : 'AI 已返回修改版，右侧已重新显示');
     } catch (error) {
+      if (axios.isCancel(error) || (error instanceof DOMException && error.name === 'AbortError')) {
+        message.info('已停止当前 AI 修改');
+        return;
+      }
       if (isAmbiguousOperationError(error)) {
         if (!quickInstruction) setPolishInput(inputInstruction);
       } else {
@@ -1650,6 +1758,9 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
       });
       message.error(getApiErrorMessage(error, '脚本润色失败'));
     } finally {
+      if (polishAbortControllerRef.current === abortController) {
+        polishAbortControllerRef.current = null;
+      }
       setIsPolishing(false);
     }
   };
@@ -2396,7 +2507,6 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
             <div className="original-prompt-box">
               <textarea
                 value={prompt}
-                maxLength={500}
                 aria-label="AI 原创提示词"
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="以宝妈人设，去写一篇电商种草的脚本。文风要轻松有趣。卖点选择必须包含什么什么。"
@@ -2406,6 +2516,11 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
                   <Select
                     value={selectedOriginalScenario}
                     options={originalScenarioSelectOptions}
+                    showSearch
+                    optionFilterProp="label"
+                    listHeight={360}
+                    virtual={false}
+                    classNames={{ popup: { root: 'original-scenario-select-dropdown' } }}
                     onChange={applyPromptPreset}
                   />
                 </div>
@@ -2413,7 +2528,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
                   <button type="button" className="original-inspiration-button" onClick={() => applyPromptPreset(selectedOriginalScenario)}>
                     <HighlightOutlined />灵感助手
                   </button>
-                  <span>{prompt.length} / 500</span>
+                  <span>{prompt.length} 字</span>
                 </div>
               </div>
             </div>
@@ -2571,11 +2686,30 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
                 <button type="button" onClick={copyCurrentScriptLink}><ShareAltOutlined /><span>分享</span></button>
                 <button type="button" onClick={() => copyText(withScriptContentTitle(currentScript.content, currentScript.name))}><CopyOutlined /><span>复制</span></button>
                 <button type="button" onClick={createScriptExport}><DownloadOutlined /><span>下载</span></button>
-                <button type="button" className="script-output-confirm" disabled={isScriptContentSaving} onClick={() => void saveCurrentScriptAndClose()}>
+                <button type="button" className="script-output-confirm" disabled={isScriptContentSaving || isPolishing} onClick={() => void saveCurrentScriptAndClose()}>
                   {isScriptContentSaving ? <LoadingOutlined spin /> : <CheckCircleOutlined />}
                   <span>{isScriptContentSaving ? '保存中' : '确认OK'}</span>
                 </button>
-                <button type="button" className="script-output-close" aria-label="关闭生成结果" onClick={closeResultDialog}>×</button>
+                <div className="script-output-window-controls" aria-label="窗口操作">
+                  <button
+                    type="button"
+                    className="script-output-minimize script-output-window-control"
+                    aria-label="暂时收起，AI 继续工作"
+                    title="暂时收起，AI 继续工作"
+                    onClick={minimizeResultDialog}
+                  >
+                    <MinusOutlined />
+                  </button>
+                  <button
+                    type="button"
+                    className="script-output-close script-output-window-control"
+                    aria-label={isPolishing ? '关闭并停止 AI 修改' : '关闭润色工作台'}
+                    title={isPolishing ? '关闭并停止 AI 修改' : '关闭润色工作台'}
+                    onClick={closeResultDialog}
+                  >
+                    <CloseOutlined />
+                  </button>
+                </div>
               </div>
             </header>
             <article className={`script-output-content script-output-layout polish-workbench-layout ${sidePanelCollapsed ? 'is-side-collapsed' : ''}`}>
@@ -2975,6 +3109,23 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
             </article>
           </section>
         </div>
+      )}
+      {resultDialogMinimized && currentScript && (
+        <button
+          type="button"
+          className={`script-polish-minimized ${isPolishing ? 'is-working' : minimizedPolishCompleted ? 'is-complete' : 'is-idle'}`}
+          onClick={restoreResultDialog}
+          aria-label={`${isPolishing ? 'AI 正在修改' : minimizedPolishCompleted ? 'AI 修改已完成' : '润色工作台已收起'}，返回润色工作台`}
+        >
+          <span className="script-polish-minimized-icon">
+            {isPolishing ? <LoadingOutlined spin /> : minimizedPolishCompleted ? <CheckCircleOutlined /> : <MinusOutlined />}
+          </span>
+          <span className="script-polish-minimized-copy">
+            <strong>{isPolishing ? 'AI 正在修改' : minimizedPolishCompleted ? 'AI 修改已完成' : '润色工作台已收起'}</strong>
+            <small>{currentScript.name} · 点击返回润色工作台</small>
+          </span>
+          <RightOutlined />
+        </button>
       )}
       <Modal
         open={Boolean(annotationTarget)}

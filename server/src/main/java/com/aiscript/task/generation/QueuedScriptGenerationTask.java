@@ -84,7 +84,7 @@ public class QueuedScriptGenerationTask {
         int total = success + failed + canceled;
         String title = failed == 0 ? "脚本批量生成已完成" : "脚本批量生成已结束";
         String content = failed == 0
-            ? String.format("本批次 %d 条脚本已全部生成，可进入脚本列表逐条润色和审核。", success)
+            ? String.format("本批次 %d 条脚本已全部生成，点击消息可直接进入脚本润色和审核。", success)
             : String.format("本批次共 %d 条：成功 %d 条，失败 %d 条，取消 %d 条。", total, success, failed, canceled);
         notificationService.sendOnce(
             item.getTenantId(), item.getCreateBy(), "system", "script_queue_batch",
