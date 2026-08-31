@@ -189,7 +189,12 @@ Notes:
 `STORAGE_ENDPOINT` should be the bucket endpoint. If the `https://` scheme is omitted, the server will automatically add it.
 Region endpoint such as `https://oss-cn-hangzhou.aliyuncs.com` is also supported; the server will automatically convert it to `https://your-bucket.oss-cn-hangzhou.aliyuncs.com/objectKey`.
 
-File upload endpoint: `/api/files/upload`.
+File upload endpoints:
+
+- User assets: `/api/files/upload`, with membership and storage-quota checks.
+- Platform assets: `/api/admin/files/upload`, requiring an admin login and `admin:file:upload` permission. Supports `site-config` (default) and `script-template-video` folders without charging a user's membership storage quota.
+
+Existing deployments should apply `doc/global-database/mysql/migrations/20260831110000_admin_file_upload.sql` to update the upload permission path, then restart the backend and update the admin frontend together. The migration preserves existing role grants. The admin upload endpoint also enforces its permission in code, including before the migration is applied.
 
 ## Product Frame OCR
 

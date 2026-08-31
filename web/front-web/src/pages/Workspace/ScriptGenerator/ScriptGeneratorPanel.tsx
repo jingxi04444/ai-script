@@ -1,7 +1,6 @@
-import { useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type MutableRefObject, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
-import axios from 'axios';
 import {
   FileTextOutlined,
   HighlightOutlined,
@@ -44,6 +43,7 @@ import { sourceApi } from '../../../api/source';
 import OperationCostLabel from '../../../components/Membership/OperationCostLabel';
 import TemplateBatchGenerationModal from './TemplateBatchGenerationModal';
 import { useAuthStore } from '../../../stores/authStore';
+import { isPolishWorking, useScriptPolishStore, type PolishEditorDraft } from '../../../stores/scriptPolishStore';
 import { useWorkspaceStore, type ScriptMode } from '../../../stores/workspaceStore';
 import type { Brief } from '../../../types/brief';
 import type { Asset } from '../../../types/asset';
@@ -403,71 +403,10 @@ const parseScriptVisualConfig = (value?: string): ScriptVisualConfig => {
   }
 };
 
-interface TemplateSpecFields {
-  referenceDesc: string;
-  paragraphStructure: string;
-  firstFiveSecondsHook: string;
-  modelFormula: string;
-  formulaExecutionChecklist: string;
-}
-
-const getTemplateSpecFields = (card: TemplateCard): TemplateSpecFields => {
-  return {
-    referenceDesc: card.referenceDesc?.trim() || '',
-    paragraphStructure: card.paragraphStructure?.trim() || '',
-    firstFiveSecondsHook: card.firstFiveSecondsHook?.trim() || '',
-    modelFormula: card.structureFormula?.trim() || card.modelFormula?.trim() || '',
-    formulaExecutionChecklist: card.formulaExecutionChecklist?.trim() || '',
-  };
-};
-
-interface TemplatePreviewMatrix {
-  columns: string[];
-  rows: string[][];
-}
-
-const splitTemplateMatrixRow = (line: string) => line
-  .trim()
-  .replace(/^\|/, '')
-  .replace(/\|$/, '')
-  .split(/(?<!\\)\|/)
-  .map((cell) => cell.replace(/\\\|/g, '|').replace(/<br\s*\/?\s*>/gi, '\n').trim());
-
-const parseTemplatePreviewMatrix = (value: string): TemplatePreviewMatrix | null => {
-  const tableLines = value.split('\n').map((line) => line.trim()).filter((line) => line.includes('|'));
-  if (tableLines.length < 2) return null;
-  const parsedRows = tableLines.map(splitTemplateMatrixRow);
-  const columns = parsedRows[0];
-  const rows = parsedRows.slice(1).filter((row) => !row.every((cell) => /^:?-{3,}:?$/.test(cell)));
-  if (columns.length < 2 || !rows.length) return null;
-  return {
-    columns,
-    rows: rows.map((row) => Array.from({ length: columns.length }, (_, index) => row[index] || '')),
-  };
-};
-
-const renderTemplateMatrix = (title: string, value: string) => {
-  if (!value) return null;
-  const matrix = parseTemplatePreviewMatrix(value);
-  if (!matrix) {
-    return <p className="template-spec-line"><b>{title}</b><span>：{value}</span></p>;
-  }
-  return (
-    <section className="template-spec-matrix">
-      <b>{title}</b>
-      <div className="template-spec-matrix-scroll">
-        <table>
-          <thead><tr>{matrix.columns.map((column, index) => <th key={index}>{column}</th>)}</tr></thead>
-          <tbody>
-            {matrix.rows.map((row, rowIndex) => (
-              <tr key={rowIndex}>{row.map((cell, columnIndex) => <td key={columnIndex}>{cell}</td>)}</tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-};
+const getTemplateSpecFields = (card: TemplateCard) => ({
+  firstFiveSecondsHook: card.firstFiveSecondsHook?.trim() || '',
+  modelFormula: card.structureFormula?.trim() || card.modelFormula?.trim() || '',
+});
 
 interface ScriptGeneratorPanelProps {
   projectId: string | null;
@@ -545,6 +484,18 @@ const operationRequestNo = (
   return requestNo;
 };
 
+const createPolishMessage = (role: ScriptPolishMessage['role'], content: string): ScriptPolishMessage => ({
+  id: `${role}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+  role,
+  content,
+  createdAt: new Date().toISOString(),
+});
+
+const defaultPolishMessage = () => createPolishMessage(
+  'assistant',
+  '我已读取原脚本。你可以直接告诉我“哪里不行、想怎么改”，也可以选中表格单元格后点击“评论”添加意见。我会保留每次修改记录，并返回完整修改稿。',
+);
+
 const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dialogOnly = false }: ScriptGeneratorPanelProps) => {
   const [searchParams, setSearchParams] = useSearchParams();
   const currentUserId = useAuthStore((state) => state.user?.id);
@@ -576,8 +527,6 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
   const [isEditingScriptName, setIsEditingScriptName] = useState(false);
   const [scriptNameDraft, setScriptNameDraft] = useState('');
   const [resultDialogOpen, setResultDialogOpen] = useState(false);
-  const [resultDialogMinimized, setResultDialogMinimized] = useState(false);
-  const [minimizedPolishCompleted, setMinimizedPolishCompleted] = useState(false);
   const [originalScriptContent, setOriginalScriptContent] = useState('');
   const [polishInput, setPolishInput] = useState('');
   const [polishBriefId, setPolishBriefId] = useState<string>();
@@ -631,7 +580,9 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
   const [annotationsLoadedFor, setAnnotationsLoadedFor] = useState<string>();
   const [annotationTarget, setAnnotationTarget] = useState<Omit<ScriptAnnotation, 'id' | 'content'> | null>(null);
   const [annotationDraft, setAnnotationDraft] = useState('');
-  const [isPolishing, setIsPolishing] = useState(false);
+  const polishSession = useScriptPolishStore((state) => currentScript ? state.sessions[currentScript.id] : undefined);
+  const isPolishing = isPolishWorking(polishSession);
+  const isStoppingPolish = polishSession?.status === 'stopping';
   const [isStatusSaving, setIsStatusSaving] = useState(false);
   const [isScriptContentSaving, setIsScriptContentSaving] = useState(false);
   const [generatingType, setGeneratingType] = useState<ScriptType | null>(null);
@@ -656,9 +607,13 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
   const generationLockedRef = useRef(false);
   const parseRequestRef = useRef<PendingOperationRequest | null>(null);
   const generationRequestRef = useRef<PendingOperationRequest | null>(null);
-  const polishRequestRef = useRef<PendingOperationRequest | null>(null);
-  const polishAbortControllerRef = useRef<AbortController | null>(null);
-  const resultDialogMinimizedRef = useRef(false);
+  const currentScriptIdRef = useRef<string | null>(null);
+  const appliedPolishResultRef = useRef<string>();
+  const editorDraftRef = useRef<PolishEditorDraft | null>(null);
+  editorDraftRef.current = currentScript ? {
+    script: currentScript, input: polishInput, briefId: polishBriefId, productFrame,
+    manualEditing: isManualEditing, messages: polishMessages,
+  } : null;
   const isDeepMode = analysisMode === 'deep';
   const scriptVisualConfig = parseScriptVisualConfig(siteConfig.scriptVisualConfig);
   const visualModeItems = new Map((scriptVisualConfig.modeItems || []).map((item) => [item.key, item]));
@@ -700,21 +655,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
     setSearchParams(nextParams, { replace: true });
   };
 
-  const closeResultDialog = () => {
-    const activePolishRequest = polishRequestRef.current;
-    if (isPolishing && currentScript && activePolishRequest) {
-      void scriptApi.cancelPolish(currentScript.id, activePolishRequest.requestNo).then(() => {
-        if (polishRequestRef.current?.requestNo === activePolishRequest.requestNo) {
-          polishRequestRef.current = null;
-        }
-        requestOperationCostRefresh();
-      });
-    }
-    polishAbortControllerRef.current?.abort();
-    polishAbortControllerRef.current = null;
-    resultDialogMinimizedRef.current = false;
-    setResultDialogMinimized(false);
-    setMinimizedPolishCompleted(false);
+  const leaveResultDialog = () => {
     setResultDialogOpen(false);
     setIsManualEditing(false);
     setPolishMentionOpen(false);
@@ -731,20 +672,36 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
     clearEditScriptParam();
   };
 
-  const minimizeResultDialog = () => {
-    resultDialogMinimizedRef.current = true;
-    setResultDialogMinimized(true);
-    setMinimizedPolishCompleted(false);
-    setResultDialogOpen(false);
-    message.info(isPolishing ? '已暂时收起，AI 将继续修改' : '润色工作台已暂时收起');
+  const closeResultDialog = async () => {
+    if (!currentScript || isStoppingPolish) return;
+    const scriptId = currentScript.id;
+    try {
+      await useScriptPolishStore.getState().stop(scriptId);
+      if (useScriptPolishStore.getState().sessions[scriptId]?.status === 'canceled') {
+        message.info('已停止当前 AI 润色');
+      }
+      useScriptPolishStore.getState().dismiss(scriptId);
+      if (currentScriptIdRef.current === scriptId) leaveResultDialog();
+    } catch (error) {
+      message.error(getApiErrorMessage(error, '停止失败，AI 可能仍在工作，请重试或最小化'));
+    }
   };
 
-  const restoreResultDialog = () => {
-    resultDialogMinimizedRef.current = false;
-    setResultDialogMinimized(false);
-    setMinimizedPolishCompleted(false);
-    setResultDialogOpen(true);
+  const minimizeResultDialog = () => {
+    if (!editorDraftRef.current) return;
+    useScriptPolishStore.getState().minimize(editorDraftRef.current);
+    leaveResultDialog();
+    message.info('已最小化，AI 继续工作。点击任务中心 → AI 润色可返回，可继续润色其他脚本。', 6);
   };
+
+  useEffect(() => () => {
+    const draft = editorDraftRef.current;
+    if (draft && useScriptPolishStore.getState().sessions[draft.script.id]
+      && !useScriptPolishStore.getState().sessions[draft.script.id].minimized) {
+      useScriptPolishStore.getState().minimize(draft);
+    }
+    currentScriptIdRef.current = null;
+  }, []);
 
   const saveCurrentScriptAndClose = async () => {
     if (!currentScript || isScriptContentSaving) return;
@@ -761,7 +718,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
         detail: { scriptId: saved.id, projectId: saved.projectId, status: normalizeScriptStatus(saved.status) },
       }));
       message.success('脚本修改已保存');
-      closeResultDialog();
+      void closeResultDialog();
     } catch (error) {
       message.error(error instanceof Error ? error.message : '脚本保存失败，请稍后重试');
     } finally {
@@ -769,39 +726,36 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
     }
   };
 
-  const createPolishMessage = (role: ScriptPolishMessage['role'], content: string): ScriptPolishMessage => ({
-    id: `${role}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    role,
-    content,
-    createdAt: new Date().toISOString(),
-  });
-
-  const defaultPolishMessage = () => createPolishMessage(
-    'assistant',
-    '我已读取原脚本。你可以直接告诉我“哪里不行、想怎么改”，也可以选中表格单元格后点击“评论”添加意见。我会保留每次修改记录，并返回完整修改稿。',
-  );
-
-  const loadScriptVersions = async (scriptId: string, fallbackContent = '') => {
+  const loadScriptVersions = useCallback(async (scriptId: string, fallbackContent = '') => {
     const versions = await scriptApi.getVersions(scriptId);
-    setScriptVersions(versions);
-    setOriginalScriptContent(versions[0]?.content || fallbackContent);
+    if (currentScriptIdRef.current === scriptId) {
+      setScriptVersions(versions);
+      setOriginalScriptContent(versions[0]?.content || fallbackContent);
+    }
     return versions;
-  };
+  }, []);
 
-  const loadPolishMessages = async (scriptId: string) => {
+  const loadPolishMessages = useCallback(async (scriptId: string) => {
     const messages = await scriptApi.getPolishMessages(scriptId);
-    setPolishMessages(messages.length ? messages : [defaultPolishMessage()]);
+    if (currentScriptIdRef.current === scriptId) {
+      const session = useScriptPolishStore.getState().sessions[scriptId];
+      const localMessages = session?.draft.messages;
+      setPolishMessages(isPolishWorking(session) && localMessages?.length
+        ? localMessages : messages.length ? messages : localMessages?.length ? localMessages : [defaultPolishMessage()]);
+    }
     return messages;
-  };
+  }, []);
 
-  const loadReviewWorkspace = async (scriptId: string) => {
+  const loadReviewWorkspace = useCallback(async (scriptId: string) => {
     const [access, comments] = await Promise.all([
       scriptApi.getAccess(scriptId),
       scriptApi.getReviewComments(scriptId),
     ]);
-    setScriptAccess(access);
-    setReviewComments(comments);
-  };
+    if (currentScriptIdRef.current === scriptId) {
+      setScriptAccess(access);
+      setReviewComments(comments);
+    }
+  }, []);
 
   useEffect(() => {
     if (!resultDialogOpen || !currentScript?.id) return;
@@ -809,7 +763,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
       setScriptAccess(undefined);
       message.warning('评论记录暂时加载失败，已保留当前页面中的评论');
     });
-  }, [resultDialogOpen, currentScript?.id]);
+  }, [resultDialogOpen, currentScript?.id, loadReviewWorkspace]);
 
   useEffect(() => {
     if (sidePanelMode !== 'review' || sidePanelCollapsed || !reviewCommentScrollTarget) return;
@@ -909,25 +863,61 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
 
   useEffect(() => {
     if (!editScriptId) return;
+    let canceled = false;
+    currentScriptIdRef.current = editScriptId;
+    appliedPolishResultRef.current = undefined;
+    setResultDialogOpen(false);
+    setScriptVersions([]);
+    setReviewComments([]);
+    setScriptAccess(undefined);
+    setSelectedStoryboardCell(undefined);
+    setIsEditingScriptName(false);
     scriptApi.getById(editScriptId).then((script) => {
-      setCurrentScript({ ...script, status: normalizeScriptStatus(script.status) });
-      if (script.briefId) setSelectedBriefId(script.briefId);
-      setIsManualEditing(false);
-      setPolishInput('');
-      setPolishBriefId(undefined);
-      resultDialogMinimizedRef.current = false;
-      setResultDialogMinimized(false);
-      setMinimizedPolishCompleted(false);
+      if (canceled) return;
+      const session = useScriptPolishStore.getState().sessions[editScriptId];
+      const draft = session?.draft;
+      setCurrentScript(draft?.script || { ...script, status: normalizeScriptStatus(script.status) });
+      setSelectedBriefId(script.briefId);
+      setIsManualEditing(draft?.manualEditing || false);
+      setPolishInput(draft?.input || '');
+      setPolishBriefId(draft?.briefId);
+      setProductFrame(draft?.productFrame || null);
+      setPolishMessages(draft?.messages || [defaultPolishMessage()]);
+      useScriptPolishStore.getState().restore(editScriptId);
       Promise.all([
         loadScriptVersions(script.id, script.content || ''),
         loadPolishMessages(script.id),
       ]).catch(() => {
+        if (canceled) return;
         setOriginalScriptContent(script.content || '');
-        setPolishMessages([defaultPolishMessage()]);
       });
       setResultDialogOpen(true);
-    }).catch(() => message.warning('脚本内容加载失败'));
-  }, [editScriptId]);
+    }).catch(() => { if (!canceled) message.warning('脚本内容加载失败'); });
+    return () => { canceled = true; };
+  }, [editScriptId, loadScriptVersions, loadPolishMessages]);
+
+  useEffect(() => {
+    if (!currentScript || !polishSession || currentScriptIdRef.current !== currentScript.id) return;
+    const resultKey = `${currentScript.id}:${polishSession.requestNo}:${polishSession.status}`;
+    if (appliedPolishResultRef.current === resultKey) return;
+    if (polishSession.status === 'success') {
+      appliedPolishResultRef.current = resultKey;
+      const scriptId = currentScript.id;
+      setCurrentScript(polishSession.draft.script);
+      setIsManualEditing(false);
+      setScriptAnnotations([]);
+      setPolishMessages(polishSession.draft.messages);
+      void Promise.allSettled([
+        loadScriptVersions(scriptId, originalScriptContent),
+        loadPolishMessages(scriptId),
+        loadReviewWorkspace(scriptId),
+      ]);
+    } else if (polishSession.status === 'failed') {
+      appliedPolishResultRef.current = resultKey;
+      setPolishInput(polishSession.draft.input);
+      setPolishBriefId(polishSession.draft.briefId);
+    }
+  }, [currentScript, polishSession, originalScriptContent, loadScriptVersions, loadPolishMessages, loadReviewWorkspace]);
 
   useEffect(() => {
     if (!currentScript?.id) {
@@ -1187,13 +1177,6 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
 
   const templateSpecContent = (card: TemplateCard) => {
     const spec = getTemplateSpecFields(card);
-    const hasTemplateSpec = Boolean(
-      spec.referenceDesc
-      || spec.paragraphStructure
-      || spec.firstFiveSecondsHook
-      || spec.modelFormula
-      || spec.formulaExecutionChecklist,
-    );
     return (
       <div className="template-spec-popover">
         <strong>{card.name} 模板说明</strong>
@@ -1213,12 +1196,11 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
             </video>
           </div>
         ) : null}
-        {spec.referenceDesc ? <p className="template-spec-line"><b>来源内容描述</b><span>：{spec.referenceDesc}</span></p> : null}
-        {renderTemplateMatrix('段落结构拆解', spec.paragraphStructure)}
-        {spec.firstFiveSecondsHook ? <p className="template-spec-line"><b>钩子提炼</b><span>：{spec.firstFiveSecondsHook}</span></p> : null}
-        {spec.modelFormula ? <p className="template-spec-line"><b>模型公式</b><span>：{spec.modelFormula}</span></p> : null}
-        {renderTemplateMatrix('公式执行清单', spec.formulaExecutionChecklist)}
-        {!card.previewVideoUrl && !hasTemplateSpec ? <p>后台暂未维护模板说明、钩子提炼或公式清单</p> : null}
+        <section className="template-source-description" aria-label="来源内容描述">
+          <strong>来源内容描述</strong>
+          <p className="template-spec-line"><b>钩子提炼</b><span>：{spec.firstFiveSecondsHook || '暂未维护'}</span></p>
+          <p className="template-spec-line"><b>模型公式</b><span>：{spec.modelFormula || '暂未维护'}</span></p>
+        </section>
       </div>
     );
   };
@@ -1700,69 +1682,24 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
     const instruction = [inputInstruction, annotationInstruction].filter(Boolean).join('\n\n');
     if (!instruction) return message.warning('请先输入要修改的地方');
     const recalledBriefId = quickInstruction ? undefined : polishBriefId;
+    if (isPolishing) return;
     const userMessage = createPolishMessage('user', instruction);
-    setPolishMessages((messages) => [...messages, userMessage]);
+    const messages = [...polishMessages, userMessage];
+    setPolishMessages(messages);
     setPolishInput('');
     setPolishBriefId(undefined);
-    setIsPolishing(true);
-    const abortController = new AbortController();
-    polishAbortControllerRef.current = abortController;
-    try {
-      const polishPayload = {
-        expectedPointCost: operationCosts.scriptPolish,
-        instruction,
-        content: currentScript.content || originalScriptContent || '',
-        briefId: recalledBriefId,
-        productFrameAssetId: productFrame?.assetId,
-        productImage: productFrame?.url,
-        productFrameFileName: productFrame?.fileName,
-        productFrameContent: productFrame?.extractedText,
-      };
-      const requestNo = operationRequestNo(
-        polishRequestRef,
-        'script_polish',
-        JSON.stringify({ scriptId: currentScript.id, ...polishPayload }),
-      );
-      const result = await scriptApi.polish(currentScript.id, { ...polishPayload, requestNo }, abortController.signal);
-      polishRequestRef.current = null;
-      const nextStatus = normalizeScriptStatus(result.status || currentScript.status);
-      setCurrentScript((script) => script ? { ...script, content: result.content, status: nextStatus, updatedAt: new Date().toISOString() } : script);
-      if (nextStatus !== currentScript.status) {
-        window.dispatchEvent(new CustomEvent('scripts:changed', {
-          detail: { scriptId: currentScript.id, projectId: currentScript.projectId, status: nextStatus },
-        }));
-      }
-      setIsManualEditing(false);
-      setScriptAnnotations([]);
-      await Promise.allSettled([
-        loadScriptVersions(currentScript.id, originalScriptContent),
-        loadPolishMessages(currentScript.id),
-        loadReviewWorkspace(currentScript.id),
-      ]);
-      notifyPointBalanceChanged();
-      if (resultDialogMinimizedRef.current) setMinimizedPolishCompleted(true);
-      message.success(resultDialogMinimizedRef.current ? 'AI 修改已完成，点击悬浮入口即可查看' : 'AI 已返回修改版，右侧已重新显示');
-    } catch (error) {
-      if (axios.isCancel(error) || (error instanceof DOMException && error.name === 'AbortError')) {
-        message.info('已停止当前 AI 修改');
-        return;
-      }
-      if (isAmbiguousOperationError(error)) {
-        if (!quickInstruction) setPolishInput(inputInstruction);
-      } else {
-        polishRequestRef.current = null;
-      }
-      requestOperationCostRefresh();
-      await loadPolishMessages(currentScript.id).catch(() => {
-        setPolishMessages((messages) => [...messages, createPolishMessage('assistant', '这次润色没有成功，请稍后重试或换一种说法。')]);
-      });
-      message.error(getApiErrorMessage(error, '脚本润色失败'));
-    } finally {
-      if (polishAbortControllerRef.current === abortController) {
-        polishAbortControllerRef.current = null;
-      }
-      setIsPolishing(false);
-    }
+    await useScriptPolishStore.getState().start({
+      script: currentScript, input: inputInstruction, briefId: recalledBriefId, productFrame, manualEditing: false, messages,
+    }, {
+      expectedPointCost: operationCosts.scriptPolish,
+      instruction,
+      content: currentScript.content || originalScriptContent || '',
+      briefId: recalledBriefId,
+      productFrameAssetId: productFrame?.assetId,
+      productImage: productFrame?.url,
+      productFrameFileName: productFrame?.fileName,
+      productFrameContent: productFrame?.extractedText,
+    });
   };
 
   const restoreScriptVersion = async (version: ScriptVersion) => {
@@ -2694,24 +2631,27 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
                   <button
                     type="button"
                     className="script-output-minimize script-output-window-control"
-                    aria-label="暂时收起，AI 继续工作"
-                    title="暂时收起，AI 继续工作"
+                    aria-label="最小化，AI 继续工作"
+                    title="AI 继续工作，可从任务中心 → AI 润色返回"
                     onClick={minimizeResultDialog}
                   >
-                    <MinusOutlined />
+                    <MinusOutlined /><span>最小化</span>
                   </button>
                   <button
                     type="button"
                     className="script-output-close script-output-window-control"
-                    aria-label={isPolishing ? '关闭并停止 AI 修改' : '关闭润色工作台'}
-                    title={isPolishing ? '关闭并停止 AI 修改' : '关闭润色工作台'}
-                    onClick={closeResultDialog}
+                    aria-label={isPolishing ? '停止并关闭' : '关闭润色工作台'}
+                    title={isPolishing ? '停止当前脚本的 AI 润色并关闭，其他任务不受影响' : '关闭润色工作台'}
+                    disabled={isStoppingPolish}
+                    onClick={() => void closeResultDialog()}
                   >
-                    <CloseOutlined />
+                    {isStoppingPolish ? <LoadingOutlined spin /> : <CloseOutlined />}
+                    <span>{isStoppingPolish ? '停止中' : isPolishing ? '停止并关闭' : '关闭'}</span>
                   </button>
                 </div>
               </div>
             </header>
+            <p className="script-output-window-hint"><MinusOutlined /> 最小化后 AI 继续工作，可继续处理其他脚本；从「任务中心 → AI 润色」返回。关闭标签页或刷新会丢失当前会话入口。</p>
             <article className={`script-output-content script-output-layout polish-workbench-layout ${sidePanelCollapsed ? 'is-side-collapsed' : ''}`}>
               <section className="polish-preview-panel">
                 <header>
@@ -3109,23 +3049,6 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
             </article>
           </section>
         </div>
-      )}
-      {resultDialogMinimized && currentScript && (
-        <button
-          type="button"
-          className={`script-polish-minimized ${isPolishing ? 'is-working' : minimizedPolishCompleted ? 'is-complete' : 'is-idle'}`}
-          onClick={restoreResultDialog}
-          aria-label={`${isPolishing ? 'AI 正在修改' : minimizedPolishCompleted ? 'AI 修改已完成' : '润色工作台已收起'}，返回润色工作台`}
-        >
-          <span className="script-polish-minimized-icon">
-            {isPolishing ? <LoadingOutlined spin /> : minimizedPolishCompleted ? <CheckCircleOutlined /> : <MinusOutlined />}
-          </span>
-          <span className="script-polish-minimized-copy">
-            <strong>{isPolishing ? 'AI 正在修改' : minimizedPolishCompleted ? 'AI 修改已完成' : '润色工作台已收起'}</strong>
-            <small>{currentScript.name} · 点击返回润色工作台</small>
-          </span>
-          <RightOutlined />
-        </button>
       )}
       <Modal
         open={Boolean(annotationTarget)}

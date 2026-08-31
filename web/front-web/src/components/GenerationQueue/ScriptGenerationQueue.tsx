@@ -6,6 +6,7 @@ import {
   CloseCircleFilled,
   CrownFilled,
   DownloadOutlined,
+  DragOutlined,
   FileZipOutlined,
   LoadingOutlined,
   OrderedListOutlined,
@@ -17,9 +18,12 @@ import { generationApi } from '../../api/generation';
 import { scriptApi } from '../../api/script';
 import type { ExportJob, ScriptQueueItem, ScriptQueueState } from '../../types/generation';
 import { formatDateTime } from '../../utils/format';
+import { useTaskCenterPosition } from './useTaskCenterPosition';
+import { isPolishWorking, useScriptPolishStore, type PolishSession } from '../../stores/scriptPolishStore';
+import PolishTaskList from './PolishTaskList';
 import './script-generation-queue.css';
 
-type TaskCenterTab = 'generation' | 'downloads';
+type TaskCenterTab = 'generation' | 'downloads' | 'polish';
 
 const EMPTY_QUEUE: ScriptQueueState = {
   items: [],
@@ -50,6 +54,11 @@ const exportStatusMeta: Record<NonNullable<ExportJob['status']>, { label: string
 
 const ScriptGenerationQueue = () => {
   const navigate = useNavigate();
+  const launcherPosition = useTaskCenterPosition();
+  const polishSessionsById = useScriptPolishStore((state) => state.sessions);
+  const polishSessions = Object.values(polishSessionsById);
+  const activePolishCount = polishSessions.filter(isPolishWorking).length;
+  const polishSessionCount = polishSessions.length;
   const [queue, setQueue] = useState<ScriptQueueState>(EMPTY_QUEUE);
   const [exportJobs, setExportJobs] = useState<ExportJob[]>([]);
   const [open, setOpen] = useState(false);
@@ -61,6 +70,16 @@ const ScriptGenerationQueue = () => {
   const seenGenerationSuccessRef = useRef<Set<string> | null>(null);
   const previousExportActiveRef = useRef<number | null>(null);
   const seenExportSuccessRef = useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    if (!polishSessionCount) return;
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [polishSessionCount]);
 
   const loadTaskCenter = useCallback(async (quiet = true) => {
     if (!quiet) setLoading(true);
@@ -166,7 +185,7 @@ const ScriptGenerationQueue = () => {
     if (job.status === 'pending' || job.status === 'running') activeExportCount += 1;
     else completedExportCount += 1;
   }
-  const totalActiveCount = queue.activeCount + activeExportCount;
+  const totalActiveCount = queue.activeCount + activeExportCount + activePolishCount;
 
   useEffect(() => {
     const interval = window.setInterval(
@@ -206,6 +225,15 @@ const ScriptGenerationQueue = () => {
     navigate(`/workspace?${params.toString()}`);
   };
 
+  const openPolishSession = (session: PolishSession) => {
+    setOpen(false);
+    const params = new URLSearchParams({
+      step: 'storyboard', scriptMode: 'mine', returnStep: 'storyboard',
+      editScriptId: session.draft.script.id, projectId: session.draft.script.projectId,
+    });
+    navigate(`/workspace?${params.toString()}`);
+  };
+
   const cancelExport = async (job: ExportJob) => {
     try {
       await generationApi.cancelExport(job.id);
@@ -238,20 +266,25 @@ const ScriptGenerationQueue = () => {
   return (
     <>
       <button
+        {...launcherPosition}
         type="button"
         className={`task-center-launcher${totalActiveCount > 0 ? ' is-active' : ''}`}
         onClick={() => {
+          if (polishSessions.length) setActiveTab('polish');
           setOpen(true);
           void loadTaskCenter(false);
         }}
         aria-label={`任务中心，${totalActiveCount} 个任务进行中`}
+        aria-description="点击查看任务；按住拖动或使用方向键调整位置，Home 键恢复默认位置"
+        title="点击查看任务 · 按住拖动调整位置（方向键移动，Home 恢复默认）"
       >
         <span className="task-center-launcher-icon"><OrderedListOutlined /></span>
         <span>
           <strong>{totalActiveCount > 0 ? `${totalActiveCount} 个后台任务进行中` : '任务中心'}</strong>
-          <small>{totalActiveCount > 0 ? '可以继续创作，完成后通知' : '生成与下载任务统一管理'}</small>
+          <small>{polishSessions.length ? `AI 润色 ${polishSessions.length} 篇 · 点击返回` : totalActiveCount > 0 ? '可以继续创作，完成后通知' : '生成与下载任务统一管理'}</small>
         </span>
         {totalActiveCount > 0 ? <em>{totalActiveCount}</em> : null}
+        <DragOutlined className="task-center-launcher-drag" aria-hidden="true" />
       </button>
 
       <Drawer
@@ -279,10 +312,13 @@ const ScriptGenerationQueue = () => {
               <button type="button" className={activeTab === 'downloads' ? 'is-active' : ''} onClick={() => setActiveTab('downloads')}>
                 下载任务 <span>{activeExportCount || completedExportCount}</span>
               </button>
+              <button type="button" className={activeTab === 'polish' ? 'is-active' : ''} onClick={() => setActiveTab('polish')}>
+                AI 润色 <span>{polishSessions.length}</span>
+              </button>
             </nav>
           </header>
 
-          {activeTab === 'generation' ? (
+          {activeTab === 'polish' ? <PolishTaskList sessions={polishSessions} onOpen={openPolishSession} /> : activeTab === 'generation' ? (
             <div className="task-center-pane">
               <section className="task-center-concurrency">
                 <div>

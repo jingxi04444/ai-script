@@ -3,6 +3,8 @@ package com.aiscript.security;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authorization.AuthorityAuthorizationManager;
+import org.springframework.security.authorization.AuthorizationManagers;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
@@ -58,6 +60,11 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/home-banners").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/briefs/share/**", "/api/briefs/share-pack/**").permitAll()
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                // Require upload permission even before the permission-path migration is applied.
+                .requestMatchers(HttpMethod.POST, "/api/admin/files/upload").access(AuthorizationManagers.allOf(
+                    dynamicAuthorizationManager,
+                    AuthorityAuthorizationManager.hasAuthority("admin:file:upload")
+                ))
                 .anyRequest().access(dynamicAuthorizationManager)
             )
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

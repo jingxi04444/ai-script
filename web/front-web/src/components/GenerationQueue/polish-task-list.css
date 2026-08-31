@@ -1,0 +1,10 @@
+.polish-task-session-note {
+  margin: -10px 2px 18px;
+  color: #8e9993;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.polish-task-card .task-center-card-actions button { font-size: 11px; }
+.polish-task-card .task-center-card-actions button:disabled { cursor: wait; opacity: 0.55; }
+.polish-task-card.is-stopping .task-center-card-icon { color: #e7c87d; }
