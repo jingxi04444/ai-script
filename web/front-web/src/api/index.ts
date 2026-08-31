@@ -11,5 +11,6 @@ export { assetApi, fileApi } from './asset';
 export { auditApi } from './audit';
 export { complianceApi } from './compliance';
 export { generationApi } from './generation';
+export { workflowApi } from './workflow';
 export { notificationApi } from './notification';
 export { siteApi } from './site';

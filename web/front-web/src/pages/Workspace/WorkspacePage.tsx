@@ -287,9 +287,9 @@ const WorkspacePage = () => {
           </>
         );
       case 'visual':
-        return <VisualCanvasPanel mode="image" projectId={projectId} ensureProjectId={ensureProjectId} />;
+        return <VisualCanvasPanel mode="image" projectId={projectId} projectTitle={projectTitle} ensureProjectId={ensureProjectId} />;
       case 'video':
-        return <VisualCanvasPanel mode="video" projectId={projectId} ensureProjectId={ensureProjectId} />;
+        return <VisualCanvasPanel mode="video" projectId={projectId} projectTitle={projectTitle} ensureProjectId={ensureProjectId} />;
       case 'preview':
         return <DevelopmentPanel featureName="视频预览" />;
       default:

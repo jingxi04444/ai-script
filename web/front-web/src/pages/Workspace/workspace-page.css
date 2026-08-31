@@ -538,13 +538,84 @@
   grid-template-columns: minmax(0, 1fr) max-content;
 }
 
-.visual-canvas-workspace-main .creation-topbar > .next-step-button {
+.workspace-shell .visual-canvas-workspace-main .creation-topbar > .next-step-button {
   grid-column: 2;
 }
 
 .visual-canvas-workspace-main .workbench-card.creation-panel {
   overflow: hidden;
   padding: 10px 12px 12px;
+}
+
+.workspace-shell:has(> .visual-canvas-workspace-main) {
+  grid-template-columns: 0 0 minmax(0, 1fr) !important;
+  width: 100vw;
+}
+
+.workspace-shell:has(> .visual-canvas-workspace-main) > .home-rail,
+.workspace-shell:has(> .visual-canvas-workspace-main) > .workspace-sidebar {
+  width: 0 !important;
+  min-width: 0 !important;
+  overflow: hidden;
+  border: 0;
+  border-right-color: transparent;
+  opacity: 0;
+  pointer-events: none;
+}
+
+body:has(.visual-canvas-workspace-main) .task-center-launcher {
+  display: none;
+}
+
+.workspace-shell > .visual-canvas-workspace-main {
+  grid-template-rows: minmax(0, 1fr) !important;
+  background: #111212;
+}
+
+.visual-canvas-workspace-main::before,
+.visual-canvas-workspace-main > .step-collapse-toggle {
+  display: none;
+}
+
+.visual-canvas-workspace-main .creation-topbar {
+  position: absolute;
+  z-index: 20;
+  top: 12px;
+  right: 16px;
+  width: auto;
+  height: auto !important;
+  min-height: 0 !important;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.visual-canvas-workspace-main .creation-topbar > .next-step-button {
+  height: 34px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 9px;
+  background: rgba(33, 33, 33, 0.92) !important;
+  background-color: rgba(33, 33, 33, 0.92) !important;
+  color: #dedfdd !important;
+  -webkit-text-fill-color: #dedfdd !important;
+  font-size: 11px !important;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
+}
+
+.visual-canvas-workspace-main .workbench-card.creation-panel {
+  grid-row: 1;
+  padding: 0;
+}
+
+.visual-canvas-workspace-main .visual-canvas-panel {
+  border: 0;
+  border-radius: 0;
 }
 
 .step-panel {

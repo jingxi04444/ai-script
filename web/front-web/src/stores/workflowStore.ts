@@ -49,9 +49,10 @@ interface WorkflowState {
   requestRun: (nodeId: string) => void;
   consumeRunRequest: () => void;
   createAgentDraft: (prompt: string) => void;
+  createVideoProductionDraft: () => void;
 }
 
-const STORAGE_PREFIX = 'ai-script:visual-workflow:v1:';
+const STORAGE_PREFIX = 'ai-script:visual-workflow:v3:';
 const HISTORY_LIMIT = 40;
 
 const cloneSnapshot = (nodes: WorkflowNode[], edges: WorkflowEdge[]): WorkflowSnapshot => ({
@@ -66,26 +67,49 @@ const makeNode = (kind: WorkflowNodeKind, position: XYPosition, id?: string): Wo
   data: createWorkflowNodeData(kind),
 });
 
-const createStarterGraph = (mode: WorkflowMode): WorkflowSnapshot => {
+const withTitle = (node: WorkflowNode, title: string, patch: Partial<WorkflowNodeData> = {}): WorkflowNode => ({
+  ...node,
+  data: { ...node.data, title, ...patch },
+});
+
+const createVideoProductionGraph = (): WorkflowSnapshot => {
   const nodes: WorkflowNode[] = [
-    makeNode('storyboard', { x: 80, y: 90 }, 'starter-storyboard'),
-    makeNode('character', { x: 80, y: 380 }, 'starter-character'),
-    makeNode('prompt', { x: 440, y: 190 }, 'starter-prompt'),
-    makeNode('image', { x: 800, y: 190 }, 'starter-image'),
-    makeNode('result', { x: 1160, y: 190 }, 'starter-result'),
+    withTitle(makeNode('product', { x: 80, y: 120 }, 'production-product'), 'A · 选中产品'),
+    withTitle(makeNode('scene', { x: 80, y: 390 }, 'production-scene'), 'A · 选中场景'),
+    withTitle(makeNode('categorySkill', { x: 470, y: 260 }, 'production-category-skill'), 'A · 品类场景 Skill'),
+    withTitle(makeNode('image', { x: 900, y: 80 }, 'production-scene-images'), 'A · 产品场景图套装', {
+      assetUrl: '/mock/skincare-reference-board.png',
+    }),
+    withTitle(makeNode('character', { x: 900, y: 790 }, 'production-character'), 'B · 选中模特'),
+    withTitle(makeNode('storyboard', { x: 900, y: 1100 }, 'production-script'), 'C · 选中营销脚本'),
+    withTitle(makeNode('prompt', { x: 1600, y: 710 }, 'production-shot-prompt'), 'D · 分镜 AI 提示词'),
+    withTitle(makeNode('video', { x: 2030, y: 230 }, 'production-selling-video'), 'D · 卖点视频镜头'),
+    withTitle(makeNode('batchMaterial', { x: 1600, y: 1120 }, 'production-batch-material'), 'D · 100 个品类镜头'),
+    withTitle(makeNode('music', { x: 2300, y: 960 }, 'production-music'), 'E · 音乐模型'),
+    withTitle(makeNode('voice', { x: 2300, y: 1260 }, 'production-voice'), 'E · 配音模型'),
+    withTitle(makeNode('editor', { x: 2760, y: 700 }, 'production-editor'), 'E · AI 剪辑组装'),
+    withTitle(makeNode('export', { x: 3200, y: 720 }, 'production-export'), 'E · 10–20 条批量成片'),
   ];
   const edges: WorkflowEdge[] = [
-    { id: 'starter-edge-1', source: 'starter-storyboard', target: 'starter-prompt', animated: true },
-    { id: 'starter-edge-2', source: 'starter-character', target: 'starter-prompt', animated: true },
-    { id: 'starter-edge-3', source: 'starter-prompt', target: 'starter-image', animated: true },
-    { id: 'starter-edge-4', source: 'starter-image', target: 'starter-result', animated: true },
+    { id: 'production-edge-1', source: 'production-product', target: 'production-category-skill', animated: true },
+    { id: 'production-edge-2', source: 'production-scene', target: 'production-category-skill', animated: true },
+    { id: 'production-edge-3', source: 'production-category-skill', target: 'production-scene-images', animated: true },
+    { id: 'production-edge-4', source: 'production-scene-images', target: 'production-shot-prompt', animated: true },
+    { id: 'production-edge-5', source: 'production-character', target: 'production-shot-prompt', animated: true },
+    { id: 'production-edge-6', source: 'production-script', target: 'production-shot-prompt', animated: true },
+    { id: 'production-edge-7', source: 'production-shot-prompt', target: 'production-selling-video', animated: true },
+    { id: 'production-edge-8', source: 'production-category-skill', target: 'production-batch-material', animated: true },
+    { id: 'production-edge-9', source: 'production-selling-video', target: 'production-editor', animated: true },
+    { id: 'production-edge-10', source: 'production-batch-material', target: 'production-editor', animated: true },
+    { id: 'production-edge-11', source: 'production-script', target: 'production-voice', animated: true },
+    { id: 'production-edge-12', source: 'production-music', target: 'production-editor', animated: true },
+    { id: 'production-edge-13', source: 'production-voice', target: 'production-editor', animated: true },
+    { id: 'production-edge-14', source: 'production-editor', target: 'production-export', animated: true },
   ];
-  if (mode === 'video') {
-    nodes.push(makeNode('video', { x: 1520, y: 190 }, 'starter-video'));
-    edges.push({ id: 'starter-edge-5', source: 'starter-result', target: 'starter-video', animated: true });
-  }
   return { nodes, edges };
 };
+
+const createStarterGraph = (_mode: WorkflowMode): WorkflowSnapshot => createVideoProductionGraph();
 
 const storageKey = (projectKey: string) => `${STORAGE_PREFIX}${projectKey}`;
 
@@ -94,7 +118,7 @@ const safeReadDocument = (projectKey: string): WorkflowDocument | null => {
     const raw = localStorage.getItem(storageKey(projectKey));
     if (!raw) return null;
     const document = JSON.parse(raw) as WorkflowDocument;
-    if (document.version !== 1 || !Array.isArray(document.nodes) || !Array.isArray(document.edges)) return null;
+    if (document.version !== 3 || !Array.isArray(document.nodes) || !Array.isArray(document.edges)) return null;
     return document;
   } catch {
     return null;
@@ -134,7 +158,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     const { projectKey, nodes, edges } = get();
     if (!projectKey) return;
     const document: WorkflowDocument = {
-      version: 1,
+      version: 3,
       projectId: projectKey,
       nodes: nodes.map((node) => ({ ...node, selected: false })),
       edges: edges.map((edge) => ({ ...edge, selected: false })),
@@ -171,7 +195,7 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     const offset = state.nodes.length * 18;
     const node = makeNode(kind, position || { x: 320 + offset, y: 180 + offset });
     set((current) => ({
-      nodes: [...current.nodes.map((item) => ({ ...item, selected: false })), { ...node, selected: true }],
+      nodes: [...current.nodes.map((item) => ({ ...item, selected: false })), { ...node, selected: false }],
       edges: current.edges.map((item) => ({ ...item, selected: false })),
     }));
     return node.id;
@@ -270,11 +294,11 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     const baseX = state.nodes.length ? Math.max(...state.nodes.map((node) => node.position.x)) + 380 : 100;
     const storyboard = makeNode('storyboard', { x: baseX, y: 110 });
     storyboard.data = { ...storyboard.data, title: 'Agent 分镜草案', prompt };
-    const promptNode = makeNode('prompt', { x: baseX + 360, y: 110 });
-    const image = makeNode('image', { x: baseX + 720, y: 110 });
-    const result = makeNode('result', { x: baseX + 1080, y: 110 });
+    const promptNode = makeNode('prompt', { x: baseX + 320, y: 110 });
+    const image = makeNode('image', { x: baseX + 670, y: 110 });
+    const result = makeNode('result', { x: baseX + 940, y: 110 });
     const nodes = [storyboard, promptNode, image, result];
-    if (/视频|动效|运镜/.test(prompt)) nodes.push(makeNode('video', { x: baseX + 1440, y: 110 }));
+    if (/视频|动效|运镜/.test(prompt)) nodes.push(makeNode('video', { x: baseX + 1210, y: 110 }));
     const edges: WorkflowEdge[] = nodes.slice(1).map((node, index) => ({
       id: `agent-${nodes[index].id}-${node.id}`,
       source: nodes[index].id,
@@ -287,5 +311,11 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       edges: [...current.edges, ...edges],
     }));
   },
-}));
 
+  createVideoProductionDraft: () => {
+    const state = get();
+    state.checkpoint();
+    const graph = createVideoProductionGraph();
+    set({ nodes: graph.nodes, edges: graph.edges, pendingRunNodeId: null });
+  },
+}));

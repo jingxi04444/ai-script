@@ -1170,6 +1170,25 @@ CREATE TABLE ai_visual_binding (
   KEY idx_ai_visual_binding_shot (shot_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='视觉元素绑定表';
 
+DROP TABLE IF EXISTS ai_workflow;
+CREATE TABLE ai_workflow (
+  id BIGINT NOT NULL COMMENT '主键ID',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  project_id INT NOT NULL COMMENT '项目ID',
+  name VARCHAR(120) NOT NULL COMMENT '工作流名称',
+  mode VARCHAR(20) NOT NULL DEFAULT 'video' COMMENT '模式：image/video',
+  version INT NOT NULL DEFAULT 1 COMMENT '画布版本号',
+  graph_json JSON NOT NULL COMMENT 'React Flow 节点、连线与配置快照',
+  create_by INT NOT NULL COMMENT '创建人',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_ai_workflow_owner (tenant_id, project_id, create_by, mode),
+  KEY idx_ai_workflow_project (project_id, update_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI生产画布工作流';
+
 DROP TABLE IF EXISTS ai_generation_task;
 CREATE TABLE ai_generation_task (
   id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
