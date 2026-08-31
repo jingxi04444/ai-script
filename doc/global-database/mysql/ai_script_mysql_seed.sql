@@ -254,7 +254,7 @@ INSERT INTO sys_permission (
   (113, '查看操作日志', 'admin:operation-log:view', 'system', 'api', '/api/admin/operation-logs/**', NULL, NULL, 1013, 1),
   (114, '管理通知', 'admin:notification:manage', 'notification', 'api', '/api/admin/notifications/**', NULL, NULL, 1014, 1),
   (115, '管理站点配置', 'admin:system:site-config:manage', 'system', 'api', '/api/admin/system/site-config', NULL, NULL, 1015, 1),
-  (116, '后台文件上传', 'admin:file:upload', 'asset', 'api', '/api/files/upload', NULL, NULL, 1016, 1),
+  (116, '后台文件上传', 'admin:file:upload', 'asset', 'api', '/api/admin/files/upload', NULL, NULL, 1016, 1),
   (117, '管理首页轮播', 'admin:system:home-banner:manage', 'system', 'api', '/api/admin/system/home-banners/**', NULL, NULL, 1017, 1)
 ON DUPLICATE KEY UPDATE
   permission_name = VALUES(permission_name),
