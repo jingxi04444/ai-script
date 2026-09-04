@@ -6,9 +6,11 @@ import com.aiscript.modules.auth.entity.SysUser;
 import com.aiscript.modules.auth.mapper.SysUserMapper;
 import com.aiscript.modules.membership.entity.AiMembershipPlan;
 import com.aiscript.modules.membership.entity.AiMembershipPlanSku;
+import com.aiscript.modules.membership.entity.AiSubscriptionChangeRecord;
 import com.aiscript.modules.membership.entity.AiUserSubscription;
 import com.aiscript.modules.membership.mapper.AiMembershipPlanMapper;
 import com.aiscript.modules.membership.mapper.AiMembershipPlanSkuMapper;
+import com.aiscript.modules.membership.mapper.AiSubscriptionChangeRecordMapper;
 import com.aiscript.modules.membership.mapper.AiUserSubscriptionMapper;
 import com.aiscript.modules.membership.service.MembershipEntitlementService;
 import com.aiscript.modules.system.entity.SysRole;
@@ -16,9 +18,9 @@ import com.aiscript.modules.system.entity.SysUserRole;
 import com.aiscript.modules.system.mapper.SysRoleMapper;
 import com.aiscript.modules.system.mapper.SysUserRoleMapper;
 import com.aiscript.modules.user.convert.UserConvert;
-import com.aiscript.modules.user.dto.InternalMembershipAdjustDTO;
 import com.aiscript.modules.user.dto.InternalUserCreateDTO;
 import com.aiscript.modules.user.dto.UserQueryDTO;
+import com.aiscript.modules.user.dto.UserMembershipAdjustDTO;
 import com.aiscript.modules.user.service.UserAdminService;
 import com.aiscript.modules.user.vo.UserVO;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
@@ -28,10 +30,12 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -45,6 +49,7 @@ public class UserAdminServiceImpl implements UserAdminService {
     private final AiMembershipPlanMapper planMapper;
     private final AiMembershipPlanSkuMapper skuMapper;
     private final AiUserSubscriptionMapper subscriptionMapper;
+    private final AiSubscriptionChangeRecordMapper subscriptionChangeMapper;
     private final MembershipEntitlementService entitlementService;
     private final PasswordEncoder passwordEncoder;
     private final ObjectMapper objectMapper;
@@ -56,6 +61,7 @@ public class UserAdminServiceImpl implements UserAdminService {
         AiMembershipPlanMapper planMapper,
         AiMembershipPlanSkuMapper skuMapper,
         AiUserSubscriptionMapper subscriptionMapper,
+        AiSubscriptionChangeRecordMapper subscriptionChangeMapper,
         MembershipEntitlementService entitlementService,
         PasswordEncoder passwordEncoder,
         ObjectMapper objectMapper
@@ -66,6 +72,7 @@ public class UserAdminServiceImpl implements UserAdminService {
         this.planMapper = planMapper;
         this.skuMapper = skuMapper;
         this.subscriptionMapper = subscriptionMapper;
+        this.subscriptionChangeMapper = subscriptionChangeMapper;
         this.entitlementService = entitlementService;
         this.passwordEncoder = passwordEncoder;
         this.objectMapper = objectMapper;
@@ -105,7 +112,7 @@ public class UserAdminServiceImpl implements UserAdminService {
         user.setUsername(payload.getUsername());
         user.setEmail(payload.getEmail());
         user.setPhone(payload.getPhone());
-        // 会员等级必须通过内部账号调级接口修改，避免只改用户表却没有真正授予权益。
+        // 会员等级必须通过调级接口修改，避免只改用户表却没有真正授予权益。
         sysUserMapper.updateById(user);
         return toUserVO(user);
     }
@@ -140,19 +147,16 @@ public class UserAdminServiceImpl implements UserAdminService {
         user.setUpdateTime(now);
         sysUserMapper.insert(user);
         assignFrontUserRole(user, now);
-        applyInternalMembership(user, selection, dto.getValidDays(), operatorId, now);
+        applyMembershipAdjustment(user, selection, dto.getValidDays(), operatorId, now);
         return toUserVO(user);
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public UserVO adjustInternalMembership(Integer id, InternalMembershipAdjustDTO dto, Integer operatorId) {
+    public UserVO adjustMembership(Integer id, UserMembershipAdjustDTO dto, Integer operatorId) {
         SysUser user = requireUser(id);
-        if (user.getInternalAccount() == null || user.getInternalAccount() != 1) {
-            throw new BusinessException("只能调整内部员工账号的会员等级");
-        }
         PlanSelection selection = requirePlanSelection(dto.getPlanId(), dto.getSkuId());
-        applyInternalMembership(user, selection, dto.getValidDays(), operatorId, LocalDateTime.now());
+        applyMembershipAdjustment(user, selection, dto.getValidDays(), operatorId, LocalDateTime.now());
         return toUserVO(requireUser(id));
     }
 
@@ -209,7 +213,7 @@ public class UserAdminServiceImpl implements UserAdminService {
         userRoleMapper.insert(relation);
     }
 
-    private void applyInternalMembership(
+    private void applyMembershipAdjustment(
         SysUser user,
         PlanSelection selection,
         Integer validDays,
@@ -218,6 +222,8 @@ public class UserAdminServiceImpl implements UserAdminService {
     ) {
         LocalDateTime end = now.plusDays(validDays);
         AiUserSubscription active = subscriptionMapper.selectActiveByUserForUpdate(user.getId().longValue());
+        Long beforePlanId = active == null ? null : active.getPlanId();
+        Long beforeSkuId = active == null ? null : active.getSkuId();
         String snapshot = buildSnapshot(selection, validDays, operatorId);
         if (active == null) {
             active = new AiUserSubscription();
@@ -232,9 +238,9 @@ public class UserAdminServiceImpl implements UserAdminService {
             active.setCurrentPeriodEnd(end);
             active.setBenefitAnchorTime(now);
             active.setCancelAtPeriodEnd(1);
-            active.setProvider("internal");
+            active.setProvider(Integer.valueOf(1).equals(user.getInternalAccount()) ? "internal" : "admin");
             active.setPlanSnapshotJson(snapshot);
-            active.setSourceOrderNo("INTERNAL-" + user.getId() + "-" + System.currentTimeMillis());
+            active.setSourceOrderNo("ADMIN-" + user.getId() + "-" + System.currentTimeMillis());
             active.setVersion(0);
             active.setCreateBy(operatorId.longValue());
             active.setUpdateBy(operatorId.longValue());
@@ -244,32 +250,30 @@ public class UserAdminServiceImpl implements UserAdminService {
             subscriptionMapper.insert(active);
         } else {
             int currentVersion = active.getVersion() == null ? 0 : active.getVersion();
+            boolean keepAutoRenew = Integer.valueOf(1).equals(active.getAutoRenew())
+                && !Integer.valueOf(1).equals(selection.plan().getIsFree());
             subscriptionMapper.update(null, new LambdaUpdateWrapper<AiUserSubscription>()
                 .eq(AiUserSubscription::getId, active.getId())
                 .set(AiUserSubscription::getPlanId, selection.plan().getId().longValue())
                 .set(AiUserSubscription::getSkuId, selection.sku().getId())
                 .set(AiUserSubscription::getStatus, "active")
-                .set(AiUserSubscription::getAutoRenew, 0)
+                .set(AiUserSubscription::getAutoRenew, keepAutoRenew ? 1 : 0)
                 .set(AiUserSubscription::getStartTime, now)
                 .set(AiUserSubscription::getCurrentPeriodStart, now)
                 .set(AiUserSubscription::getCurrentPeriodEnd, end)
                 .set(AiUserSubscription::getBenefitAnchorTime, now)
-                .set(AiUserSubscription::getNextRenewTime, null)
+                .set(AiUserSubscription::getNextRenewTime, keepAutoRenew ? end : null)
                 .set(AiUserSubscription::getGraceEndTime, null)
-                .set(AiUserSubscription::getCancelAtPeriodEnd, 1)
-                .set(AiUserSubscription::getCancelTime, null)
                 .set(AiUserSubscription::getPendingPlanId, null)
                 .set(AiUserSubscription::getPendingSkuId, null)
                 .set(AiUserSubscription::getPendingEffectiveTime, null)
-                .set(AiUserSubscription::getProvider, "internal")
-                .set(AiUserSubscription::getAgreementNo, null)
                 .set(AiUserSubscription::getPlanSnapshotJson, snapshot)
                 .set(AiUserSubscription::getVersion, currentVersion + 1)
                 .set(AiUserSubscription::getUpdateBy, operatorId.longValue())
                 .set(AiUserSubscription::getUpdateTime, now));
         }
+        recordMembershipAdjustment(active, user, selection, beforePlanId, beforeSkuId, operatorId, now);
         user.setMemberLevel(selection.plan().getPlanLevel());
-        user.setInternalAccount(1);
         user.setUpdateBy(operatorId);
         user.setUpdateTime(now);
         sysUserMapper.updateById(user);
@@ -284,13 +288,44 @@ public class UserAdminServiceImpl implements UserAdminService {
                 "planName", selection.plan().getPlanName(),
                 "skuId", selection.sku().getId(),
                 "skuCode", selection.sku().getSkuCode(),
-                "internalGrant", true,
+                "adminGrant", true,
                 "validDays", validDays,
                 "operatorId", operatorId
             ));
         } catch (JsonProcessingException ex) {
             throw new BusinessException("会员套餐快照生成失败");
         }
+    }
+
+    private void recordMembershipAdjustment(
+        AiUserSubscription subscription,
+        SysUser user,
+        PlanSelection selection,
+        Long beforePlanId,
+        Long beforeSkuId,
+        Integer operatorId,
+        LocalDateTime now
+    ) {
+        AiSubscriptionChangeRecord record = new AiSubscriptionChangeRecord();
+        record.setTenantId(user.getTenantId() == null ? null : user.getTenantId().longValue());
+        record.setSubscriptionId(subscription.getId());
+        record.setUserId(user.getId().longValue());
+        record.setChangeType("admin_adjust");
+        record.setBeforePlanId(beforePlanId);
+        record.setBeforeSkuId(beforeSkuId);
+        record.setAfterPlanId(selection.plan().getId().longValue());
+        record.setAfterSkuId(selection.sku().getId());
+        record.setOriginalAmount(BigDecimal.ZERO);
+        record.setCreditAmount(BigDecimal.ZERO);
+        record.setPayableAmount(BigDecimal.ZERO);
+        record.setEffectiveType("immediate");
+        record.setEffectiveTime(now);
+        record.setSourceOrderNo("ADMIN-ADJUST-" + user.getId() + "-" + operatorId + "-"
+            + UUID.randomUUID().toString().replace("-", ""));
+        record.setStatus("effective");
+        record.setCreateTime(now);
+        record.setUpdateTime(now);
+        subscriptionChangeMapper.insert(record);
     }
 
     private UserVO toUserVO(SysUser user) {

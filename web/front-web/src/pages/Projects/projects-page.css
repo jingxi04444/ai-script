@@ -1455,6 +1455,21 @@ html[data-color-mode='light'] .project-team-dialog-mask {
   font-size: 16px;
 }
 
+.project-gallery-load-more {
+  min-height: 54px;
+  display: grid;
+  place-items: center;
+  padding: 4px 16px 22px;
+  color: #7f888c;
+  font-size: 13px;
+}
+
+.project-gallery-load-more span {
+  padding: 7px 13px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
 @media (max-width: 1500px) {
   .project-gallery-grid {
     grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));

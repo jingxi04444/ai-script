@@ -3,7 +3,7 @@ package com.aiscript.modules.user.controller;
 import com.aiscript.common.api.PageResult;
 import com.aiscript.common.api.R;
 import com.aiscript.modules.user.dto.UserQueryDTO;
-import com.aiscript.modules.user.dto.InternalMembershipAdjustDTO;
+import com.aiscript.modules.user.dto.UserMembershipAdjustDTO;
 import com.aiscript.modules.user.dto.InternalUserCreateDTO;
 import com.aiscript.modules.user.service.UserAdminService;
 import com.aiscript.modules.user.vo.UserVO;
@@ -51,13 +51,13 @@ public class AdminUserController {
         return R.ok(userAdminService.createInternalAccount(dto, operator.getUserId(), operator.getTenantId()));
     }
 
-    @PutMapping("/{id}/internal-membership")
-    public R<UserVO> adjustInternalMembership(
+    @PutMapping("/{id}/membership")
+    public R<UserVO> adjustMembership(
         @PathVariable Integer id,
-        @Valid @RequestBody InternalMembershipAdjustDTO dto
+        @Valid @RequestBody UserMembershipAdjustDTO dto
     ) {
         LoginUser operator = currentUser();
-        return R.ok(userAdminService.adjustInternalMembership(id, dto, operator.getUserId()));
+        return R.ok(userAdminService.adjustMembership(id, dto, operator.getUserId()));
     }
 
     @PostMapping("/{id}/disable")

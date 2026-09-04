@@ -7,9 +7,13 @@ interface ProjectState {
   currentProject: Project | null;
   total: number;
   isLoading: boolean;
+  isLoadingMore: boolean;
+  hasMore: boolean;
+  currentPage: number;
   filters: ProjectListParams;
 
   fetchProjects: (params?: ProjectListParams) => Promise<void>;
+  fetchMoreProjects: () => Promise<void>;
   fetchProjectById: (id: string) => Promise<void>;
   createProject: (data: Partial<Project>) => Promise<Project>;
   updateProject: (id: string, data: Partial<Project>) => Promise<void>;
@@ -24,19 +28,57 @@ const initialProjectState = {
   currentProject: null as Project | null,
   total: 0,
   isLoading: false,
-  filters: { page: 1, pageSize: 10 } as ProjectListParams,
+  isLoadingMore: false,
+  hasMore: false,
+  currentPage: 1,
+  filters: { page: 1, pageSize: 20 } as ProjectListParams,
 };
+
+let projectListRequestVersion = 0;
 
 export const useProjectStore = create<ProjectState>((set, get) => ({
   ...initialProjectState,
 
   fetchProjects: async (params) => {
-    set({ isLoading: true });
+    const requestVersion = ++projectListRequestVersion;
+    const filters = { ...get().filters, ...params, page: 1, pageSize: params?.pageSize || get().filters.pageSize || 20 };
+    set({ isLoading: true, isLoadingMore: false, filters });
     try {
-      const { list, total } = await projectApi.getList(params || get().filters);
-      set({ projects: list, total, isLoading: false });
+      const result = await projectApi.getList(filters);
+      if (requestVersion !== projectListRequestVersion) return;
+      const currentPage = result.page || 1;
+      const pages = result.pages ?? Math.ceil(result.total / (result.pageSize || filters.pageSize || 20));
+      set({ projects: result.list, total: result.total, currentPage, hasMore: currentPage < pages, isLoading: false });
     } catch (error) {
-      set({ isLoading: false });
+      if (requestVersion === projectListRequestVersion) set({ isLoading: false });
+      throw error;
+    }
+  },
+
+  fetchMoreProjects: async () => {
+    const state = get();
+    if (state.isLoading || state.isLoadingMore || !state.hasMore) return;
+    const requestVersion = projectListRequestVersion;
+    const nextPage = state.currentPage + 1;
+    set({ isLoadingMore: true });
+    try {
+      const result = await projectApi.getList({ ...state.filters, page: nextPage });
+      if (requestVersion !== projectListRequestVersion) return;
+      const page = result.page || nextPage;
+      const pages = result.pages ?? Math.ceil(result.total / (result.pageSize || state.filters.pageSize || 20));
+      set((current) => {
+        const existingIds = new Set(current.projects.map((project) => project.id));
+        const additions = result.list.filter((project) => !existingIds.has(project.id));
+        return {
+          projects: [...current.projects, ...additions],
+          total: result.total,
+          currentPage: page,
+          hasMore: page < pages,
+          isLoadingMore: false,
+        };
+      });
+    } catch (error) {
+      if (requestVersion === projectListRequestVersion) set({ isLoadingMore: false });
       throw error;
     }
   },
@@ -54,7 +96,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   createProject: async (data) => {
     const project = await projectApi.create(data);
-    set((state) => ({ projects: [project, ...state.projects] }));
+    set((state) => ({ projects: [project, ...state.projects], total: state.total + 1 }));
     return project;
   },
 

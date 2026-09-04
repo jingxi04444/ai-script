@@ -1,5 +1,6 @@
 package com.aiscript.integration.parser;
 
+import com.aiscript.common.api.ResultCode;
 import com.aiscript.common.exception.BusinessException;
 import com.aiscript.common.util.JsonUtils;
 import com.aiscript.common.util.UrlUtils;
@@ -19,19 +20,27 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Component
+@Slf4j
 public class DefaultVideoParserClient implements VideoParserClient {
     private final ProviderConfigService providerConfigService;
     private final SecretCipherService secretCipherService;
+    private final DouyinBrowserMediaResolver douyinBrowserMediaResolver;
     private final HttpClient redirectClient;
     private final HttpClient noRedirectClient;
 
-    public DefaultVideoParserClient(ProviderConfigService providerConfigService, SecretCipherService secretCipherService) {
+    public DefaultVideoParserClient(
+        ProviderConfigService providerConfigService,
+        SecretCipherService secretCipherService,
+        DouyinBrowserMediaResolver douyinBrowserMediaResolver
+    ) {
         this.providerConfigService = providerConfigService;
         this.secretCipherService = secretCipherService;
+        this.douyinBrowserMediaResolver = douyinBrowserMediaResolver;
         this.redirectClient = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.ALWAYS)
             .connectTimeout(Duration.ofSeconds(15))
@@ -50,7 +59,11 @@ public class DefaultVideoParserClient implements VideoParserClient {
         }
         SysApiProviderConfig provider = providerConfigService.firstEnabled("video_parse");
         if (provider == null || !StringUtils.hasText(provider.getEndpointUrl())) {
-            return localParse(normalizedUrl).orElseGet(() -> fallback(normalizedUrl));
+            Map<String, Object> parsed = localParse(normalizedUrl).orElseGet(() -> fallback(normalizedUrl));
+            if ("url_only".equals(stringValue(parsed.get("parseMode"))) && looksLikeDirectMediaUrl(normalizedUrl)) {
+                parsed.put("parseMode", "real_video");
+            }
+            return requireUsableResult(normalizedUrl, parsed, false);
         }
         Map<String, Object> payload = Map.of("url", normalizedUrl);
         HttpRequest.Builder builder = HttpRequest.newBuilder()
@@ -70,7 +83,7 @@ public class DefaultVideoParserClient implements VideoParserClient {
             if (body.isEmpty()) {
                 throw new BusinessException("视频解析Provider返回为空");
             }
-            return unwrapData(body);
+            return requireUsableResult(normalizedUrl, normalizeProviderResult(normalizedUrl, unwrapData(body)), true);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new BusinessException("视频解析Provider调用被中断");
@@ -96,9 +109,98 @@ public class DefaultVideoParserClient implements VideoParserClient {
             if ("xiaohongshu".equals(platform)) {
                 return Optional.of(parseRedBook(url));
             }
-        } catch (Exception ignored) {
+        } catch (Exception exception) {
+            log.warn("本地视频链接解析失败，platform={}, url={}, reason={}", platform, url, exception.getMessage());
         }
         return Optional.empty();
+    }
+
+    private Map<String, Object> normalizeProviderResult(String sourceUrl, Map<String, Object> providerResult) {
+        Map<String, Object> result = new HashMap<>(providerResult);
+        copyAlias(result, "sourceUrl", "source_url", "shareUrl", "share_url");
+        copyAlias(result, "videoUrl", "video_url", "playUrl", "play_url", "downloadUrl", "download_url", "url");
+        copyAlias(result, "coverUrl", "cover_url", "cover", "poster");
+        copyAlias(result, "authorName", "author_name", "nickname");
+        copyAlias(result, "copy", "transcript", "text", "content", "description", "desc");
+        result.putIfAbsent("sourceUrl", sourceUrl);
+        result.putIfAbsent("platform", detectPlatform(sourceUrl));
+        result.putIfAbsent("status", "parsed");
+
+        String parseMode = stringValue(result.get("parseMode"));
+        String videoUrl = stringValue(result.get("videoUrl"));
+        String copy = firstNonBlank(
+            stringValue(result.get("copy")),
+            stringValue(result.get("transcript")),
+            stringValue(result.get("text"))
+        );
+        if (!StringUtils.hasText(parseMode) || "url_only".equals(parseMode)) {
+            if (!asList(result.get("images")).isEmpty()) {
+                result.put("parseMode", "image_gallery");
+            } else if (isHttpUrl(videoUrl) && (!sameUrl(sourceUrl, videoUrl) || looksLikeDirectMediaUrl(videoUrl))) {
+                result.put("parseMode", "real_video");
+            } else if (StringUtils.hasText(copy)) {
+                result.put("parseMode", "text_only");
+            }
+        }
+        return result;
+    }
+
+    private Map<String, Object> requireUsableResult(String sourceUrl, Map<String, Object> parsed, boolean providerConfigured) {
+        String parseMode = stringValue(parsed.get("parseMode"));
+        String videoUrl = stringValue(parsed.get("videoUrl"));
+        String copy = firstNonBlank(
+            stringValue(parsed.get("transcript")),
+            stringValue(parsed.get("copy")),
+            stringValue(parsed.get("text")),
+            stringValue(parsed.get("description")),
+            stringValue(parsed.get("desc"))
+        );
+        boolean hasDirectVideo = "real_video".equals(parseMode)
+            && isHttpUrl(videoUrl)
+            && (!sameUrl(sourceUrl, videoUrl) || looksLikeDirectMediaUrl(videoUrl));
+        boolean hasCopy = StringUtils.hasText(copy);
+        boolean hasGallery = "image_gallery".equals(parseMode) && !asList(parsed.get("images")).isEmpty();
+        if (hasDirectVideo || hasCopy || hasGallery) {
+            return parsed;
+        }
+
+        String platform = detectPlatform(sourceUrl);
+        if (providerConfigured) {
+            throw new BusinessException(ResultCode.PROVIDER_ERROR, "视频解析服务未返回可识别的视频地址或文案，请检查 video_parse Provider 的返回字段；本次解析水滴会自动退回");
+        }
+        if ("douyin".equals(platform)) {
+            throw new BusinessException("抖音页面未返回可下载的视频直链，暂时无法执行本地下载和 ffmpeg 转码；请稍后重试，本次解析水滴会自动退回");
+        }
+        throw new BusinessException("视频页面未返回可下载的视频直链，暂时无法执行本地下载和 ffmpeg 转码；本次解析水滴会自动退回");
+    }
+
+    private void copyAlias(Map<String, Object> result, String target, String... aliases) {
+        if (StringUtils.hasText(stringValue(result.get(target)))) {
+            return;
+        }
+        for (String alias : aliases) {
+            Object value = result.get(alias);
+            if (value != null && StringUtils.hasText(stringValue(value))) {
+                result.put(target, value);
+                return;
+            }
+        }
+    }
+
+    private boolean isHttpUrl(String value) {
+        return StringUtils.hasText(value) && (value.startsWith("http://") || value.startsWith("https://"));
+    }
+
+    private boolean sameUrl(String first, String second) {
+        if (!StringUtils.hasText(first) || !StringUtils.hasText(second)) {
+            return false;
+        }
+        return first.trim().replaceAll("/+$", "").equalsIgnoreCase(second.trim().replaceAll("/+$", ""));
+    }
+
+    private boolean looksLikeDirectMediaUrl(String value) {
+        String lowerValue = value == null ? "" : value.toLowerCase();
+        return lowerValue.matches(".*\\.(mp4|mov|m4v|webm|m3u8|mp3|m4a|wav)(?:[?#].*)?$");
     }
 
     private Map<String, Object> parseDouyin(String url) throws Exception {
@@ -147,6 +249,20 @@ public class DefaultVideoParserClient implements VideoParserClient {
         String coverUrl = firstRegex(html, "https?:\\\\/\\\\/[^\\\"]*?(?:cover|image)[^\\\"]*?");
         if (StringUtils.hasText(coverUrl)) {
             result.put("coverUrl", cleanJsonText(coverUrl));
+        }
+        if (!"real_video".equals(stringValue(result.get("parseMode"))) && StringUtils.hasText(awemeId)) {
+            String browserUrl = "https://www.douyin.com/video/" + awemeId;
+            douyinBrowserMediaResolver.resolve(browserUrl).ifPresent(media -> {
+                result.put("videoUrl", media.mediaUrl());
+                result.put("parseMode", "real_video");
+                result.put("resolvedUrl", browserUrl);
+                if (StringUtils.hasText(media.title())) {
+                    result.put("title", media.title());
+                }
+                if (StringUtils.hasText(media.coverUrl())) {
+                    result.put("coverUrl", media.coverUrl());
+                }
+            });
         }
         return result;
     }

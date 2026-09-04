@@ -95,7 +95,7 @@ const routeMeta: Record<string, { title: string; desc: string }> = {
   '/dashboard': { title: '运营仪表盘', desc: '查看用户、项目、脚本和视频的核心数据。' },
   '/frontend': { title: '前台配置', desc: '管理前台租户、品牌和基础展示配置。' },
   '/projects': { title: '项目管理', desc: '按项目查看用户协作、脚本与视频产出。' },
-  '/users': { title: '用户与内部账号', desc: '维护普通用户，并创建和调整内部员工会员账号。' },
+  '/users': { title: '用户与内部账号', desc: '维护全部用户，并创建内部账号或调整任意用户的会员等级。' },
   '/models': { title: '大模型管理', desc: '配置 Provider、模型路由和服务状态。' },
   '/membership/plans': { title: '套餐权益', desc: '维护会员套餐、订阅周期和可用权益。' },
   '/membership/subscriptions': { title: '用户订阅', desc: '查看用户会员状态、续费和套餐变更。' },

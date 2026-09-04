@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../../stores/authStore';
-import ScriptGenerationQueue from '../GenerationQueue/ScriptGenerationQueue';
+import { useScriptPolishStore } from '../../stores/scriptPolishStore';
 
 interface RequireAuthProps {
   children: React.ReactNode;
@@ -11,6 +11,18 @@ const RequireAuth = ({ children }: RequireAuthProps) => {
   const location = useLocation();
   const { token, user, isAuthenticated, needsPhoneBinding, needsEmailBinding, fetchUserInfo } = useAuthStore();
   const [checking, setChecking] = useState(Boolean(token && !user));
+  const hasPolishSessions = useScriptPolishStore((state) => Object.keys(state.sessions).length > 0);
+
+  useEffect(() => {
+    if (!hasPolishSessions) return;
+    // Leaving a project hides its task center; refreshing must still warn about unsaved AI work.
+    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warnBeforeUnload);
+    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
+  }, [hasPolishSessions]);
 
   useEffect(() => {
     if (!token || user) {
@@ -52,7 +64,6 @@ const RequireAuth = ({ children }: RequireAuthProps) => {
   return (
     <>
       {children}
-      <ScriptGenerationQueue />
     </>
   );
 };

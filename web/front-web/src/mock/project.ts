@@ -14,9 +14,20 @@ const mockProjects: Project[] = [
 ];
 
 export const mockProjectApi = {
-  getList: async (_params?: any) => {
+  getList: async (params?: { page?: number; pageSize?: number; keyword?: string }) => {
     await delay(300);
-    return { list: mockProjects, total: mockProjects.length };
+    const page = params?.page || 1;
+    const pageSize = params?.pageSize || 20;
+    const keyword = params?.keyword?.trim().toLowerCase() || '';
+    const filtered = mockProjects.filter((project) => !keyword || project.name.toLowerCase().includes(keyword));
+    const start = (page - 1) * pageSize;
+    return {
+      list: filtered.slice(start, start + pageSize),
+      total: filtered.length,
+      page,
+      pageSize,
+      pages: Math.ceil(filtered.length / pageSize),
+    };
   },
 
   getById: async (id: string) => {

@@ -357,6 +357,7 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
         Map<String, Object> parsed = videoParserClient.parseShareUrl(dto.getUrl());
         String videoUrl = stringValue(parsed.getOrDefault("videoUrl", dto.getUrl()));
         String title = stringValue(parsed.get("title"));
+        requireExtractedContent(parsed, videoUrl);
         String copy = "";
         if (transcribe && shouldTranscribe(videoUrl, parsed)) {
             copy = asrClient.transcribe(videoUrl);
@@ -431,6 +432,26 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
         }
         String parseMode = stringValue(parsed.get("parseMode"));
         return "real_video".equals(parseMode) && (videoUrl.startsWith("http://") || videoUrl.startsWith("https://"));
+    }
+
+    private void requireExtractedContent(Map<String, Object> parsed, String videoUrl) {
+        String parseMode = stringValue(parsed.get("parseMode"));
+        boolean hasCopy = StringUtils.hasText(firstText(
+            parsed.get("transcript"),
+            parsed.get("copy"),
+            parsed.get("text"),
+            parsed.get("description"),
+            parsed.get("desc")
+        ));
+        boolean hasDirectVideo = "real_video".equals(parseMode)
+            && StringUtils.hasText(videoUrl)
+            && (videoUrl.startsWith("http://") || videoUrl.startsWith("https://"));
+        boolean hasGallery = "image_gallery".equals(parseMode)
+            && parsed.get("images") instanceof List<?> images
+            && !images.isEmpty();
+        if (!hasCopy && !hasDirectVideo && !hasGallery) {
+            throw new BusinessException("视频链接解析失败，未获取到可识别的视频地址或文案");
+        }
     }
 
     @Override

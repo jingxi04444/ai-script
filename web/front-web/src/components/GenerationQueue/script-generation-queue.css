@@ -1,9 +1,10 @@
 .task-center-launcher {
   position: fixed;
-  right: var(--task-center-right, 24px);
-  bottom: var(--task-center-bottom, 96px);
+  left: var(--task-center-left, calc(var(--workspace-rail-width, 112px) + 12px));
+  bottom: var(--task-center-bottom, 12px);
   z-index: 990;
-  min-width: 220px;
+  width: calc(var(--workspace-step-width, 272px) - 24px);
+  min-width: 0;
   max-width: calc(100vw - 24px);
   min-height: 60px;
   display: flex;
@@ -59,6 +60,16 @@ body:has(.script-output-backdrop) .task-center-launcher { visibility: hidden; po
 
 .task-center-launcher strong { font-size: 13px; letter-spacing: 0.01em; }
 .task-center-launcher small { color: #8f9b95; font-size: 11px; }
+
+.task-center-launcher strong,
+.task-center-launcher small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-shell.steps-collapsed .task-center-launcher { width: auto; }
+.workspace-shell.steps-collapsed .task-center-launcher > span:nth-child(2) { display: none; }
 
 .task-center-launcher em {
   min-width: 23px;
@@ -405,9 +416,7 @@ html[data-color-mode='light'] .task-center-download-title strong { color: #1d2a2
 
 @media (max-width: 700px) {
   .task-center-launcher {
-    right: var(--task-center-right, 14px);
-    bottom: var(--task-center-bottom, 88px);
-    min-width: 0;
+    width: auto;
   }
   .task-center-launcher > span:nth-child(2) { display: none; }
   .task-center-drawer-root .ant-drawer-content-wrapper { width: 100% !important; }

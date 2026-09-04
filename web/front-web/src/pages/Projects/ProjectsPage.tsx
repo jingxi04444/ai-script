@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Dropdown, Modal, message } from 'antd';
 import type { MenuProps } from 'antd';
@@ -19,7 +19,17 @@ import './projects-page.css';
 
 const ProjectsPage = () => {
   const navigate = useNavigate();
-  const { projects, fetchProjects, createProject, deleteProject, isLoading } = useProjectStore();
+  const {
+    projects,
+    total,
+    fetchProjects,
+    fetchMoreProjects,
+    createProject,
+    deleteProject,
+    isLoading,
+    isLoadingMore,
+    hasMore,
+  } = useProjectStore();
   const { setProject, reset } = useWorkspaceStore();
   const user = useAuthStore((state) => state.user);
   const [detailProject, setDetailProject] = useState<Project | null>(null);
@@ -36,10 +46,37 @@ const ProjectsPage = () => {
   const [inviteProject, setInviteProject] = useState<Project | null>(null);
   const [quickInviteUrl, setQuickInviteUrl] = useState('');
   const [quickInviteCreating, setQuickInviteCreating] = useState(false);
+  const projectScrollRef = useRef<HTMLElement | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+    const timer = window.setTimeout(() => {
+      projectScrollRef.current?.scrollTo({ top: 0 });
+      void fetchProjects({
+        page: 1,
+        pageSize: 20,
+        keyword: keyword.trim() || undefined,
+      }).catch((error) => {
+        message.error(error instanceof Error ? error.message : '项目加载失败，请稍后重试');
+      });
+    }, keyword.trim() ? 250 : 0);
+    return () => window.clearTimeout(timer);
+  }, [fetchProjects, keyword]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    const root = projectScrollRef.current;
+    if (!target || !root || !hasMore) return undefined;
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        void fetchMoreProjects().catch((error) => {
+          message.error(error instanceof Error ? error.message : '更多项目加载失败');
+        });
+      }
+    }, { root, rootMargin: '320px 0px', threshold: 0.01 });
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [fetchMoreProjects, hasMore]);
 
   const typeOptions = useMemo(
     () => Array.from(new Set(projects.map((item) => item.category).filter(Boolean))) as string[],
@@ -238,9 +275,9 @@ const ProjectsPage = () => {
         onHome={() => navigate('/home')}
       />
 
-      <section className="my-projects-page project-gallery-page" aria-label="我的项目">
+      <section ref={projectScrollRef} className="my-projects-page project-gallery-page" aria-label="我的项目">
         <header className="project-gallery-toolbar">
-          <strong>共{visibleProjects.length}项</strong>
+          <strong>{typeFilter === 'all' ? `共${total}项` : `已显示${visibleProjects.length}项`}</strong>
           <div className="project-gallery-toolbar-actions">
             <button className="project-gallery-collection-button" type="button" onClick={handleCreate}>
               <PlusOutlined />创建项目
@@ -338,6 +375,9 @@ const ProjectsPage = () => {
             ))}
           </section>
         )}
+        <div ref={loadMoreRef} className="project-gallery-load-more" aria-live="polite">
+          {isLoadingMore ? <span>正在加载更多项目…</span> : hasMore ? <span>继续向下滑动加载更多</span> : projects.length ? <span>已加载全部项目</span> : null}
+        </div>
       </section>
       {detailProject && (
         <div className="project-detail-dialog-mask" role="dialog" aria-modal="true" aria-label="项目详情">

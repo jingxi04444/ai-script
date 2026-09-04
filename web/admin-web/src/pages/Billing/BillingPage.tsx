@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Coins, Crown, Eye, Pencil, RefreshCcw, Save } from 'lucide-react';
+import { Check, Coins, Crown, Eye, Pencil, RefreshCcw, Save, Search, UserRound, X } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 import {
   membershipApi,
@@ -13,6 +13,7 @@ import {
   type RefundOrder,
   type TemplateCustomRequest,
 } from '../../api/membership';
+import { userApi, type User } from '../../api/user';
 import { EmptyState, Modal, PageHeader, Pagination, SectionCard, StatusBadge } from '../../components/common/AdminUI';
 import { useAdminShell } from '../../components/Layout/adminShell';
 import './billing-page.css';
@@ -195,6 +196,11 @@ const copyPlan = (plan: MembershipPlan): MembershipPlan => ({
 
 const formatPrice = (value: number | undefined) => `¥${Number(value || 0).toFixed(2)}`;
 
+const pointUserPrimaryLabel = (user: User) => user.username || user.nickname || user.account || user.email || user.phone || '未命名用户';
+
+const pointUserSecondaryLabel = (user: User) => [user.email, user.phone, user.account]
+  .find((value) => value && value !== pointUserPrimaryLabel(user)) || '暂无联系方式';
+
 const subscriptionStatusMeta: Record<string, { label: string; tone: 'green' | 'orange' | 'gray' | 'red' }> = {
   active: { label: '有效', tone: 'green' },
   canceling: { label: '到期取消', tone: 'orange' },
@@ -321,6 +327,10 @@ const BillingPage = () => {
   const [previewMode, setPreviewMode] = useState<PurchaseMode>('once_year');
   const [editingMode, setEditingMode] = useState<PurchaseMode>('once_year');
   const [pointForm, setPointForm] = useState({ userId: '', changePoints: '', remark: '' });
+  const [pointUserSearch, setPointUserSearch] = useState('');
+  const [pointUserResults, setPointUserResults] = useState<User[]>([]);
+  const [selectedPointUser, setSelectedPointUser] = useState<User | null>(null);
+  const [pointUserSearching, setPointUserSearching] = useState(false);
   const [pointPackageForm, setPointPackageForm] = useState<PointPackageFormState>(createPointPackageFormState());
   const [planCreateOpen, setPlanCreateOpen] = useState(false);
   const [planCreateForm, setPlanCreateForm] = useState<PlanCreateFormState>(createPlanFormState());
@@ -338,6 +348,36 @@ const BillingPage = () => {
     }),
     [plans],
   );
+
+  useEffect(() => {
+    if (section !== 'points' || pointManagementTab !== 'adjustment' || selectedPointUser) return undefined;
+    const query = pointUserSearch.trim();
+    if (!query) {
+      setPointUserResults([]);
+      setPointUserSearching(false);
+      return undefined;
+    }
+
+    let active = true;
+    const timer = window.setTimeout(() => {
+      setPointUserSearching(true);
+      userApi.getList({ page: 1, pageSize: 8, keyword: query })
+        .then((result) => {
+          if (active) setPointUserResults(result.list || []);
+        })
+        .catch(() => {
+          if (active) setPointUserResults([]);
+        })
+        .finally(() => {
+          if (active) setPointUserSearching(false);
+        });
+    }, 250);
+
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [pointManagementTab, pointUserSearch, section, selectedPointUser]);
 
   const skuCards = useMemo<PlanSkuCard[]>(() => plans.flatMap((plan) => (plan.skus || []).map((sku) => ({
     plan,
@@ -664,8 +704,8 @@ const BillingPage = () => {
 
   const adjustPoints = async () => {
     const changePoints = Number(pointForm.changePoints);
-    if (!pointForm.userId.trim() || !Number.isFinite(changePoints) || changePoints === 0) {
-      notify('请填写用户 ID 和非 0 的水滴调整数量');
+    if (!selectedPointUser || !pointForm.userId || !Number.isFinite(changePoints) || changePoints === 0) {
+      notify('请选择用户并填写非 0 的水滴调整数量');
       return;
     }
     setLoading(true);
@@ -673,6 +713,9 @@ const BillingPage = () => {
       await membershipApi.adjustPoints({ userId: pointForm.userId.trim(), changePoints, remark: pointForm.remark });
       notify('水滴已调整并写入流水');
       setPointForm({ userId: '', changePoints: '', remark: '' });
+      setSelectedPointUser(null);
+      setPointUserSearch('');
+      setPointUserResults([]);
     } catch { notify('水滴调整失败'); }
     finally { setLoading(false); }
   };
@@ -1063,15 +1106,56 @@ const BillingPage = () => {
         </SectionCard> : null}
 
         {pointManagementTab === 'adjustment' ? <div className="membership-point-layout">
-          <SectionCard title="人工调整水滴" description="正数增加、负数扣减；每次操作都会写入不可重复的水滴流水。">
+          <SectionCard title="人工调整水滴" description="搜索并选择用户后调整水滴，无需查询或输入用户 ID。">
             <div className="membership-point-form">
-              <label className="field"><span>用户 ID</span><input value={pointForm.userId} onChange={(event) => setPointForm({ ...pointForm, userId: event.target.value })} placeholder="请输入用户 ID" /></label>
+              <div className="field membership-point-user-picker">
+                <span>选择用户</span>
+                {selectedPointUser ? <div className="membership-point-selected-user">
+                  <span className="membership-point-user-avatar"><UserRound size={17} /></span>
+                  <span><strong>{pointUserPrimaryLabel(selectedPointUser)}</strong><small>{pointUserSecondaryLabel(selectedPointUser)} · {selectedPointUser.planName || '暂无有效套餐'}</small></span>
+                  <button type="button" aria-label="重新选择用户" onClick={() => {
+                    setSelectedPointUser(null);
+                    setPointForm((current) => ({ ...current, userId: '' }));
+                    setPointUserSearch('');
+                  }}><X size={16} /></button>
+                </div> : <div className="membership-point-user-search">
+                  <Search size={17} aria-hidden="true" />
+                  <input
+                    value={pointUserSearch}
+                    onChange={(event) => setPointUserSearch(event.target.value)}
+                    placeholder="输入用户名、邮箱或手机号"
+                    role="combobox"
+                    aria-expanded={Boolean(pointUserSearch.trim())}
+                    aria-controls="membership-point-user-results"
+                    autoComplete="off"
+                  />
+                  {pointUserSearching ? <span className="membership-point-user-loading">搜索中…</span> : null}
+                  {pointUserSearch.trim() ? <div className="membership-point-user-results" id="membership-point-user-results" role="listbox">
+                    {pointUserResults.map((user) => <button
+                      key={user.id}
+                      type="button"
+                      role="option"
+                      aria-selected="false"
+                      onClick={() => {
+                        setSelectedPointUser(user);
+                        setPointForm((current) => ({ ...current, userId: user.id }));
+                        setPointUserResults([]);
+                      }}
+                    >
+                      <span className="membership-point-user-avatar"><UserRound size={16} /></span>
+                      <span><strong>{pointUserPrimaryLabel(user)}</strong><small>{pointUserSecondaryLabel(user)}</small></span>
+                      <b>{user.planName || '暂无套餐'}</b>
+                    </button>)}
+                    {!pointUserSearching && !pointUserResults.length ? <div className="membership-point-user-empty">没有找到匹配用户</div> : null}
+                  </div> : null}
+                </div>}
+              </div>
               <label className="field"><span>调整数量</span><input type="number" value={pointForm.changePoints} onChange={(event) => setPointForm({ ...pointForm, changePoints: event.target.value })} placeholder="例如 500 或 -100" /></label>
               <label className="field"><span>调整原因</span><textarea rows={4} value={pointForm.remark} onChange={(event) => setPointForm({ ...pointForm, remark: event.target.value })} placeholder="请填写本次人工调整原因" /></label>
             </div>
-            <button className="toolbar-btn primary membership-point-submit" disabled={loading} onClick={() => void adjustPoints()}><Coins size={16} />确认调整</button>
+            <button className="toolbar-btn primary membership-point-submit" disabled={loading || !selectedPointUser} onClick={() => void adjustPoints()}><Coins size={16} />确认调整</button>
           </SectionCard>
-          <aside className="membership-point-note"><Coins size={22} /><h3>操作提示</h3><p>增加水滴填写正数，扣减水滴填写负数。提交前请核对用户 ID，水滴流水生成后不可重复提交。</p></aside>
+          <aside className="membership-point-note"><Coins size={22} /><h3>操作提示</h3><p>增加水滴填写正数，扣减水滴填写负数。提交前请核对用户名和联系方式，水滴流水生成后不可重复提交。</p></aside>
         </div> : null}
         </div>
       </div>}

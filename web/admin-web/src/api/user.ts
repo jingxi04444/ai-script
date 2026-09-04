@@ -31,7 +31,7 @@ export interface InternalUserCreatePayload {
   validDays: number;
 }
 
-export interface InternalMembershipAdjustPayload {
+export interface UserMembershipAdjustPayload {
   planId: string;
   skuId: string;
   validDays: number;
@@ -61,8 +61,8 @@ export const userApi = {
     return api.post('/users/internal', data);
   },
 
-  adjustInternalMembership: (id: string, data: InternalMembershipAdjustPayload): Promise<User> => {
-    return api.put(`/users/${id}/internal-membership`, data);
+  adjustMembership: (id: string, data: UserMembershipAdjustPayload): Promise<User> => {
+    return api.put(`/users/${id}/membership`, data);
   },
 
   disable: (id: string): Promise<void> => {

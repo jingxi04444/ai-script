@@ -2,7 +2,7 @@ package com.aiscript.modules.user.service;
 
 import com.aiscript.common.api.PageResult;
 import com.aiscript.modules.user.dto.UserQueryDTO;
-import com.aiscript.modules.user.dto.InternalMembershipAdjustDTO;
+import com.aiscript.modules.user.dto.UserMembershipAdjustDTO;
 import com.aiscript.modules.user.dto.InternalUserCreateDTO;
 import com.aiscript.modules.user.vo.UserVO;
 
@@ -15,7 +15,7 @@ public interface UserAdminService {
 
     UserVO createInternalAccount(InternalUserCreateDTO dto, Integer operatorId, Integer tenantId);
 
-    UserVO adjustInternalMembership(Integer id, InternalMembershipAdjustDTO dto, Integer operatorId);
+    UserVO adjustMembership(Integer id, UserMembershipAdjustDTO dto, Integer operatorId);
 
     void enable(Integer id);
 

@@ -3,7 +3,7 @@ import { BadgeCheck, Crown, Edit2, RefreshCcw, Save, ShieldCheck, Trash2, UserPl
 import { membershipApi, type MembershipPlan } from '../../api/membership';
 import {
   userApi,
-  type InternalMembershipAdjustPayload,
+  type UserMembershipAdjustPayload,
   type InternalUserCreatePayload,
   type User,
 } from '../../api/user';
@@ -23,7 +23,7 @@ const emptyCreateForm: InternalUserCreatePayload = {
   validDays: 365,
 };
 
-const emptyMembershipForm: InternalMembershipAdjustPayload = {
+const emptyMembershipForm: UserMembershipAdjustPayload = {
   planId: '',
   skuId: '',
   validDays: 365,
@@ -45,7 +45,7 @@ const UserListPage = () => {
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState<InternalUserCreatePayload>(emptyCreateForm);
   const [membershipUser, setMembershipUser] = useState<User | null>(null);
-  const [membershipForm, setMembershipForm] = useState<InternalMembershipAdjustPayload>(emptyMembershipForm);
+  const [membershipForm, setMembershipForm] = useState<UserMembershipAdjustPayload>(emptyMembershipForm);
   const [saving, setSaving] = useState(false);
 
   const enabledPlans = useMemo(() => plans.filter((plan) => plan.status === 1), [plans]);
@@ -149,7 +149,7 @@ const UserListPage = () => {
     if (!membershipUser || !membershipForm.planId || !membershipForm.skuId) return;
     setSaving(true);
     try {
-      await userApi.adjustInternalMembership(membershipUser.id, {
+      await userApi.adjustMembership(membershipUser.id, {
         ...membershipForm,
         validDays: Number(membershipForm.validDays),
       });
@@ -188,7 +188,7 @@ const UserListPage = () => {
     <div className="page-stack user-account-page">
       <PageHeader
         title="用户与内部账号"
-        description="管理普通用户，并为内部员工创建可登录、可到期、权益真实生效的会员账号。"
+        description="管理全部用户，并为任意用户调整真实生效的会员套餐与有效期。"
         actions={
           <div className="toolbar-group">
             <input className="toolbar-input" value={keyword} onChange={(e) => setKeyword(e.target.value)} placeholder="搜索用户名 / 邮箱 / 手机号" />
@@ -198,7 +198,7 @@ const UserListPage = () => {
         }
       />
 
-      <SectionCard title="用户列表" description="内部账号可人工调整套餐和有效期；普通注册用户的等级由支付订阅控制。">
+      <SectionCard title="用户列表" description="管理员可为全部用户调整套餐和有效期；调到付费套餐时保留原自动续费状态。">
         {users.length ? (
           <>
             <div className="admin-table user-account-table">
@@ -213,7 +213,7 @@ const UserListPage = () => {
                   <span>{user.subscriptionEnd?.replace('T', ' ') || '-'}</span>
                   <StatusBadge tone={user.status === 'disabled' ? 'gray' : 'green'}>{user.status === 'disabled' ? '已禁用' : '正常'}</StatusBadge>
                   <div className="table-actions">
-                    {user.internalAccount ? <button className="table-btn membership-action" type="button" onClick={() => openMembership(user)}><Crown size={15} />调等级</button> : null}
+                    <button className="table-btn membership-action" type="button" onClick={() => openMembership(user)}><Crown size={15} />调等级</button>
                     <button className="table-btn" title="编辑基础信息" type="button" onClick={() => openEdit(user)}><Edit2 size={16} /></button>
                     <button className="table-btn" type="button" onClick={() => setActionId(user.id)}>{user.status === 'disabled' ? '启用' : '禁用'}</button>
                   </div>
@@ -248,7 +248,7 @@ const UserListPage = () => {
       <Modal
         open={Boolean(membershipUser)}
         title={`调整会员等级${membershipUser ? ` · ${membershipUser.username}` : ''}`}
-        description="调整会覆盖当前内部订阅的套餐与到期时间，并立即刷新该账号的权益。"
+        description="调整会立即覆盖当前套餐和到期时间，并刷新用户权益；付费套餐保留原自动续费状态，免费套餐停止系统自动扣款。"
         onClose={() => setMembershipUser(null)}
         footer={<><button className="modal-btn" type="button" onClick={() => setMembershipUser(null)}>取消</button><button className="modal-btn primary" disabled={saving} type="button" onClick={adjustMembership}><Crown size={16} />确认调级</button></>}
       >
@@ -262,7 +262,7 @@ const UserListPage = () => {
       <Modal
         open={editorOpen}
         title="编辑用户基础信息"
-        description="会员等级不在这里直接修改，内部账号请使用列表中的“调等级”。"
+        description="会员等级不在这里直接修改，请使用列表中的“调等级”。"
         onClose={() => setEditorOpen(false)}
         footer={<><button className="modal-btn" type="button" onClick={() => setEditorOpen(false)}>取消</button><button className="modal-btn primary" disabled={saving} type="button" onClick={save}><Save size={16} />保存</button></>}
       >

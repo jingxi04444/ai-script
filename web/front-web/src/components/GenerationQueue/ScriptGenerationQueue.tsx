@@ -58,7 +58,6 @@ const ScriptGenerationQueue = () => {
   const polishSessionsById = useScriptPolishStore((state) => state.sessions);
   const polishSessions = Object.values(polishSessionsById);
   const activePolishCount = polishSessions.filter(isPolishWorking).length;
-  const polishSessionCount = polishSessions.length;
   const [queue, setQueue] = useState<ScriptQueueState>(EMPTY_QUEUE);
   const [exportJobs, setExportJobs] = useState<ExportJob[]>([]);
   const [open, setOpen] = useState(false);
@@ -71,25 +70,19 @@ const ScriptGenerationQueue = () => {
   const previousExportActiveRef = useRef<number | null>(null);
   const seenExportSuccessRef = useRef<Set<string> | null>(null);
 
-  useEffect(() => {
-    if (!polishSessionCount) return;
-    const warnBeforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault();
-      event.returnValue = '';
-    };
-    window.addEventListener('beforeunload', warnBeforeUnload);
-    return () => window.removeEventListener('beforeunload', warnBeforeUnload);
-  }, [polishSessionCount]);
-
-  const loadTaskCenter = useCallback(async (quiet = true) => {
+  const loadTaskCenter = useCallback(async (
+    quiet = true,
+    loadGeneration = true,
+    loadExports = true,
+  ) => {
     if (!quiet) setLoading(true);
     try {
       const [queueResult, exportResult] = await Promise.allSettled([
-        scriptApi.getGenerationQueue(),
-        generationApi.exports({ page: 1, pageSize: 30 }),
+        loadGeneration ? scriptApi.getGenerationQueue() : Promise.resolve(null),
+        loadExports ? generationApi.exports({ page: 1, pageSize: 30 }) : Promise.resolve(null),
       ]);
 
-      if (queueResult.status === 'fulfilled') {
+      if (queueResult.status === 'fulfilled' && queueResult.value) {
         const next = queueResult.value;
         const currentSuccessIds = new Set(
           next.items.filter((item) => item.status === 'success').map((item) => item.id),
@@ -122,7 +115,7 @@ const ScriptGenerationQueue = () => {
         setQueue(next);
       }
 
-      if (exportResult.status === 'fulfilled') {
+      if (exportResult.status === 'fulfilled' && exportResult.value) {
         const jobs = exportResult.value.list || [];
         let activeCount = 0;
         const successIds = new Set<string>();
@@ -151,10 +144,10 @@ const ScriptGenerationQueue = () => {
 
   useEffect(() => {
     void loadTaskCenter();
-    const handleQueueChanged = () => void loadTaskCenter(false);
+    const handleQueueChanged = () => void loadTaskCenter(false, true, false);
     const handleExportChanged = () => {
       setActiveTab('downloads');
-      void loadTaskCenter(false);
+      void loadTaskCenter(false, false, true);
     };
     const handleOpen = (event: Event) => {
       const requestedTab = (event as CustomEvent<{ tab?: TaskCenterTab }>).detail?.tab;
@@ -188,12 +181,14 @@ const ScriptGenerationQueue = () => {
   const totalActiveCount = queue.activeCount + activeExportCount + activePolishCount;
 
   useEffect(() => {
-    const interval = window.setInterval(
-      () => void loadTaskCenter(),
-      totalActiveCount > 0 ? 3000 : 15000,
-    );
+    const shouldPollGeneration = queue.activeCount > 0;
+    const shouldPollExports = activeExportCount > 0;
+    if (!shouldPollGeneration && !shouldPollExports) return undefined;
+    const interval = window.setInterval(() => {
+      void loadTaskCenter(true, shouldPollGeneration, shouldPollExports);
+    }, 3000);
     return () => window.clearInterval(interval);
-  }, [loadTaskCenter, totalActiveCount]);
+  }, [activeExportCount, loadTaskCenter, queue.activeCount]);
 
   const updateConcurrency = async (concurrency: number) => {
     if (concurrency === queue.concurrency || savingConcurrency) return;
@@ -210,7 +205,7 @@ const ScriptGenerationQueue = () => {
   const cancelGeneration = async (item: ScriptQueueItem) => {
     await scriptApi.cancelGeneration(item.id);
     message.success('已从生成队列移除');
-    await loadTaskCenter(false);
+    await loadTaskCenter(false, true, false);
   };
 
   const openScript = (item: ScriptQueueItem) => {
@@ -238,7 +233,7 @@ const ScriptGenerationQueue = () => {
     try {
       await generationApi.cancelExport(job.id);
       message.success('已取消下载任务');
-      await loadTaskCenter(false);
+      await loadTaskCenter(false, false, true);
     } catch (error) {
       message.error(error instanceof Error ? error.message : '任务已经开始处理，无法取消');
     }
@@ -248,7 +243,7 @@ const ScriptGenerationQueue = () => {
     try {
       await generationApi.retryExport(job.id);
       message.success('下载任务已重新加入队列');
-      await loadTaskCenter(false);
+      await loadTaskCenter(false, false, true);
     } catch (error) {
       message.error(error instanceof Error ? error.message : '重新打包失败');
     }

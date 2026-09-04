@@ -1764,7 +1764,7 @@ CREATE TABLE IF NOT EXISTS ai_subscription_change_record (
   tenant_id BIGINT DEFAULT NULL,
   subscription_id BIGINT NOT NULL,
   user_id BIGINT NOT NULL,
-  change_type VARCHAR(30) NOT NULL COMMENT 'upgrade/downgrade/renew/cancel/revoke_downgrade',
+  change_type VARCHAR(30) NOT NULL COMMENT 'upgrade/downgrade/renew/cancel/revoke_downgrade/admin_adjust',
   before_plan_id BIGINT DEFAULT NULL,
   before_sku_id BIGINT DEFAULT NULL,
   after_plan_id BIGINT DEFAULT NULL,

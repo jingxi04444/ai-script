@@ -17,6 +17,7 @@ import {
   FolderOutlined,
 } from '@ant-design/icons';
 import HomeRail from '../../components/Layout/HomeRail';
+import ScriptGenerationQueue from '../../components/GenerationQueue/ScriptGenerationQueue';
 import BriefDialog from '../../components/Modal/BriefDialog';
 import BriefDetectionDialog from '../../components/Modal/BriefDetectionDialog';
 import UploadDialog from '../../components/Modal/UploadDialog';
@@ -498,6 +499,7 @@ const WorkspacePage = () => {
           }}
         />
       )}
+      <ScriptGenerationQueue />
     </main>
   );
 };

@@ -2651,7 +2651,6 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
                 </div>
               </div>
             </header>
-            <p className="script-output-window-hint"><MinusOutlined /> 最小化后 AI 继续工作，可继续处理其他脚本；从「任务中心 → AI 润色」返回。关闭标签页或刷新会丢失当前会话入口。</p>
             <article className={`script-output-content script-output-layout polish-workbench-layout ${sidePanelCollapsed ? 'is-side-collapsed' : ''}`}>
               <section className="polish-preview-panel">
                 <header>

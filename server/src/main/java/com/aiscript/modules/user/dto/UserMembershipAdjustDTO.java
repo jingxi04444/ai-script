@@ -6,7 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 
 @Data
-public class InternalMembershipAdjustDTO {
+public class UserMembershipAdjustDTO {
     @NotNull(message = "请选择会员套餐")
     private Long planId;
 

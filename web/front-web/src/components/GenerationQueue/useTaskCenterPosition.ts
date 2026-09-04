@@ -1,11 +1,12 @@
 import { useLayoutEffect, useRef, type KeyboardEvent, type MouseEvent, type PointerEvent } from 'react';
 
-const STORAGE_KEY = 'ai-script:task-center-position:v1';
+// Start with the project-sidebar default instead of restoring an old bottom-right position.
+const STORAGE_KEY = 'ai-script:task-center-position:v2';
 const EDGE_GAP = 12;
 const DRAG_THRESHOLD = 6;
 
 interface Position {
-  right: number;
+  left: number;
   bottom: number;
 }
 
@@ -25,19 +26,19 @@ export function useTaskCenterPosition() {
 
   function readPosition(): Position {
     const rect = launcherRef.current!.getBoundingClientRect();
-    return { right: window.innerWidth - rect.right, bottom: window.innerHeight - rect.bottom };
+    return { left: rect.left, bottom: window.innerHeight - rect.bottom };
   }
 
   function applyPosition(position: Position) {
     const launcher = launcherRef.current;
     if (!launcher) return;
     const next = {
-      right: Math.max(EDGE_GAP, Math.min(position.right, window.innerWidth - launcher.offsetWidth - EDGE_GAP)),
+      left: Math.max(EDGE_GAP, Math.min(position.left, window.innerWidth - launcher.offsetWidth - EDGE_GAP)),
       bottom: Math.max(EDGE_GAP, Math.min(position.bottom, window.innerHeight - launcher.offsetHeight - EDGE_GAP)),
     };
     positionRef.current = next;
     // Only the coordinates change during dragging; task cards do not need to render again.
-    launcher.style.setProperty('--task-center-right', `${next.right}px`);
+    launcher.style.setProperty('--task-center-left', `${next.left}px`);
     launcher.style.setProperty('--task-center-bottom', `${next.bottom}px`);
   }
 
@@ -52,10 +53,10 @@ export function useTaskCenterPosition() {
   useLayoutEffect(() => {
     try {
       const stored: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-      if (stored && typeof stored === 'object' && 'right' in stored && 'bottom' in stored
-        && typeof stored.right === 'number' && Number.isFinite(stored.right)
+      if (stored && typeof stored === 'object' && 'left' in stored && 'bottom' in stored
+        && typeof stored.left === 'number' && Number.isFinite(stored.left)
         && typeof stored.bottom === 'number' && Number.isFinite(stored.bottom)) {
-        applyPosition({ right: stored.right, bottom: stored.bottom });
+        applyPosition({ left: stored.left, bottom: stored.bottom });
       }
     } catch {
       // Ignore invalid or unavailable saved preferences and use the CSS default.
@@ -95,7 +96,7 @@ export function useTaskCenterPosition() {
     drag.moved = true;
     suppressClickRef.current = true;
     event.currentTarget.dataset.dragging = 'true';
-    applyPosition({ right: drag.origin.right - dx, bottom: drag.origin.bottom - dy });
+    applyPosition({ left: drag.origin.left + dx, bottom: drag.origin.bottom - dy });
   }
 
   function endDrag(event: PointerEvent<HTMLButtonElement>) {
@@ -122,7 +123,7 @@ export function useTaskCenterPosition() {
     if (event.key === 'Home') {
       event.preventDefault();
       positionRef.current = null;
-      event.currentTarget.style.removeProperty('--task-center-right');
+      event.currentTarget.style.removeProperty('--task-center-left');
       event.currentTarget.style.removeProperty('--task-center-bottom');
       try {
         localStorage.removeItem(STORAGE_KEY);
@@ -135,8 +136,8 @@ export function useTaskCenterPosition() {
     event.preventDefault();
     const position = readPosition();
     const step = event.shiftKey ? 40 : 10;
-    if (event.key === 'ArrowLeft') position.right += step;
-    if (event.key === 'ArrowRight') position.right -= step;
+    if (event.key === 'ArrowLeft') position.left -= step;
+    if (event.key === 'ArrowRight') position.left += step;
     if (event.key === 'ArrowUp') position.bottom += step;
     if (event.key === 'ArrowDown') position.bottom -= step;
     applyPosition(position);

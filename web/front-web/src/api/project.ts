@@ -1,6 +1,7 @@
 import { config } from '../config';
 import { mockProjectApi } from '../mock/project';
 import api from './request';
+import type { PaginatedResponse } from '../types/api';
 import type {
   Project,
   ProjectCollaborationOverview,
@@ -10,7 +11,7 @@ import type {
 } from '../types/project';
 
 export const projectApi = {
-  getList: (params?: ProjectListParams): Promise<{ list: Project[]; total: number }> => {
+  getList: (params?: ProjectListParams): Promise<PaginatedResponse<Project>> => {
     if (config.useMock) return mockProjectApi.getList(params);
     return api.get('/projects', { params });
   },
