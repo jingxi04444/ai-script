@@ -51,7 +51,8 @@ public class SecurityConfig {
                     "/api/payments/notify/wechat/deduct",
                     "/api/payments/notify/alipay/contract",
                     "/api/payments/notify/alipay/deduct",
-                    "/api/payments/notify/alipay/scan"
+                    "/api/payments/notify/alipay/scan",
+                    "/api/internal/workflow/providers/**"
                 ).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/site-config").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/script-formats").permitAll()

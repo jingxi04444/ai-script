@@ -33,12 +33,17 @@ public class OpenAiCompatibleClient implements LlmClient {
 
     @Override
     public String chat(String systemPrompt, String userPrompt) {
-        return sendChat(systemPrompt, userPrompt, List.of());
+        return sendChat(systemPrompt, userPrompt, List.of(), null);
+    }
+
+    @Override
+    public String chat(String systemPrompt, String userPrompt, String model) {
+        return sendChat(systemPrompt, userPrompt, List.of(), model);
     }
 
     @Override
     public String chatWithImages(String systemPrompt, String userPrompt, List<String> imageUrls) {
-        return sendChat(systemPrompt, userPrompt, imageUrls == null ? List.of() : imageUrls);
+        return sendChat(systemPrompt, userPrompt, imageUrls == null ? List.of() : imageUrls, null);
     }
 
     @Override
@@ -46,10 +51,12 @@ public class OpenAiCompatibleClient implements LlmClient {
         return sendStreamingChat(systemPrompt, userPrompt);
     }
 
-    private String sendChat(String systemPrompt, String userPrompt, List<String> imageUrls) {
-        SysApiProviderConfig provider = requireProvider();
+    private String sendChat(String systemPrompt, String userPrompt, List<String> imageUrls, String requestedModel) {
+        SysApiProviderConfig provider = requireProvider(requestedModel);
         Map<String, Object> config = JsonUtils.toMap(provider.getConfigJson());
-        String model = String.valueOf(config.getOrDefault("model", "gpt-4o-mini"));
+        String configuredModel = String.valueOf(config.getOrDefault("model", "gpt-4o-mini"));
+        String model = StringUtils.hasText(requestedModel)
+            && requestedModel.equalsIgnoreCase(configuredModel) ? requestedModel : configuredModel;
         Map<String, Object> payload = chatPayload(systemPrompt, userPrompt, imageUrls, config, model);
         HttpRequest.Builder builder = requestBuilder(provider)
             .POST(HttpRequest.BodyPublishers.ofString(JsonUtils.toJson(payload)));
@@ -109,8 +116,9 @@ public class OpenAiCompatibleClient implements LlmClient {
         return payload;
     }
 
-    private SysApiProviderConfig requireProvider() {
-        SysApiProviderConfig provider = providerConfigService.firstEnabled("llm");
+    private SysApiProviderConfig requireProvider(String model) {
+        SysApiProviderConfig provider = providerConfigService.resolveEnabled("llm", model);
+        if (provider == null && StringUtils.hasText(model)) provider = providerConfigService.firstEnabled("llm");
         if (provider == null || !StringUtils.hasText(provider.getEndpointUrl())) {
             throw new BusinessException("未配置LLM Provider");
         }
@@ -129,7 +137,7 @@ public class OpenAiCompatibleClient implements LlmClient {
     }
 
     private LlmChatResult sendStreamingChat(String systemPrompt, String userPrompt) {
-        SysApiProviderConfig provider = requireProvider();
+        SysApiProviderConfig provider = requireProvider(null);
         Map<String, Object> config = JsonUtils.toMap(provider.getConfigJson());
         String model = String.valueOf(config.getOrDefault("model", "gpt-4o-mini"));
         Map<String, Object> payload = chatPayload(systemPrompt, userPrompt, List.of(), config, model);

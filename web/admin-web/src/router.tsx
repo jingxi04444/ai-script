@@ -14,6 +14,7 @@ const PaymentOrdersPage = lazy(() => import('./pages/Payments/PaymentOrdersPage'
 const TemplateListPage = lazy(() => import('./pages/Templates/TemplateListPage'));
 const PromptTemplatesPage = lazy(() => import('./pages/Materials/PromptTemplatesPage'));
 const ImportTemplatesPage = lazy(() => import('./pages/Materials/ImportTemplatesPage'));
+const CreativeResourcesPage = lazy(() => import('./pages/CreativeResources/CreativeResourcesPage'));
 const RolesPage = lazy(() => import('./pages/System/RolesPage'));
 const PermissionsPage = lazy(() => import('./pages/System/PermissionsPage'));
 const OperationLogsPage = lazy(() => import('./pages/System/OperationLogsPage'));
@@ -103,6 +104,10 @@ export const router: RouteObject[] = [
       {
         path: 'templates',
         element: <LazyLoad><TemplateListPage /></LazyLoad>,
+      },
+      {
+        path: 'creative-resources',
+        element: <LazyLoad><CreativeResourcesPage /></LazyLoad>,
       },
       {
         path: 'script-generator-management',

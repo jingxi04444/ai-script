@@ -1,11 +1,13 @@
-import { memo, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useState, type ReactNode } from 'react';
 import {
   AppstoreOutlined,
+  BgColorsOutlined,
   ArrowUpOutlined,
   AudioOutlined,
   CameraOutlined,
   CheckOutlined,
   CheckCircleFilled,
+  CloseOutlined,
   CloudDownloadOutlined,
   DownOutlined,
   ExpandAltOutlined,
@@ -31,15 +33,24 @@ import {
   VideoCameraOutlined,
 } from '@ant-design/icons';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { workflowApi } from '../../../api/workflow';
 import { useWorkflowStore } from '../../../stores/workflowStore';
-import type { WorkflowNode, WorkflowNodeData, WorkflowNodeKind, WorkflowNodeStatus } from '../../../types/workflow';
+import type { WorkflowModelOption, WorkflowNode, WorkflowNodeData, WorkflowNodeKind, WorkflowNodeStatus } from '../../../types/workflow';
+import { creativeResourceLabels, isCreativeResourceType } from '../../../types/creativeResource';
+import './director-node.css';
+import './CreativeLibrary/creative-resource-library.css';
+import './template-resource-node.css';
+import './character-image-node.css';
 
 const nodeIcons: Record<WorkflowNodeKind, React.ReactNode> = {
   storyboard: <FileTextOutlined />,
   scriptGenerator: <FileTextOutlined />,
   text: <FileTextOutlined />,
   character: <UserOutlined />,
+  style: <BgColorsOutlined />,
+  effect: <ThunderboltOutlined />,
   scene: <AppstoreOutlined />,
+  director: <VideoCameraOutlined />,
   product: <ProductOutlined />,
   categorySkill: <ThunderboltOutlined />,
   prompt: <HighlightOutlined />,
@@ -63,26 +74,37 @@ const statusCopy: Record<WorkflowNodeStatus, string> = {
 };
 
 const resourceKinds = new Set<WorkflowNodeKind>([
-  'storyboard', 'character', 'scene', 'product', 'result', 'note',
-]);
-
-const editorKinds = new Set<WorkflowNodeKind>([
-  'text',
+  'storyboard',
   'scriptGenerator',
-  'image',
-  'video',
-  'batchMaterial',
-  'music',
-  'voice',
-  'prompt',
+  'character',
+  'style',
+  'effect',
+  'scene',
+  'product',
   'categorySkill',
+  'prompt',
+  'batchMaterial',
+  'result',
   'editor',
   'export',
+  'note',
 ]);
+
+const editorKinds = new Set<WorkflowNodeKind>(['text', 'image', 'video', 'music', 'voice']);
+
+const outputKinds = new Set<WorkflowNodeKind>(['batchMaterial', 'result', 'editor', 'export']);
+
+const nodeRole = (kind: WorkflowNodeKind) => {
+  if (kind === 'director') return { key: 'director', label: '3D 工作台' } as const;
+  if (editorKinds.has(kind)) return { key: 'creator', label: '创作' } as const;
+  if (outputKinds.has(kind)) return { key: 'output', label: '输出' } as const;
+  return { key: 'resource', label: '资源' } as const;
+};
 
 export const isWorkflowEditorKind = (kind: WorkflowNodeKind) => editorKinds.has(kind);
 
 const mediaKinds = new Set<WorkflowNodeKind>(['image', 'video', 'batchMaterial', 'result']);
+const visualResourceKinds = new Set<WorkflowNodeKind>(['product', 'scene', 'character']);
 
 const numberValue = (value: string, fallback: number) => {
   const parsed = Number(value);
@@ -112,6 +134,7 @@ interface EditorBodyProps {
   isBusy: boolean;
   onChange: (patch: Partial<WorkflowNodeData>) => void;
   onRun: () => void;
+  onStartCanvasSelection: (mode: 'reference' | 'mark') => void;
 }
 
 const RunButton = ({ isBusy, batch, onRun }: { isBusy: boolean; batch?: boolean; onRun: () => void }) => (
@@ -121,40 +144,97 @@ const RunButton = ({ isBusy, batch, onRun }: { isBusy: boolean; batch?: boolean;
   </button>
 );
 
-const ReferenceStrip = ({ data, video = false, onChange }: { data: WorkflowNodeData; video?: boolean; onChange: (patch: Partial<WorkflowNodeData>) => void }) => {
-  const uploadRef = useRef<HTMLInputElement>(null);
-  const [marked, setMarked] = useState(false);
+const ReferenceStrip = ({
+  data,
+  video = false,
+  onChange,
+  onStartCanvasSelection,
+}: {
+  data: WorkflowNodeData;
+  video?: boolean;
+  onChange: (patch: Partial<WorkflowNodeData>) => void;
+  onStartCanvasSelection: (mode: 'reference' | 'mark') => void;
+}) => {
+  const referenceLabels = data.referenceLabels || [];
+  const referenceMarks = data.referenceMarks || [];
+  const hasReferences = Boolean(data.assetUrl || referenceLabels.length || referenceMarks.length);
 
-  const selectReference = () => uploadRef.current?.click();
+  const removeReference = (index: number) => {
+    onChange({
+      referenceNodeIds: (data.referenceNodeIds || []).filter((_, itemIndex) => itemIndex !== index),
+      referenceLabels: referenceLabels.filter((_, itemIndex) => itemIndex !== index),
+    });
+  };
+
+  const removeMark = (index: number) => {
+    onChange({
+      referenceMarks: referenceMarks.filter((_, itemIndex) => itemIndex !== index),
+    });
+  };
 
   return (
-    <div className={`workflow-reference-strip${data.assetUrl ? ' has-asset' : ''}`}>
-      <input
-        ref={uploadRef}
-        type="file"
-        accept="image/*"
-        aria-label="上传参考素材"
-        hidden
-        onChange={(event) => {
-          const file = event.target.files?.[0];
-          if (file) onChange({ assetUrl: URL.createObjectURL(file) });
-          event.target.value = '';
-        }}
-      />
+    <div className={`workflow-reference-strip${hasReferences ? ' has-asset' : ''}`}>
       <div className="workflow-reference-actions">
-        <button type="button" onClick={selectReference}><PlusOutlined />{video ? '首帧参考' : '参考'}</button>
-        {video ? <button type="button" onClick={selectReference}><PlusOutlined />尾帧参考</button> : null}
-        <button type="button" className={marked ? 'selected' : ''} aria-pressed={marked} onClick={() => setMarked((value) => !value)}>
+        <button type="button" className={referenceLabels.length ? 'selected' : ''} onClick={() => onStartCanvasSelection('reference')}>
+          <PlusOutlined />{video ? '首帧参考' : '参考'}
+        </button>
+        {video ? <button type="button" onClick={() => onStartCanvasSelection('reference')}><PlusOutlined />尾帧参考</button> : null}
+        <button type="button" className={referenceMarks.length ? 'selected' : ''} onClick={() => onStartCanvasSelection('mark')}>
           <TagsOutlined />{video ? '动作参考' : '标记'}
         </button>
       </div>
-      {data.assetUrl ? (
+      {hasReferences ? (
         <div className="workflow-reference-assets">
-          <button type="button" className="workflow-reference-preview" onClick={selectReference} title="替换参考素材">
-            <img src={data.assetUrl} alt="参考素材" />
-            <span><ProductOutlined /></span>
-            <em>{video ? '首帧' : '风格'}</em>
-          </button>
+          {data.assetUrl ? (
+            <div className="workflow-reference-item">
+              <button type="button" className="workflow-reference-preview" onClick={() => onStartCanvasSelection('reference')} title="替换参考素材">
+                <img src={data.assetUrl} alt="参考素材" />
+                <span><ProductOutlined /></span>
+                <em>{video ? '首帧' : '风格'}</em>
+              </button>
+              <button
+                type="button"
+                className="workflow-reference-remove"
+                aria-label="移除参考素材"
+                title="移除参考素材"
+                onClick={() => onChange({ assetUrl: undefined })}
+              >
+                <CloseOutlined />
+              </button>
+            </div>
+          ) : null}
+          {referenceLabels.map((label, index) => (
+            <div className="workflow-reference-item" key={`${label}-${data.referenceNodeIds?.[index] || index}`}>
+              <button type="button" className="workflow-reference-node-chip" onClick={() => onStartCanvasSelection('reference')}>
+                <FileImageOutlined /><span>{label}</span><em>画布参考</em>
+              </button>
+              <button
+                type="button"
+                className="workflow-reference-remove"
+                aria-label={`移除参考：${label}`}
+                title="移除参考"
+                onClick={() => removeReference(index)}
+              >
+                <CloseOutlined />
+              </button>
+            </div>
+          ))}
+          {referenceMarks.map((mark, index) => (
+            <div className="workflow-reference-item" key={`${mark.nodeId}-${mark.parts.join('-')}`}>
+              <button type="button" className="workflow-reference-node-chip is-mark" onClick={() => onStartCanvasSelection('mark')}>
+                <TagsOutlined /><span>{mark.nodeTitle}</span><em>{mark.parts.join(' · ')}</em>
+              </button>
+              <button
+                type="button"
+                className="workflow-reference-remove"
+                aria-label={`移除标记：${mark.nodeTitle}`}
+                title="移除标记"
+                onClick={() => removeMark(index)}
+              >
+                <CloseOutlined />
+              </button>
+            </div>
+          ))}
         </div>
       ) : null}
     </div>
@@ -166,6 +246,43 @@ interface ModelOption {
   description: string;
   latency?: string;
 }
+
+let modelCatalogRequest: Promise<WorkflowModelOption[]> | null = null;
+
+const loadModelCatalog = () => {
+  if (!modelCatalogRequest) {
+    modelCatalogRequest = workflowApi.getModels().catch((error) => {
+      modelCatalogRequest = null;
+      throw error;
+    });
+  }
+  return modelCatalogRequest;
+};
+
+const useProviderModelOptions = (providerTypes: string[], fallback: ModelOption[]) => {
+  const [options, setOptions] = useState<ModelOption[]>(fallback);
+  const providerTypeKey = providerTypes.join(',');
+
+  useEffect(() => {
+    let active = true;
+    loadModelCatalog().then((catalog) => {
+      if (!active) return;
+      const allowedTypes = new Set(providerTypeKey.split(','));
+      const configured = catalog
+        .filter((item) => allowedTypes.has(item.providerType))
+        .map((item) => ({
+          name: item.model,
+          description: [item.providerName, item.platform].filter(Boolean).join(' · ') || '数据库 Provider 配置',
+        }));
+      if (configured.length) setOptions(configured);
+    }).catch(() => {
+      // 保留画布 Demo 的内置选项；运行时仍会由后端校验实际 Provider。
+    });
+    return () => { active = false; };
+  }, [providerTypeKey]);
+
+  return options;
+};
 
 interface ModelSelectorProps {
   ariaLabel: string;
@@ -277,13 +394,6 @@ const EditorExpandButton = ({ expanded, onClick }: { expanded: boolean; onClick:
   </button>
 );
 
-const imageModels: ModelOption[] = [
-  { name: 'Lib Image', latency: '20s', description: '高质量通用图片生成与编辑' },
-  { name: '高一致性商业生图模型', latency: '25s', description: '保持产品、人物和包装细节一致' },
-  { name: '商品 3D 渲染模型', latency: '35s', description: '棚拍级商品渲染与材质表现' },
-  { name: '高质感广告模型', latency: '30s', description: '商业广告视觉与高级光影' },
-];
-
 const videoModels: ModelOption[] = [
   { name: '高质量图生视频模型', latency: '90s', description: '画面稳定、主体一致的图生视频' },
   { name: '通用品类视频模型', latency: '70s', description: '适合批量生成电商品类镜头' },
@@ -291,10 +401,11 @@ const videoModels: ModelOption[] = [
   { name: '高速视频模型', latency: '45s', description: '快速预览动作与镜头节奏' },
 ];
 
-const scriptModels: ModelOption[] = [
-  { name: '商业短视频脚本模型', latency: '20s', description: '卖点、节奏与转化结构兼顾' },
-  { name: '电商卖点脚本模型', latency: '15s', description: '强化前三秒钩子与购买理由' },
-  { name: '品牌故事脚本模型', latency: '25s', description: '适合品牌叙事与情绪表达' },
+const imageModels: ModelOption[] = [
+  { name: 'Lib Image', latency: '25s', description: '商品主体稳定，适合电商场景图' },
+  { name: '高质感商品摄影', latency: '35s', description: '强化材质、光线与商业摄影质感' },
+  { name: '人物场景一致性', latency: '45s', description: '适合模特、产品与场景联合生成' },
+  { name: '快速预览模型', latency: '12s', description: '快速验证构图、比例与创意方向' },
 ];
 
 const textModels = [
@@ -304,7 +415,16 @@ const textModels = [
   { name: 'Qwen 3 VL Flash', latency: '10s', description: '视觉语言快速模型' },
 ];
 
-const TextModelSelector = ({ value, onChange }: { value: string; onChange: (value: string) => void }) => {
+const musicModels: ModelOption[] = [
+  { name: '商业音乐生成模型', description: '适合广告节奏与品牌氛围' },
+];
+
+const voiceModels: ModelOption[] = [
+  { name: '自然口播配音模型', description: '自然中文口播与旁白' },
+  { name: '情绪广告配音模型', description: '强调节奏和卖点情绪' },
+];
+
+const TextModelSelector = ({ value, options, onChange }: { value: string; options: ModelOption[]; onChange: (value: string) => void }) => {
   const [open, setOpen] = useState(false);
 
   return (
@@ -322,7 +442,7 @@ const TextModelSelector = ({ value, onChange }: { value: string; onChange: (valu
       </button>
       {open ? (
         <div className="workflow-text-model-menu" role="listbox" aria-label="文本模型">
-          {textModels.map((model) => (
+          {options.map((model) => (
             <button
               type="button"
               key={model.name}
@@ -345,8 +465,9 @@ const TextModelSelector = ({ value, onChange }: { value: string; onChange: (valu
   );
 };
 
-const TextEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => {
+const TextEditorBody = ({ data, isBusy, onChange, onRun, onStartCanvasSelection }: EditorBodyProps) => {
   const [expanded, setExpanded] = useState(false);
+  const modelOptions = useProviderModelOptions(['llm'], textModels);
 
   return (
     <div className={`workflow-native-editor workflow-text-editor nodrag nowheel${expanded ? ' is-expanded' : ''}`}>
@@ -359,7 +480,7 @@ const TextEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => {
       >
         {expanded ? <ShrinkOutlined /> : <ExpandAltOutlined />}
       </button>
-      <ReferenceStrip data={data} onChange={onChange} />
+      <ReferenceStrip data={data} onChange={onChange} onStartCanvasSelection={onStartCanvasSelection} />
       <textarea
         aria-label="文本内容"
         value={data.prompt || ''}
@@ -367,81 +488,34 @@ const TextEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => {
         onChange={(event) => onChange({ prompt: event.target.value })}
       />
       <footer className="workflow-native-toolbar">
-        <TextModelSelector value={data.model || 'GVLM 3.1'} onChange={(model) => onChange({ model })} />
+        <TextModelSelector value={data.model || modelOptions[0]?.name || 'GVLM 3.1'} options={modelOptions} onChange={(model) => onChange({ model })} />
         <span className="workflow-toolbar-spacer" />
-        <button type="button" className="workflow-toolbar-icon" title="翻译与语言处理" aria-label="翻译与语言处理">
-          <TranslationOutlined />
-        </button>
-        <span className="workflow-text-credit" title="预计消耗 6 点">
-          <ThunderboltOutlined /> 6
-        </span>
-        <button
-          type="button"
-          className="workflow-text-run"
-          title="生成文本"
-          aria-label="生成文本"
-          disabled={isBusy || !(data.prompt || '').trim()}
-          onClick={onRun}
-        >
-          {isBusy ? <LoadingOutlined spin /> : <ArrowUpOutlined />}
-        </button>
+        <div className="workflow-text-toolbar-actions">
+          <button type="button" className="workflow-toolbar-icon" title="翻译与语言处理" aria-label="翻译与语言处理">
+            <TranslationOutlined />
+          </button>
+          <span className="workflow-text-credit" title="预计消耗 6 点">
+            <ThunderboltOutlined /> 6
+          </span>
+          <button
+            type="button"
+            className="workflow-text-run"
+            title="生成文本"
+            aria-label="生成文本"
+            disabled={isBusy || !(data.prompt || '').trim()}
+            onClick={onRun}
+          >
+            {isBusy ? <LoadingOutlined spin /> : <ArrowUpOutlined />}
+          </button>
+        </div>
       </footer>
     </div>
   );
 };
 
-const ScriptEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => {
+const ImageEditorBody = ({ data, isBusy, onChange, onRun, onStartCanvasSelection }: EditorBodyProps) => {
   const [expanded, setExpanded] = useState(false);
-  const duration = String(data.durationSeconds || 30);
-
-  return (
-    <div className={`workflow-native-editor workflow-script-editor nodrag nowheel${expanded ? ' is-expanded' : ''}`}>
-      <EditorExpandButton expanded={expanded} onClick={() => setExpanded((value) => !value)} />
-      <div className="workflow-editor-suggestion">
-        <span>尝试：</span>
-        <button type="button" onClick={() => onChange({ prompt: '围绕产品核心卖点，生成一条节奏紧凑、前三秒抓人的短视频脚本。' })}>产品卖点脚本</button>
-        <button type="button" onClick={() => onChange({ prompt: '生成自然可信的真人口播脚本，包含痛点、体验、卖点和行动指令。' })}>口播脚本</button>
-        <button type="button" onClick={() => onChange({ prompt: '将上游产品、场景与人物素材拆解为可执行的分镜脚本。' })}>分镜脚本</button>
-      </div>
-      <textarea
-        aria-label="脚本生成要求"
-        value={data.prompt || ''}
-        placeholder="描述脚本主题、受众、产品卖点与表达风格…"
-        onChange={(event) => onChange({ prompt: event.target.value })}
-      />
-      <footer className="workflow-native-toolbar">
-        <ModelSelector
-          ariaLabel="脚本模型"
-          icon={<FileTextOutlined />}
-          value={data.model || '商业短视频脚本模型'}
-          options={scriptModels}
-          onChange={(model) => onChange({ model })}
-        />
-        <i />
-        <ParameterSelector
-          ariaLabel="脚本参数"
-          summary={`${duration}秒 · 营销脚本`}
-          groups={[
-            {
-              label: '脚本时长', value: duration,
-              options: ['15', '30', '60', '90'].map((value) => ({ value, label: `${value} 秒` })),
-              onChange: (value) => onChange({ durationSeconds: numberValue(value, 30) }),
-            },
-          ]}
-        />
-        <span className="workflow-toolbar-spacer" />
-        <button type="button" className="workflow-toolbar-icon" title="翻译与语言处理" aria-label="翻译与语言处理"><TranslationOutlined /></button>
-        <span className="workflow-editor-credit"><ThunderboltOutlined /> 12</span>
-        <button type="button" className="workflow-editor-run" aria-label="生成脚本" disabled={isBusy || !(data.prompt || '').trim()} onClick={onRun}>
-          {isBusy ? <LoadingOutlined spin /> : <ArrowUpOutlined />}
-        </button>
-      </footer>
-    </div>
-  );
-};
-
-const ImageEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => {
-  const [expanded, setExpanded] = useState(false);
+  const modelOptions = useProviderModelOptions(['image', 'vision'], imageModels);
   const aspectRatio = data.aspectRatio || '16:9';
   const quality = data.quality || '高画质';
   const resolution = data.resolution || '4K';
@@ -450,19 +524,19 @@ const ImageEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => 
   return (
     <div className={`workflow-native-editor workflow-image-editor nodrag nowheel${expanded ? ' is-expanded' : ''}`}>
       <EditorExpandButton expanded={expanded} onClick={() => setExpanded((value) => !value)} />
-      <ReferenceStrip data={data} onChange={onChange} />
+      <ReferenceStrip data={data} onChange={onChange} onStartCanvasSelection={onStartCanvasSelection} />
       <textarea
         aria-label="图片生成指令"
         value={data.prompt || ''}
-        placeholder="可直接文字生图，或上传图片输入文字指令进行编辑，例如：将背景改为雪夜"
+        placeholder="描述产品、场景、构图、材质和光线，也可以引用画布中的商品或人物…"
         onChange={(event) => onChange({ prompt: event.target.value })}
       />
       <footer className="workflow-native-toolbar">
         <ModelSelector
           ariaLabel="图片模型"
           icon={<FileImageOutlined />}
-          value={data.model || 'Lib Image'}
-          options={imageModels}
+          value={data.model || modelOptions[0]?.name || 'Lib Image'}
+          options={modelOptions}
           onChange={(model) => onChange({ model })}
         />
         <i />
@@ -471,9 +545,9 @@ const ImageEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => 
           summary={`${aspectRatio} · ${quality} · ${resolution} · ${batchSize}张`}
           groups={[
             { label: '画面比例', value: aspectRatio, options: ['16:9', '9:16', '1:1', '4:3'].map((value) => ({ value, label: value })), onChange: (value) => onChange({ aspectRatio: value }) },
-            { label: '图片质量', value: quality, options: ['标准', '高画质', '超清细节'].map((value) => ({ value, label: value })), onChange: (value) => onChange({ quality: value }) },
+            { label: '画面质量', value: quality, options: ['标准', '高画质', '超清细节'].map((value) => ({ value, label: value })), onChange: (value) => onChange({ quality: value }) },
             { label: '分辨率', value: resolution, options: ['1K', '2K', '4K'].map((value) => ({ value, label: value })), onChange: (value) => onChange({ resolution: value }) },
-            { label: '生成张数', value: batchSize, options: ['1', '4', '8', '12'].map((value) => ({ value, label: `${value} 张` })), onChange: (value) => onChange({ batchSize: numberValue(value, 1) }) },
+            { label: '生成数量', value: batchSize, options: ['1', '2', '4', '8'].map((value) => ({ value, label: `${value} 张` })), onChange: (value) => onChange({ batchSize: numberValue(value, 1) }) },
           ]}
         />
         <button type="button" className="workflow-toolbar-icon has-indicator" title="智能引用" aria-label="智能引用"><AppstoreOutlined /></button>
@@ -481,7 +555,7 @@ const ImageEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => 
         <span className="workflow-toolbar-spacer" />
         <button type="button" className="workflow-toolbar-icon" title="翻译与语言处理" aria-label="翻译与语言处理"><TranslationOutlined /></button>
         <button type="button" className="workflow-toolbar-icon" title="高级设置" aria-label="高级设置"><SettingOutlined /></button>
-        <span className="workflow-editor-credit"><ThunderboltOutlined /> 120</span>
+        <span className="workflow-editor-credit"><ThunderboltOutlined /> {Math.max(1, Number(batchSize)) * 30}</span>
         <button type="button" className="workflow-editor-run" aria-label="生成图片" disabled={isBusy || !(data.prompt || '').trim()} onClick={onRun}>
           {isBusy ? <LoadingOutlined spin /> : <ArrowUpOutlined />}
         </button>
@@ -490,8 +564,9 @@ const ImageEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => 
   );
 };
 
-const VideoEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => {
+const VideoEditorBody = ({ data, isBusy, onChange, onRun, onStartCanvasSelection }: EditorBodyProps) => {
   const [expanded, setExpanded] = useState(false);
+  const modelOptions = useProviderModelOptions(['video'], videoModels);
   const aspectRatio = data.aspectRatio || '9:16';
   const duration = String(data.durationSeconds || 5);
   const batchSize = String(data.batchSize || 1);
@@ -499,7 +574,7 @@ const VideoEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => 
   return (
     <div className={`workflow-native-editor workflow-video-editor nodrag nowheel${expanded ? ' is-expanded' : ''}`}>
       <EditorExpandButton expanded={expanded} onClick={() => setExpanded((value) => !value)} />
-      <ReferenceStrip data={data} video onChange={onChange} />
+      <ReferenceStrip data={data} video onChange={onChange} onStartCanvasSelection={onStartCanvasSelection} />
       <textarea
         aria-label="视频生成指令"
         value={data.prompt || ''}
@@ -510,8 +585,8 @@ const VideoEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => 
         <ModelSelector
           ariaLabel="视频模型"
           icon={<VideoCameraOutlined />}
-          value={data.model || '高质量图生视频模型'}
-          options={videoModels}
+          value={data.model || modelOptions[0]?.name || '高质量图生视频模型'}
+          options={modelOptions}
           onChange={(model) => onChange({ model })}
         />
         <i />
@@ -538,12 +613,18 @@ const VideoEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => 
   );
 };
 
-const AudioEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => (
-  <div className="workflow-native-editor workflow-audio-editor nodrag nowheel">
+const AudioEditorBody = ({ data, isBusy, onChange, onRun, onStartCanvasSelection }: EditorBodyProps) => {
+  const modelOptions = useProviderModelOptions(
+    data.kind === 'music' ? ['music'] : ['tts'],
+    data.kind === 'music' ? musicModels : voiceModels,
+  );
+  const defaultModel = data.kind === 'music' ? '商业音乐生成模型' : '自然口播配音模型';
+
+  return <div className="workflow-native-editor workflow-audio-editor nodrag nowheel">
     <div className="workflow-editor-suggestion">
       <span>尝试：</span><button type="button">广告口播</button><button type="button">节奏音乐</button>
     </div>
-    <ReferenceStrip data={data} onChange={onChange} />
+    <ReferenceStrip data={data} onChange={onChange} onStartCanvasSelection={onStartCanvasSelection} />
     <textarea
       aria-label="音频生成指令"
       value={data.prompt || ''}
@@ -551,73 +632,39 @@ const AudioEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => 
       onChange={(event) => onChange({ prompt: event.target.value })}
     />
     <footer className="workflow-native-toolbar">
-      <select className="workflow-model-select" value={data.model || '自然口播配音模型'} onChange={(event) => onChange({ model: event.target.value })}>
-        <option>自然口播配音模型</option><option>商业音乐生成模型</option><option>情绪广告配音模型</option>
+      <select className="workflow-model-select" value={data.model || modelOptions[0]?.name || defaultModel} onChange={(event) => onChange({ model: event.target.value })}>
+        {modelOptions.map((option) => <option key={option.name} value={option.name}>{option.name}</option>)}
       </select>
       <i />
-      <select value={data.voice || '年轻女声·清透'} onChange={(event) => onChange({ voice: event.target.value })}>
-        <option>年轻女声·清透</option><option>专业女声·高级</option><option>年轻男声·活力</option>
-      </select>
+      {data.kind === 'voice' ? (
+        <select value={data.voice || '年轻女声·清透'} onChange={(event) => onChange({ voice: event.target.value })}>
+          <option>年轻女声·清透</option><option>专业女声·高级</option><option>年轻男声·活力</option>
+        </select>
+      ) : <span className="workflow-audio-style">{data.musicStyle || '自动匹配节奏'}</span>}
       <span className="workflow-toolbar-spacer" />
       <button type="button" className="workflow-toolbar-icon" title="高级设置"><SettingOutlined /></button>
       <RunButton isBusy={isBusy} onRun={onRun} />
     </footer>
-  </div>
-);
-
-const OperatorEditorBody = ({ data, isBusy, onChange, onRun }: EditorBodyProps) => (
-  <div className="workflow-native-editor workflow-operator-editor nodrag nowheel">
-    {data.kind !== 'export' ? (
-      <textarea
-        aria-label="执行说明"
-        value={data.prompt || ''}
-        placeholder="输入这个节点的执行要求…"
-        onChange={(event) => onChange({ prompt: event.target.value })}
-      />
-    ) : null}
-    <footer className="workflow-native-toolbar">
-      {data.kind === 'categorySkill' ? (
-        <>
-          <select value={data.category || '美妆个护'} onChange={(event) => onChange({ category: event.target.value })}>
-            <option>美妆个护</option><option>食品饮料</option><option>服装配饰</option><option>3C 数码</option><option>家居家电</option>
-          </select>
-          <select value={data.renderMode || 'AI 场景合成'} onChange={(event) => onChange({ renderMode: event.target.value })}>
-            <option>AI 场景合成</option><option>3D 渲染插件</option><option>实拍素材匹配</option><option>混合生成</option>
-          </select>
-        </>
-      ) : null}
-      {data.kind === 'prompt' ? (
-        <select className="workflow-model-select" value={data.model || '商业分镜提示词模型'} onChange={(event) => onChange({ model: event.target.value })}>
-          <option>商业分镜提示词模型</option><option>电商卖点导演模型</option><option>短视频节奏模型</option>
-        </select>
-      ) : null}
-      {data.kind === 'editor' ? (
-        <select className="workflow-model-select" value={data.model || 'AI 智能剪辑引擎'} onChange={(event) => onChange({ model: event.target.value })}>
-          <option>AI 智能剪辑引擎</option><option>强节奏带货剪辑</option><option>高级品牌广告剪辑</option>
-        </select>
-      ) : null}
-      {data.kind === 'editor' || data.kind === 'export' ? (
-        <>
-          <label className="workflow-count-control"><span>成片</span><input type="number" min={1} max={50} value={data.outputCount || 15} onChange={(event) => onChange({ outputCount: numberValue(event.target.value, 15) })} /></label>
-          <select value={data.resolution || '1080P'} onChange={(event) => onChange({ resolution: event.target.value })}><option>1080P</option><option>2K</option><option>4K</option></select>
-        </>
-      ) : null}
-      <span className="workflow-toolbar-spacer" />
-      <button type="button" className="workflow-toolbar-icon" title="高级设置"><SettingOutlined /></button>
-      <RunButton isBusy={isBusy} batch={data.executionMode === 'batch'} onRun={onRun} />
-    </footer>
-  </div>
-);
+  </div>;
+};
 
 const CompactNodePreview = ({ data }: { data: WorkflowNodeData }) => {
   const previewUrl = data.outputUrl || data.assetUrl;
+
+  if (data.assetUrl && visualResourceKinds.has(data.kind)) {
+    return (
+      <div className="workflow-compact-media is-resource-image">
+        <img src={data.assetUrl} alt={data.title} />
+      </div>
+    );
+  }
 
   if (mediaKinds.has(data.kind)) {
     const isVideo = data.kind === 'video' || data.kind === 'batchMaterial';
     return (
       <div className={`workflow-compact-media${isVideo ? ' is-video' : ''}`}>
         {previewUrl ? (
-          isVideo ? <video src={previewUrl} muted /> : <img src={previewUrl} alt={data.title} />
+          isVideo ? <video src={previewUrl} poster={data.assetUrl} muted loop autoPlay playsInline preload="metadata" /> : <img src={previewUrl} alt={data.title} />
         ) : (
           <span>{isVideo ? <VideoCameraOutlined /> : <FileImageOutlined />}</span>
         )}
@@ -625,7 +672,22 @@ const CompactNodePreview = ({ data }: { data: WorkflowNodeData }) => {
     );
   }
 
-  if (data.kind === 'text' || data.kind === 'scriptGenerator' || data.kind === 'prompt' || data.kind === 'storyboard' || data.kind === 'note') {
+  if (data.kind === 'text') {
+    return (
+      <div className={`workflow-compact-text is-output${data.outputText ? ' has-output' : ' is-empty'}`}>
+        {data.outputText ? (
+          <p>{data.outputText}</p>
+        ) : (
+          <span className="workflow-text-output-empty">
+            <FileTextOutlined />
+            <small>生成结果将在这里显示</small>
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  if (data.kind === 'scriptGenerator' || data.kind === 'prompt' || data.kind === 'storyboard' || data.kind === 'note') {
     return (
       <div className={`workflow-compact-text${data.kind === 'storyboard' ? ' is-resource' : ''}`}>
         <p>{data.prompt || (data.kind === 'storyboard' ? '暂无脚本内容' : '点击节点输入内容')}</p>
@@ -657,19 +719,19 @@ const CompactNodePreview = ({ data }: { data: WorkflowNodeData }) => {
 const SelectionEditor = (props: EditorBodyProps) => {
   const { kind } = props.data;
   if (kind === 'text') return <TextEditorBody {...props} />;
-  if (kind === 'scriptGenerator') return <ScriptEditorBody {...props} />;
   if (kind === 'image') return <ImageEditorBody {...props} />;
-  if (kind === 'video' || kind === 'batchMaterial') return <VideoEditorBody {...props} />;
+  if (kind === 'video') return <VideoEditorBody {...props} />;
   if (kind === 'music' || kind === 'voice') return <AudioEditorBody {...props} />;
-  return <OperatorEditorBody {...props} />;
+  return null;
 };
 
 interface WorkflowNodeSelectionEditorProps {
   id: string;
   data: WorkflowNodeData;
+  onStartCanvasSelection: (mode: 'reference' | 'mark') => void;
 }
 
-export const WorkflowNodeSelectionEditor = memo(({ id, data }: WorkflowNodeSelectionEditorProps) => {
+export const WorkflowNodeSelectionEditor = memo(({ id, data, onStartCanvasSelection }: WorkflowNodeSelectionEditorProps) => {
   const updateNodeData = useWorkflowStore((state) => state.updateNodeData);
   const requestRun = useWorkflowStore((state) => state.requestRun);
   const isBusy = data.status === 'queued' || data.status === 'running';
@@ -681,6 +743,7 @@ export const WorkflowNodeSelectionEditor = memo(({ id, data }: WorkflowNodeSelec
         isBusy={isBusy}
         onChange={(patch) => updateNodeData(id, patch)}
         onRun={() => requestRun(id)}
+        onStartCanvasSelection={onStartCanvasSelection}
       />
     </div>
   );
@@ -688,20 +751,29 @@ export const WorkflowNodeSelectionEditor = memo(({ id, data }: WorkflowNodeSelec
 
 WorkflowNodeSelectionEditor.displayName = 'WorkflowNodeSelectionEditor';
 
-const WorkflowNodeCard = memo(({ data, selected }: NodeProps<WorkflowNode>) => {
+const WorkflowNodeCard = memo(({ id, data, selected }: NodeProps<WorkflowNode>) => {
+  const openDirector = useWorkflowStore((state) => state.openDirector);
+  const openCreativeLibrary = useWorkflowStore((state) => state.openCreativeLibrary);
   const isBusy = data.status === 'queued' || data.status === 'running';
   const progress = data.status === 'success' ? 100 : data.progress || 0;
   const canOpenEditor = isWorkflowEditorKind(data.kind);
+  const role = nodeRole(data.kind);
+  const isCharacterImage = data.kind === 'character' && Boolean(data.resourceViewLabel);
 
   return (
-    <article className={`workflow-node workflow-node-${data.kind}${resourceKinds.has(data.kind) ? ' workflow-resource-node' : ''}${selected ? ' selected' : ''}`}>
+    <article aria-label={data.title} className={`workflow-node workflow-node-${data.kind} workflow-${role.key}-node${resourceKinds.has(data.kind) ? ' workflow-resource-node' : ''}${isCharacterImage ? ' workflow-character-image-node' : ''}${selected ? ' selected' : ''}${data.canvasPickState ? ` canvas-pick-${data.canvasPickState}` : ''}`}>
       <div className="workflow-node-card-shell">
         <Handle id="left" className="workflow-handle workflow-handle-target" type="target" position={Position.Left} isConnectableStart isConnectableEnd />
         <header className="workflow-node-label">
           {data.stage ? <span className={`workflow-stage-tag stage-${data.stage.toLowerCase()}`}>{data.stage}</span> : null}
           <span className="workflow-node-icon" aria-hidden="true">{nodeIcons[data.kind]}</span>
           <strong>{data.title}</strong>
-          {canOpenEditor ? <span className="workflow-node-editable-dot" title="点击配置" /> : null}
+          <span className={`workflow-node-role is-${role.key}`}>{role.label}</span>
+          {canOpenEditor ? <span className="workflow-node-edit-hint">点击编辑</span> : null}
+          {isCharacterImage ? <button type="button" className="workflow-character-image-remove nodrag nopan" aria-label={`从画布移除：${data.title}`} title="仅移除此图，角色库原素材保留；可撤销" disabled={Boolean(data.canvasPickState)} onClick={event => {
+            event.stopPropagation();
+            useWorkflowStore.getState().onNodesChange([{ type: 'remove', id }]);
+          }}><CloseOutlined aria-hidden /></button> : null}
           {data.status !== 'idle' ? (
             <span className={`workflow-node-status ${data.status}`} title={statusCopy[data.status]}>
               {statusIcon(data.status)}{statusCopy[data.status]}
@@ -709,7 +781,45 @@ const WorkflowNodeCard = memo(({ data, selected }: NodeProps<WorkflowNode>) => {
           ) : null}
         </header>
         <div className="workflow-node-body">
-          <CompactNodePreview data={data} />
+          {data.kind === 'director' ? (
+            <div className="workflow-director-preview">
+              {data.outputUrl || data.assetUrl ? (
+                <img src={data.outputUrl || data.assetUrl} alt={`${data.title}机位截图`} />
+              ) : (
+                <div className="workflow-director-placeholder" aria-hidden="true">
+                  <span className="workflow-director-frame"><VideoCameraOutlined /></span>
+                  <strong>让创意先有一个机位</strong>
+                  <small>布置场景 · 摆放角色 · 预演镜头</small>
+                </div>
+              )}
+              <button
+                type="button"
+                className="workflow-director-open nodrag nopan"
+                aria-label={`打开导演台：${data.title}`}
+                aria-disabled={Boolean(data.canvasPickState)}
+                onClick={(event) => {
+                  if (data.canvasPickState) return;
+                  event.stopPropagation();
+                  openDirector(id);
+                }}
+              >
+                <VideoCameraOutlined />{data.directorScene ? '进入导演台' : '开始布景'}<ExpandAltOutlined />
+              </button>
+            </div>
+          ) : isCreativeResourceType(data.kind) ? (
+            <div className="workflow-creative-resource-preview">
+              {data.resourceCoverUrl || data.assetUrl ? <img src={data.resourceCoverUrl || data.assetUrl} alt={data.title} draggable={false} /> : <span>{nodeIcons[data.kind]}</span>}
+              <button type="button" className="workflow-creative-resource-open nodrag nopan" disabled={Boolean(data.canvasPickState)} onClick={event => {
+                event.stopPropagation();
+                if (isCreativeResourceType(data.kind)) openCreativeLibrary(data.kind, { nodeId: id });
+              }}><AppstoreOutlined />{isCharacterImage ? '更换此图' : data.creativeResourceId ? `更换${creativeResourceLabels[data.kind]}` : `打开${creativeResourceLabels[data.kind]}库`}</button>
+            </div>
+          ) : <CompactNodePreview data={data} />}
+          {data.canvasPickState === 'selected' ? (
+            <span className="workflow-node-pick-overlay"><CheckOutlined />取消选择</span>
+          ) : data.canvasPickState === 'eligible' ? (
+            <span className="workflow-node-pick-hint">{data.canvasPickMode === 'mark' ? '点击选择图片' : '点击添加参考'}</span>
+          ) : null}
           {data.executionMode === 'batch' ? <span className="workflow-compact-badge">BATCH</span> : null}
           {isBusy || data.status === 'success' ? (
             <div className="workflow-node-progress" aria-label={`执行进度 ${progress}%`}>

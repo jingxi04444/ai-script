@@ -1,4 +1,7 @@
 import { create } from 'zustand';
+import type { CreativeResource, CreativeResourceType } from '../types/creativeResource';
+import { isCreativeResourceType } from '../types/creativeResource';
+import { characterResourceImages, creativeResourceNodeData, withoutDeletedNodeReferences } from '../utils/workflowCreativeResource';
 import {
   addEdge,
   applyEdgeChanges,
@@ -31,6 +34,12 @@ interface WorkflowState {
   past: WorkflowSnapshot[];
   future: WorkflowSnapshot[];
   pendingRunNodeId: string | null;
+  activeDirectorNodeId: string | null;
+  creativeLibraryRequest: { type: CreativeResourceType; projectKey: string | null; nodeId?: string; targetNodeId?: string; position?: XYPosition } | null;
+  openCreativeLibrary: (type: CreativeResourceType, options?: { nodeId?: string; targetNodeId?: string; position?: XYPosition }) => void;
+  closeCreativeLibrary: () => void;
+  openDirector: (nodeId: string) => void;
+  closeDirector: () => void;
   load: (projectId: string | null, mode: WorkflowMode) => void;
   persist: () => void;
   checkpoint: () => void;
@@ -38,6 +47,7 @@ interface WorkflowState {
   onEdgesChange: (changes: EdgeChange<WorkflowEdge>[]) => void;
   connect: (connection: Connection) => void;
   addNode: (kind: WorkflowNodeKind, position?: XYPosition) => string;
+  applyCreativeResource: (resource: CreativeResource, options?: { nodeId?: string; targetNodeId?: string; position?: XYPosition }) => string;
   deleteSelection: () => void;
   duplicateSelection: () => void;
   selectAll: () => void;
@@ -52,8 +62,13 @@ interface WorkflowState {
   createVideoProductionDraft: () => void;
 }
 
-const STORAGE_PREFIX = 'ai-script:visual-workflow:v3:';
+const STORAGE_PREFIX = 'ai-script:visual-workflow:v5:';
 const HISTORY_LIMIT = 40;
+const DEMO_PRODUCT_IMAGE = '/demo-media/skincare-product.jpg';
+const DEMO_LIFESTYLE_IMAGE = '/demo-media/skincare-lifestyle.jpg';
+const DEMO_VIDEO = '/demo-media/skincare-demo.mp4';
+const DEMO_IMAGE_PROMPT = '把精华产品自然融入晨间浴室护肤场景，真实肤质，柔和窗光，保持瓶身结构与材质一致。';
+const DEMO_VIDEO_PROMPT = '模特在晨光浴室中自然涂抹精华，镜头缓慢推进，产品始终清晰，动作真实克制。';
 
 const cloneSnapshot = (nodes: WorkflowNode[], edges: WorkflowEdge[]): WorkflowSnapshot => ({
   nodes: nodes.map((node) => ({ ...node, data: { ...node.data }, position: { ...node.position } })),
@@ -72,39 +87,77 @@ const withTitle = (node: WorkflowNode, title: string, patch: Partial<WorkflowNod
   data: { ...node.data, title, ...patch },
 });
 
+const hydrateDemoMedia = (nodes: WorkflowNode[]): WorkflowNode[] => nodes.map((node) => {
+  if (node.id === 'production-product') {
+    return { ...node, data: { ...node.data, assetUrl: node.data.assetUrl || DEMO_PRODUCT_IMAGE } };
+  }
+  if (node.id === 'production-scene') {
+    return { ...node, data: { ...node.data, assetUrl: node.data.assetUrl || DEMO_LIFESTYLE_IMAGE } };
+  }
+  if (node.id === 'production-scene-images') {
+    const previousAsset = node.data.assetUrl;
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        assetUrl: !previousAsset || previousAsset === '/mock/skincare-reference-board.png' ? DEMO_PRODUCT_IMAGE : previousAsset,
+        outputUrl: node.data.outputUrl || DEMO_LIFESTYLE_IMAGE,
+        prompt: node.data.prompt || DEMO_IMAGE_PROMPT,
+      },
+    };
+  }
+  if (node.id === 'production-selling-video') {
+    return {
+      ...node,
+      data: {
+        ...node.data,
+        assetUrl: node.data.assetUrl || DEMO_LIFESTYLE_IMAGE,
+        outputUrl: node.data.outputUrl || DEMO_VIDEO,
+        prompt: node.data.prompt || DEMO_VIDEO_PROMPT,
+      },
+    };
+  }
+  return node;
+});
+
 const createVideoProductionGraph = (): WorkflowSnapshot => {
   const nodes: WorkflowNode[] = [
-    withTitle(makeNode('product', { x: 80, y: 120 }, 'production-product'), 'A · 选中产品'),
-    withTitle(makeNode('scene', { x: 80, y: 390 }, 'production-scene'), 'A · 选中场景'),
-    withTitle(makeNode('categorySkill', { x: 470, y: 260 }, 'production-category-skill'), 'A · 品类场景 Skill'),
-    withTitle(makeNode('image', { x: 900, y: 80 }, 'production-scene-images'), 'A · 产品场景图套装', {
-      assetUrl: '/mock/skincare-reference-board.png',
+    withTitle(makeNode('product', { x: 60, y: 70 }, 'production-product'), '产品素材', {
+      assetUrl: DEMO_PRODUCT_IMAGE,
     }),
-    withTitle(makeNode('character', { x: 900, y: 790 }, 'production-character'), 'B · 选中模特'),
-    withTitle(makeNode('storyboard', { x: 900, y: 1100 }, 'production-script'), 'C · 选中营销脚本'),
-    withTitle(makeNode('prompt', { x: 1600, y: 710 }, 'production-shot-prompt'), 'D · 分镜 AI 提示词'),
-    withTitle(makeNode('video', { x: 2030, y: 230 }, 'production-selling-video'), 'D · 卖点视频镜头'),
-    withTitle(makeNode('batchMaterial', { x: 1600, y: 1120 }, 'production-batch-material'), 'D · 100 个品类镜头'),
-    withTitle(makeNode('music', { x: 2300, y: 960 }, 'production-music'), 'E · 音乐模型'),
-    withTitle(makeNode('voice', { x: 2300, y: 1260 }, 'production-voice'), 'E · 配音模型'),
-    withTitle(makeNode('editor', { x: 2760, y: 700 }, 'production-editor'), 'E · AI 剪辑组装'),
-    withTitle(makeNode('export', { x: 3200, y: 720 }, 'production-export'), 'E · 10–20 条批量成片'),
+    withTitle(makeNode('scene', { x: 60, y: 310 }, 'production-scene'), '场景设定', {
+      assetUrl: DEMO_LIFESTYLE_IMAGE,
+    }),
+    withTitle(makeNode('storyboard', { x: 60, y: 550 }, 'production-script'), '营销脚本'),
+    withTitle(makeNode('text', { x: 410, y: 70 }, 'production-copy'), '创意文案', {
+      stage: 'C',
+      prompt: '围绕产品核心卖点，写一段前三秒抓人、表达自然的短视频创意文案。',
+    }),
+    withTitle(makeNode('image', { x: 410, y: 370 }, 'production-scene-images'), '产品场景图', {
+      assetUrl: DEMO_PRODUCT_IMAGE,
+      outputUrl: DEMO_LIFESTYLE_IMAGE,
+      prompt: DEMO_IMAGE_PROMPT,
+    }),
+    withTitle(makeNode('video', { x: 760, y: 130 }, 'production-selling-video'), '视频生成', {
+      assetUrl: DEMO_LIFESTYLE_IMAGE,
+      outputUrl: DEMO_VIDEO,
+      prompt: DEMO_VIDEO_PROMPT,
+    }),
+    withTitle(makeNode('voice', { x: 760, y: 450 }, 'production-voice'), '配音生成'),
+    withTitle(makeNode('editor', { x: 1110, y: 280 }, 'production-editor'), 'AI 剪辑组装'),
+    withTitle(makeNode('export', { x: 1440, y: 280 }, 'production-export'), '成片输出'),
   ];
   const edges: WorkflowEdge[] = [
-    { id: 'production-edge-1', source: 'production-product', target: 'production-category-skill', animated: true },
-    { id: 'production-edge-2', source: 'production-scene', target: 'production-category-skill', animated: true },
-    { id: 'production-edge-3', source: 'production-category-skill', target: 'production-scene-images', animated: true },
-    { id: 'production-edge-4', source: 'production-scene-images', target: 'production-shot-prompt', animated: true },
-    { id: 'production-edge-5', source: 'production-character', target: 'production-shot-prompt', animated: true },
-    { id: 'production-edge-6', source: 'production-script', target: 'production-shot-prompt', animated: true },
-    { id: 'production-edge-7', source: 'production-shot-prompt', target: 'production-selling-video', animated: true },
-    { id: 'production-edge-8', source: 'production-category-skill', target: 'production-batch-material', animated: true },
-    { id: 'production-edge-9', source: 'production-selling-video', target: 'production-editor', animated: true },
-    { id: 'production-edge-10', source: 'production-batch-material', target: 'production-editor', animated: true },
-    { id: 'production-edge-11', source: 'production-script', target: 'production-voice', animated: true },
-    { id: 'production-edge-12', source: 'production-music', target: 'production-editor', animated: true },
-    { id: 'production-edge-13', source: 'production-voice', target: 'production-editor', animated: true },
-    { id: 'production-edge-14', source: 'production-editor', target: 'production-export', animated: true },
+    { id: 'production-edge-1', source: 'production-product', target: 'production-copy', animated: true },
+    { id: 'production-edge-2', source: 'production-scene', target: 'production-copy', animated: true },
+    { id: 'production-edge-3', source: 'production-product', target: 'production-scene-images', animated: true },
+    { id: 'production-edge-4', source: 'production-scene', target: 'production-scene-images', animated: true },
+    { id: 'production-edge-5', source: 'production-copy', target: 'production-selling-video', animated: true },
+    { id: 'production-edge-6', source: 'production-scene-images', target: 'production-selling-video', animated: true },
+    { id: 'production-edge-7', source: 'production-script', target: 'production-voice', animated: true },
+    { id: 'production-edge-8', source: 'production-selling-video', target: 'production-editor', animated: true },
+    { id: 'production-edge-9', source: 'production-voice', target: 'production-editor', animated: true },
+    { id: 'production-edge-10', source: 'production-editor', target: 'production-export', animated: true },
   ];
   return { nodes, edges };
 };
@@ -133,6 +186,16 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
   past: [],
   future: [],
   pendingRunNodeId: null,
+  activeDirectorNodeId: null,
+  creativeLibraryRequest: null,
+  openCreativeLibrary: (type, options = {}) => set({ creativeLibraryRequest: { type, projectKey: get().projectKey, ...options } }),
+  closeCreativeLibrary: () => set({ creativeLibraryRequest: null }),
+  openDirector: (nodeId) => {
+    if (get().nodes.some((node) => node.id === nodeId && node.data.kind === 'director')) {
+      set({ activeDirectorNodeId: nodeId });
+    }
+  },
+  closeDirector: () => set({ activeDirectorNodeId: null }),
 
   load: (projectId, mode) => {
     const projectKey = projectId || 'draft';
@@ -146,11 +209,13 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     set({
       projectKey,
       mode,
-      nodes: saved?.nodes || starter.nodes,
+      nodes: hydrateDemoMedia(saved?.nodes || starter.nodes),
       edges: saved?.edges || starter.edges,
       past: [],
       future: [],
       pendingRunNodeId: null,
+      activeDirectorNodeId: null,
+      creativeLibraryRequest: null,
     });
   },
 
@@ -175,7 +240,19 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     });
   },
 
-  onNodesChange: (changes) => set((state) => ({ nodes: applyNodeChanges(changes, state.nodes) })),
+  onNodesChange: (changes) => {
+    const state = get();
+    const removedIds = new Set(changes.flatMap(change => change.type === 'remove' && state.nodes.some(node => node.id === change.id) ? [change.id] : []));
+    if (removedIds.size) state.checkpoint();
+    set(current => ({
+      nodes: withoutDeletedNodeReferences(applyNodeChanges(changes, current.nodes), removedIds),
+      ...(removedIds.size ? {
+        edges: current.edges.filter(edge => !removedIds.has(edge.source) && !removedIds.has(edge.target)),
+        activeDirectorNodeId: current.activeDirectorNodeId && removedIds.has(current.activeDirectorNodeId) ? null : current.activeDirectorNodeId,
+        pendingRunNodeId: current.pendingRunNodeId && removedIds.has(current.pendingRunNodeId) ? null : current.pendingRunNodeId,
+      } : {}),
+    }));
+  },
   onEdgesChange: (changes) => set((state) => ({ edges: applyEdgeChanges(changes, state.edges) })),
 
   connect: (connection) => {
@@ -195,10 +272,82 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     const offset = state.nodes.length * 18;
     const node = makeNode(kind, position || { x: 320 + offset, y: 180 + offset });
     set((current) => ({
-      nodes: [...current.nodes.map((item) => ({ ...item, selected: false })), { ...node, selected: false }],
+      nodes: [...current.nodes.map((item) => ({ ...item, selected: false })), { ...node, selected: true }],
       edges: current.edges.map((item) => ({ ...item, selected: false })),
     }));
     return node.id;
+  },
+
+  applyCreativeResource: (resource, options = {}) => {
+    if (resource.status !== 'published') throw new Error('只能引用已发布的资源');
+    if (!isCreativeResourceType(resource.type)) throw new Error('资源类型不正确，请重新选择');
+    const state = get();
+    const existing = options.nodeId ? state.nodes.find(item => item.id === options.nodeId) : undefined;
+    if (options.nodeId !== undefined && (!existing || !isCreativeResourceType(existing.data.kind))) throw new Error('资源节点已不存在，请重新选择');
+    if (existing && existing.data.kind !== resource.type) throw new Error('不允许更换节点类型，请从对应资源库选择');
+    const target = options.targetNodeId ? state.nodes.find(item => item.id === options.targetNodeId
+      && (item.data.kind === 'image' || item.data.kind === 'video')) : undefined;
+    if (options.targetNodeId !== undefined && !target) throw new Error('请选择仍在画布中的图片或视频生成节点作为目标');
+    const images = resource.type === 'character' ? characterResourceImages(resource) : [];
+    if (resource.type === 'character' && !images.length) throw new Error('角色资源没有可用的参考图片，请检查图库地址');
+    const expandsLegacyCharacter = resource.type === 'character' && existing && !existing.data.resourceViewLabel;
+    const linkedTargetIds = new Set(target ? [target.id] : []);
+    if (expandsLegacyCharacter) {
+      state.nodes.forEach(node => { if (node.data.referenceNodeIds?.includes(existing.id)) linkedTargetIds.add(node.id); });
+      state.edges.forEach(edge => { if (edge.source === existing.id) linkedTargetIds.add(edge.target); });
+    }
+    // Replacing a node is intentionally local: match its view, never replace/delete the whole set.
+    const selectedImages = resource.type === 'character' ? existing?.data.resourceViewLabel
+      ? [images.find(image => image.label === existing.data.resourceViewLabel) || images[0]] : images : [undefined];
+    const columns = Math.min(selectedImages.length, 3);
+    let origin = existing?.position || options.position || (target
+      ? { x: target.position.x - columns * 360 - 60, y: target.position.y }
+      : { x: 220 + state.nodes.length * 18, y: 180 + state.nodes.length * 18 });
+    if (resource.type === 'character' && (!existing || expandsLegacyCharacter)) {
+      const occupied = state.nodes.filter(node => node.id !== existing?.id);
+      const width = (columns - 1) * 360 + 304;
+      const height = (Math.ceil(selectedImages.length / columns) - 1) * 360 + 300;
+      const rightOf = (node: WorkflowNode) => node.position.x + (node.measured?.width || node.width || 320);
+      const bottomOf = (node: WorkflowNode) => node.position.y + (node.measured?.height || node.height || 300);
+      if (occupied.some(node => origin.x < rightOf(node) + 40 && origin.x + width + 40 > node.position.x
+        && origin.y < bottomOf(node) + 40 && origin.y + height + 40 > node.position.y)) {
+        origin = { x: Math.max(...occupied.map(rightOf)) + 120, y: origin.y };
+      }
+    }
+    const bundleId = resource.type === 'character' ? `character-set-${Date.now()}-${Math.random().toString(36).slice(2, 9)}` : undefined;
+    const imported = selectedImages.map((image, index) => {
+      // An old whole-character node expands in place; only the first view reuses its ID.
+      const position = { x: origin.x + (index % columns) * 360, y: origin.y + Math.floor(index / columns) * 360 };
+      const node = index === 0 && existing ? { ...existing, position } : makeNode(resource.type, position);
+      return { ...node, data: creativeResourceNodeData(resource, image, bundleId), selected: true };
+    });
+    const importedIds = new Set(imported.map(node => node.id));
+    const titleById = new Map([...state.nodes, ...imported].map(node => [node.id, node.data.title]));
+    state.checkpoint();
+    set(current => {
+      const remaining = current.nodes.filter(item => !importedIds.has(item.id)).map(item => {
+        let data = item.data;
+        const references = item.data.referenceNodeIds || [];
+        const nextReferences = linkedTargetIds.has(item.id) ? [...new Set([...references, ...importedIds])] : references;
+        if (linkedTargetIds.has(item.id) || references.some(id => importedIds.has(id))) {
+          data = { ...data, referenceNodeIds: nextReferences, referenceLabels: nextReferences.map((id, index) => titleById.get(id) || item.data.referenceLabels?.[index] || '画布资源') };
+        }
+        if (data.referenceMarks?.some(mark => importedIds.has(mark.nodeId))) {
+          data = { ...data, referenceMarks: data.referenceMarks.map(mark => importedIds.has(mark.nodeId) ? { ...mark, nodeTitle: titleById.get(mark.nodeId)! } : mark) };
+        }
+        return { ...item, selected: false, data };
+      });
+      const pairs = new Set(current.edges.map(edge => `${edge.source}\0${edge.target}`));
+      const addedEdges: WorkflowEdge[] = [...linkedTargetIds].flatMap(targetId => imported.flatMap(node => {
+        const pair = `${node.id}\0${targetId}`;
+        if (pairs.has(pair)) return [];
+        pairs.add(pair);
+        return [{ id: `creative-${node.id}-${targetId}`, source: node.id, target: targetId,
+          sourceHandle: 'right', targetHandle: 'left', type: 'smoothstep', animated: true }];
+      }));
+      return { nodes: [...remaining, ...imported], edges: [...current.edges.map(edge => ({ ...edge, selected: false })), ...addedEdges] };
+    });
+    return imported[0].id;
   },
 
   deleteSelection: () => {
@@ -208,8 +357,10 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
     if (!selectedNodeIds.size && !hasSelectedEdge) return;
     state.checkpoint();
     set((current) => ({
-      nodes: current.nodes.filter((node) => !selectedNodeIds.has(node.id)),
+      nodes: withoutDeletedNodeReferences(current.nodes.filter((node) => !selectedNodeIds.has(node.id)), selectedNodeIds),
       edges: current.edges.filter((edge) => !edge.selected && !selectedNodeIds.has(edge.source) && !selectedNodeIds.has(edge.target)),
+      activeDirectorNodeId: current.activeDirectorNodeId && selectedNodeIds.has(current.activeDirectorNodeId) ? null : current.activeDirectorNodeId,
+      pendingRunNodeId: current.pendingRunNodeId && selectedNodeIds.has(current.pendingRunNodeId) ? null : current.pendingRunNodeId,
     }));
   },
 

@@ -243,7 +243,7 @@ DROP TABLE IF EXISTS sys_api_provider_config;
 CREATE TABLE sys_api_provider_config (
   id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
   tenant_id INT DEFAULT NULL COMMENT '租户ID，NULL表示全局',
-  provider_type VARCHAR(40) NOT NULL COMMENT '类型：llm/video_parse/asr/video/tts/pay',
+  provider_type VARCHAR(40) NOT NULL COMMENT '类型：llm/image/vision/video/music/tts/editor/video_editor/video_parse/asr/pay',
   provider_name VARCHAR(120) NOT NULL COMMENT '供应商名称',
   platform VARCHAR(60) DEFAULT NULL COMMENT '平台：douyin/xiaohongshu/openai等',
   endpoint_url VARCHAR(500) DEFAULT NULL COMMENT '接口地址',
@@ -1189,6 +1189,92 @@ CREATE TABLE ai_workflow (
   KEY idx_ai_workflow_project (project_id, update_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='AI生产画布工作流';
 
+DROP TABLE IF EXISTS ai_workflow_run;
+CREATE TABLE ai_workflow_run (
+  id BIGINT NOT NULL COMMENT '主键ID，由Spring Boot生成',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  project_id INT NOT NULL COMMENT '项目ID',
+  workflow_id BIGINT DEFAULT NULL COMMENT '工作流ID',
+  workflow_version INT NOT NULL DEFAULT 1 COMMENT '本次运行绑定的画布版本',
+  status VARCHAR(32) NOT NULL DEFAULT 'queued' COMMENT 'queued/running/success/failed/canceling/canceled',
+  progress INT NOT NULL DEFAULT 0 COMMENT '运行进度0-100',
+  graph_json JSON NOT NULL COMMENT '不可变的本次运行画布快照',
+  input_json JSON DEFAULT NULL COMMENT '运行级输入',
+  output_json JSON DEFAULT NULL COMMENT '运行级输出摘要',
+  total_nodes INT NOT NULL DEFAULT 0 COMMENT '节点总数',
+  completed_nodes INT NOT NULL DEFAULT 0 COMMENT '成功节点数',
+  failed_nodes INT NOT NULL DEFAULT 0 COMMENT '失败节点数',
+  cancel_requested TINYINT NOT NULL DEFAULT 0 COMMENT '是否请求取消',
+  idempotency_key VARCHAR(160) NOT NULL COMMENT '前端幂等键',
+  error_code VARCHAR(80) DEFAULT NULL COMMENT '错误码',
+  error_message TEXT DEFAULT NULL COMMENT '错误信息',
+  started_at DATETIME DEFAULT NULL COMMENT '开始时间',
+  finished_at DATETIME DEFAULT NULL COMMENT '结束时间',
+  create_by INT NOT NULL COMMENT '创建人',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_ai_workflow_run_idem (tenant_id, create_by, idempotency_key),
+  KEY idx_ai_workflow_run_project (tenant_id, project_id, create_time),
+  KEY idx_ai_workflow_run_status (status, update_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工作流运行实例';
+
+DROP TABLE IF EXISTS ai_workflow_node_run;
+CREATE TABLE ai_workflow_node_run (
+  id BIGINT NOT NULL COMMENT '主键ID，由Python Runner生成',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  workflow_run_id BIGINT NOT NULL COMMENT '工作流运行ID',
+  node_id VARCHAR(160) NOT NULL COMMENT '画布节点ID',
+  node_kind VARCHAR(60) NOT NULL COMMENT '节点类型',
+  skill_code VARCHAR(160) DEFAULT NULL COMMENT '执行Skill编码',
+  skill_version VARCHAR(40) DEFAULT NULL COMMENT '执行Skill版本',
+  status VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT 'pending/running/success/failed/skipped/canceled',
+  attempt INT NOT NULL DEFAULT 1 COMMENT '执行次数',
+  progress INT NOT NULL DEFAULT 0 COMMENT '节点进度0-100',
+  input_json JSON DEFAULT NULL COMMENT '解析后的节点输入',
+  config_json JSON DEFAULT NULL COMMENT '节点运行配置快照',
+  output_json JSON DEFAULT NULL COMMENT '节点结构化输出',
+  worker_id VARCHAR(120) DEFAULT NULL COMMENT 'Python Worker标识',
+  error_code VARCHAR(80) DEFAULT NULL COMMENT '错误码',
+  error_message TEXT DEFAULT NULL COMMENT '错误信息',
+  started_at DATETIME DEFAULT NULL COMMENT '开始时间',
+  finished_at DATETIME DEFAULT NULL COMMENT '结束时间',
+  create_by INT DEFAULT NULL COMMENT '创建人',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_ai_workflow_node_attempt (workflow_run_id, node_id, attempt),
+  KEY idx_ai_workflow_node_run_status (workflow_run_id, status),
+  KEY idx_ai_workflow_node_run_tenant (tenant_id, update_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工作流节点运行记录';
+
+DROP TABLE IF EXISTS ai_workflow_outbox;
+CREATE TABLE ai_workflow_outbox (
+  id BIGINT NOT NULL COMMENT '主键ID',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  aggregate_type VARCHAR(60) NOT NULL COMMENT '聚合类型',
+  aggregate_id BIGINT NOT NULL COMMENT '聚合ID',
+  event_type VARCHAR(80) NOT NULL COMMENT '事件类型',
+  payload_json JSON NOT NULL COMMENT '待发布消息',
+  status VARCHAR(32) NOT NULL DEFAULT 'pending' COMMENT 'pending/publishing/sent',
+  attempts INT NOT NULL DEFAULT 0 COMMENT '发布次数',
+  next_attempt_time DATETIME DEFAULT NULL COMMENT '下次重试时间',
+  sent_time DATETIME DEFAULT NULL COMMENT '发送成功时间',
+  error_message VARCHAR(500) DEFAULT NULL COMMENT '最后错误',
+  create_by INT DEFAULT NULL COMMENT '创建人',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  KEY idx_ai_workflow_outbox_due (status, next_attempt_time, create_time),
+  KEY idx_ai_workflow_outbox_aggregate (aggregate_type, aggregate_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='工作流Redis消息事务发件箱';
+
 DROP TABLE IF EXISTS ai_generation_task;
 CREATE TABLE ai_generation_task (
   id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
@@ -1903,5 +1989,35 @@ CREATE TABLE ai_ab_test_variant (
   PRIMARY KEY (id),
   KEY idx_ai_ab_variant_test (ab_test_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='A/B测试版本表';
+
+-- 平台创意资源库；增量升级请只运行对应 migrations 文件。
+CREATE TABLE IF NOT EXISTS sys_creative_resource (
+  id BIGINT NOT NULL COMMENT 'Snowflake 主键，由应用 ASSIGN_ID 生成',
+  code VARCHAR(80) NOT NULL COMMENT '全局稳定编码；软删除后仍保留，禁止复用',
+  type VARCHAR(20) NOT NULL COMMENT 'character/style/effect',
+  name VARCHAR(120) NOT NULL COMMENT '资源名称',
+  category VARCHAR(80) NOT NULL COMMENT '分类',
+  description VARCHAR(2000) NOT NULL DEFAULT '' COMMENT '纯文本描述',
+  cover_url VARCHAR(2048) NOT NULL DEFAULT '' COMMENT '封面 HTTP(S) URL 或站内绝对路径',
+  preview_video_url VARCHAR(2048) NOT NULL DEFAULT '' COMMENT '可选预览视频',
+  gallery_json JSON NOT NULL COMMENT '画廊 [{label,url}]，最多12项',
+  tags_json JSON NOT NULL COMMENT '标签数组，最多20项',
+  prompt TEXT NOT NULL COMMENT '提示词模板，数据而非可执行代码',
+  negative_prompt TEXT NOT NULL COMMENT '负向提示词',
+  config_json JSON NOT NULL COMMENT '有界 JSON 模板参数，禁止执行',
+  status VARCHAR(20) NOT NULL DEFAULT 'draft' COMMENT 'draft/published',
+  sort_order INT NOT NULL DEFAULT 0 COMMENT '升序排列',
+  license_note VARCHAR(2000) NOT NULL DEFAULT '' COMMENT '授权/使用限制说明，发布必填',
+  author VARCHAR(120) NOT NULL DEFAULT '' COMMENT '作者或来源',
+  create_by INT DEFAULT NULL COMMENT '创建管理员ID',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  update_by INT DEFAULT NULL COMMENT '更新管理员ID',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除 0/1',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_sys_creative_resource_code (code),
+  KEY idx_creative_resource_catalog (deleted, status, type, sort_order, id),
+  KEY idx_creative_resource_category (type, category, deleted)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='平台创意资源库（角色/风格/特效）';
 
 SET FOREIGN_KEY_CHECKS = 1;

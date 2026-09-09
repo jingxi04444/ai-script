@@ -1,4 +1,6 @@
 import type { Edge, Node } from '@xyflow/react';
+import type { DirectorScene } from '../pages/Workspace/VisualCanvas/DirectorStudio/directorScene';
+import type { CreativeResourceImage, CreativeResourceType } from './creativeResource';
 
 export type WorkflowMode = 'image' | 'video';
 
@@ -7,7 +9,10 @@ export type WorkflowNodeKind =
   | 'scriptGenerator'
   | 'text'
   | 'character'
+  | 'style'
+  | 'effect'
   | 'scene'
+  | 'director'
   | 'product'
   | 'categorySkill'
   | 'prompt'
@@ -23,18 +28,46 @@ export type WorkflowNodeKind =
 
 export type WorkflowNodeStatus = 'idle' | 'queued' | 'running' | 'success' | 'failed';
 
+export interface WorkflowReferenceMark {
+  nodeId: string;
+  nodeTitle: string;
+  parts: string[];
+}
+
 export interface WorkflowNodeData extends Record<string, unknown> {
   kind: WorkflowNodeKind;
   stage?: 'A' | 'B' | 'C' | 'D' | 'E';
   title: string;
   description: string;
   prompt?: string;
+  outputText?: string;
   model?: string;
   aspectRatio?: string;
   resolution?: string;
   quality?: string;
   assetUrl?: string;
   outputUrl?: string;
+  directorScene?: DirectorScene;
+  referenceNodeIds?: string[];
+  referenceLabels?: string[];
+  referenceMarks?: WorkflowReferenceMark[];
+  canvasPickState?: 'origin' | 'eligible' | 'selected';
+  canvasPickMode?: 'reference' | 'mark';
+  resourceId?: string;
+  resourceName?: string;
+  resourceMeta?: string;
+  creativeResourceId?: string;
+  type?: CreativeResourceType;
+  resourcePrompt?: string;
+  resourceNegativePrompt?: string;
+  resourceConfig?: Record<string, unknown>;
+  resourceGallery?: CreativeResourceImage[];
+  /** A library character is imported as one independent image per resource node. */
+  resourceViewLabel?: string;
+  /** Cosmetic import-set identity only; deleting one member never cascades to siblings. */
+  resourceBundleId?: string;
+  resourceCoverUrl?: string;
+  resourcePreviewVideoUrl?: string;
   skillCode?: string;
   renderMode?: string;
   category?: string;
@@ -87,12 +120,68 @@ export interface WorkflowValidation {
   errors: string[];
 }
 
+export interface WorkflowNodeRun {
+  id: string;
+  nodeId: string;
+  nodeKind: string;
+  skillCode?: string;
+  skillVersion?: string;
+  status: string;
+  attempt: number;
+  progress: number;
+  outputJson?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  startedAt?: string;
+  finishedAt?: string;
+}
+
+export interface WorkflowRun {
+  id: string;
+  projectId: string;
+  workflowId?: string;
+  workflowVersion: number;
+  status: string;
+  progress: number;
+  totalNodes: number;
+  completedNodes: number;
+  failedNodes: number;
+  cancelRequested: boolean;
+  outputJson?: string;
+  errorCode?: string;
+  errorMessage?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  nodes: WorkflowNodeRun[];
+}
+
+export interface WorkflowRunEvent {
+  type: string;
+  runId: string;
+  nodeId?: string;
+  status?: string;
+  progress?: number;
+  message?: string;
+  output?: Record<string, unknown>;
+}
+
+export interface WorkflowModelOption {
+  providerId: string;
+  providerType: string;
+  providerName: string;
+  platform?: string;
+  model: string;
+}
+
 export const workflowNodeDefinitions: WorkflowNodeDefinition[] = [
   { kind: 'storyboard', title: '分镜脚本', description: '镜头、画面和对白', group: 'source' },
   { kind: 'scriptGenerator', title: '脚本生成器', description: '根据需求生成营销脚本', group: 'creative' },
   { kind: 'text', title: '文本', description: '输入提示词、文案或说明', group: 'creative' },
-  { kind: 'character', title: '角色设定', description: '人物形象与参考图', group: 'source' },
+  { kind: 'character', title: '角色资源', description: '从角色库选择一致的人物形象', group: 'source' },
+  { kind: 'style', title: '风格资源', description: '引用光影、质感与美术风格', group: 'source' },
+  { kind: 'effect', title: '特效资源', description: '引用运镜与特效提示词模板', group: 'source' },
   { kind: 'scene', title: '场景设定', description: '空间、光线与氛围', group: 'source' },
+  { kind: 'director', title: '导演台', description: '3D 布景、角色与机位预演', group: 'creative' },
   { kind: 'product', title: '产品素材', description: '商品图与关键卖点', group: 'source' },
   { kind: 'categorySkill', title: '品类场景 Skill', description: '调用品类知识与场景生成插件', group: 'creative' },
   { kind: 'prompt', title: '分镜 AI 提示词', description: '把脚本拆成可执行镜头提示词', group: 'creative' },
@@ -117,8 +206,11 @@ export const createWorkflowNodeData = (kind: WorkflowNodeKind): WorkflowNodeData
       prompt: '',
     },
     text: { prompt: '', model: 'GVLM 3.1' },
-    character: { stage: 'B', prompt: '自然、可信赖的年轻使用者，服装、发型和面部特征在全部镜头中保持一致。' },
+    character: { stage: 'B', skillCode: 'resource.character' },
+    style: { stage: 'A', skillCode: 'resource.style' },
+    effect: { stage: 'D', skillCode: 'resource.effect' },
     scene: { stage: 'A', prompt: '选择与产品品类和受众匹配的真实使用场景，保持统一光线与美术风格。' },
+    director: { stage: 'A', aspectRatio: '16:9', skillCode: 'resource.director' },
     product: { stage: 'A', prompt: '保持产品结构、包装文字、Logo 与品牌颜色准确。' },
     categorySkill: {
       stage: 'A',

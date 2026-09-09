@@ -5,6 +5,10 @@ import java.util.List;
 public interface LlmClient {
     String chat(String systemPrompt, String userPrompt);
 
+    default String chat(String systemPrompt, String userPrompt, String model) {
+        return chat(systemPrompt, userPrompt);
+    }
+
     default LlmChatResult chatWithMetrics(String systemPrompt, String userPrompt) {
         long startedAt = System.nanoTime();
         String content = chat(systemPrompt, userPrompt);

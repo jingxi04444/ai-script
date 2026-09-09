@@ -210,7 +210,7 @@ const ModelsPage = () => {
         <div className="field-grid">
           <label className="field"><span>名称</span><input value={form.providerName || ''} onChange={(e) => setForm({ ...form, providerName: e.target.value })} /></label>
           <label className="field"><span>平台</span><input value={form.platform || ''} onChange={(e) => setForm({ ...form, platform: e.target.value })} placeholder="openai / qwen / deepseek" /></label>
-          <label className="field"><span>类型</span><input value={form.providerType || ''} onChange={(e) => setForm({ ...form, providerType: e.target.value })} placeholder="llm / vision / tts" /></label>
+          <label className="field"><span>类型</span><input value={form.providerType || ''} onChange={(e) => setForm({ ...form, providerType: e.target.value })} placeholder="llm / image / video / music / tts / editor" /></label>
           <label className="field"><span>接口地址</span><input value={form.endpointUrl || ''} onChange={(e) => setForm({ ...form, endpointUrl: e.target.value })} /></label>
           <label className="field"><span>API Key</span><input type="password" value={form.apiKey || ''} onChange={(e) => setForm({ ...form, apiKey: e.target.value })} placeholder={editing?.apiKeyConfigured ? '留空则不更新现有 Key' : '请输入 Provider API Key'} /></label>
           <label className="field"><span>优先级</span><input type="number" value={form.priority ?? ''} onChange={(e) => setForm({ ...form, priority: optionalNumberFromInput(e.target.value) })} /></label>

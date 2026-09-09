@@ -71,6 +71,7 @@ const menuGroups: Array<{ title: string; items: MenuItem[] }> = [
   {
     title: '资源与模板',
     items: [
+      { label: '创意资源库', path: '/creative-resources', icon: Image },
       { label: '脚本生成器', path: '/script-generator-management', icon: Sparkles },
       { label: 'AI智能脚本管理', path: '/ai-script-management', icon: Bot },
       { label: '脚本模板库管理', path: '/templates', icon: Database },
@@ -107,6 +108,7 @@ const routeMeta: Record<string, { title: string; desc: string }> = {
   '/script-generator-management': { title: '脚本生成器', desc: '集中管理爆款复刻解析、文案整理和脚本生成。' },
   '/ai-script-management': { title: 'AI智能脚本管理', desc: '维护大类、子类和两级通用提示词。' },
   '/templates': { title: '脚本模板库管理', desc: '维护前台脚本模板库中的可复用模板。' },
+  '/creative-resources': { title: '创意资源库', desc: '管理平台公共角色、风格与特效资源，审核后发布到用户端。' },
   '/brief-management/detection-prompts': { title: 'Brief 检测提示词', desc: '维护产品卖点 Brief 检测使用的提示词和返回结构。' },
   '/brief-management/import-template': { title: '卖点 Brief 导入模板', desc: '维护卖点 Brief 批量导入模板文件。' },
   '/brief-management': { title: '卖点 Brief 管理', desc: '集中维护 Brief 检测提示词和批量导入模板。' },

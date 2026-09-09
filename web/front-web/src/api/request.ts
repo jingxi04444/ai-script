@@ -117,6 +117,8 @@ api.interceptors.response.use(
     return body;
   }) as Parameters<typeof api.interceptors.response.use>[0],
   (error: AxiosError) => {
+    // Switching a search/filter cancels its previous request; cancellation is not a network failure.
+    if (axios.isCancel(error)) return Promise.reject(error);
     const handledByAuthPage = isInteractiveAuthRequest(error.config?.url);
     if (error.response?.status === 401 && !handledByAuthPage) {
       redirectToLogin();

@@ -85,15 +85,52 @@ public class ProviderConfigServiceImpl implements ProviderConfigService {
 
     @Override
     public SysApiProviderConfig firstEnabled(String providerType) {
-        return providerConfigMapper.selectList(new LambdaQueryWrapper<SysApiProviderConfig>()
-                .eq(SysApiProviderConfig::getProviderType, providerType)
-                .eq(SysApiProviderConfig::getStatus, 1)
-                .orderByAsc(SysApiProviderConfig::getPriority)
-                .orderByDesc(SysApiProviderConfig::getUpdateTime)
-                .orderByDesc(SysApiProviderConfig::getId)
-                .last("limit 1"))
-            .stream()
-            .findFirst()
-            .orElse(null);
+        return resolveEnabled(providerType, null);
+    }
+
+    @Override
+    public SysApiProviderConfig resolveEnabled(String providerType, String model) {
+        List<SysApiProviderConfig> providers = listEnabled().stream()
+            .filter(provider -> providerType.equalsIgnoreCase(provider.getProviderType()))
+            .toList();
+        if (StringUtils.hasText(model)) {
+            return providers.stream()
+                .filter(provider -> model.equalsIgnoreCase(String.valueOf(
+                    com.aiscript.common.util.JsonUtils.toMap(provider.getConfigJson()).get("model")
+                )) || model.equalsIgnoreCase(provider.getProviderName()))
+                .findFirst()
+                .orElse(null);
+        }
+        return providers.stream().findFirst().orElse(null);
+    }
+
+    @Override
+    public List<SysApiProviderConfig> listEnabled() {
+        Integer tenantId = TenantContext.getTenantId();
+        LambdaQueryWrapper<SysApiProviderConfig> wrapper = new LambdaQueryWrapper<SysApiProviderConfig>()
+            .eq(SysApiProviderConfig::getStatus, 1);
+        if (tenantId != null) {
+            wrapper.and(query -> query.eq(SysApiProviderConfig::getTenantId, tenantId)
+                .or().isNull(SysApiProviderConfig::getTenantId));
+        }
+        return providerConfigMapper.selectList(wrapper
+            .orderByDesc(SysApiProviderConfig::getTenantId)
+            .orderByAsc(SysApiProviderConfig::getPriority)
+            .orderByDesc(SysApiProviderConfig::getUpdateTime)
+            .orderByDesc(SysApiProviderConfig::getId));
+    }
+
+    @Override
+    public SysApiProviderConfig getEnabled(Integer id) {
+        if (id == null) return null;
+        Integer tenantId = TenantContext.getTenantId();
+        LambdaQueryWrapper<SysApiProviderConfig> wrapper = new LambdaQueryWrapper<SysApiProviderConfig>()
+            .eq(SysApiProviderConfig::getId, id)
+            .eq(SysApiProviderConfig::getStatus, 1);
+        if (tenantId != null) {
+            wrapper.and(query -> query.eq(SysApiProviderConfig::getTenantId, tenantId)
+                .or().isNull(SysApiProviderConfig::getTenantId));
+        }
+        return providerConfigMapper.selectOne(wrapper.last("LIMIT 1"));
     }
 }

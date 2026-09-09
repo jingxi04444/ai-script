@@ -49,6 +49,18 @@ management:
 
 # AI Script 业务配置
 aiscript:
+  workflow:
+    provider-gateway:
+      token: ${WORKFLOW_PROVIDER_GATEWAY_TOKEN:}
+    redis:
+      commands-stream: ${WORKFLOW_COMMANDS_STREAM:aiscript:workflow:commands}
+      events-stream: ${WORKFLOW_EVENTS_STREAM:aiscript:workflow:events}
+      event-consumer-group: ${WORKFLOW_EVENT_CONSUMER_GROUP:spring-workflow-events}
+      event-consumer-name: ${WORKFLOW_EVENT_CONSUMER_NAME:${HOSTNAME:spring-local}}
+    outbox:
+      publish-delay-ms: ${WORKFLOW_OUTBOX_PUBLISH_DELAY_MS:500}
+    events:
+      consume-delay-ms: ${WORKFLOW_EVENT_CONSUME_DELAY_MS:300}
   recycle-bin:
     retention-days: ${RECYCLE_BIN_RETENTION_DAYS:7}  # 回收站默认保留天数
     cleanup-cron: "${RECYCLE_BIN_CLEANUP_CRON:0 20 3 * * ?}"  # 每天 03:20 清理过期内容

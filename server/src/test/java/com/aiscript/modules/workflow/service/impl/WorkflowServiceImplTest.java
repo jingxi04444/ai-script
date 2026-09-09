@@ -38,6 +38,26 @@ class WorkflowServiceImplTest {
     }
 
     @Test
+    void allowsSavingAnUnrenderedDirectorSceneAndItsDownstreamConnection() {
+        String graphJson = """
+            {
+              "nodes": [
+                {"id":"director","data":{"kind":"director","directorScene":{"version":1,"objects":[],"cameras":[]}}},
+                {"id":"image","data":{"kind":"image"}}
+              ],
+              "edges": [{"source":"director","target":"image"}]
+            }
+            """;
+
+        // Draft scenes are valid to save; the runner validates an exported snapshot at execution time.
+        var result = service.validate(graphJson);
+
+        assertTrue(result.isValid());
+        assertEquals(2, result.getNodeCount());
+        assertEquals(1, result.getEdgeCount());
+    }
+
+    @Test
     void rejectsCircularWorkflow() {
         String graphJson = """
             {

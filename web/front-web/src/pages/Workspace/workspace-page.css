@@ -550,6 +550,9 @@
 .workspace-shell:has(> .visual-canvas-workspace-main) {
   grid-template-columns: 0 0 minmax(0, 1fr) !important;
   width: 100vw;
+  min-width: 0;
+  max-width: 100vw;
+  overflow: hidden;
 }
 
 .workspace-shell:has(> .visual-canvas-workspace-main) > .home-rail,
@@ -568,6 +571,8 @@ body:has(.visual-canvas-workspace-main) .task-center-launcher {
 }
 
 .workspace-shell > .visual-canvas-workspace-main {
+  width: 100%;
+  min-width: 0;
   grid-template-rows: minmax(0, 1fr) !important;
   background: #111212;
 }
@@ -606,6 +611,11 @@ body:has(.visual-canvas-workspace-main) .task-center-launcher {
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.24);
   backdrop-filter: blur(18px);
   pointer-events: auto;
+}
+
+/* Reserve the separate step action's space so it cannot cover Save or Agent. */
+.visual-canvas-workspace-main .workflow-canvas-chrome .workflow-canvas-header {
+  right: 154px;
 }
 
 .visual-canvas-workspace-main .workbench-card.creation-panel {
