@@ -1,0 +1,84 @@
+[
+  {
+    "asset": "character-chen-fullbody.png",
+    "mode": "built-in image_gen / identity-preserve",
+    "status": "generated",
+    "references": [
+      "web/front-web/public/creative-library/character-chen-portrait.png",
+      "web/front-web/public/creative-library/character-chen.png"
+    ],
+    "outputs": [
+      "web/front-web/public/creative-library/character-chen-fullbody.png",
+      "web/admin-web/public/creative-library/character-chen-fullbody.png"
+    ],
+    "prompt": "Use case: identity-preserve. Asset type: character library individual reference asset. Reference Image 1: primary face/identity anchor, fictional adult East Asian man Chen Yu aged 34. Reference Image 2: full wardrobe/body anchor. Keep the same facial features, age, short black hair, skin texture, dark navy overshirt over plain white tee, charcoal trousers and white shoes unchanged. Clean pure white seamless background, soft neutral even studio light, realistic professional photography. Create ONE standalone full-body straight-on studio photo, portrait 3:4, head to the complete soles of both white sneakers fully visible with margin. Calm neutral friendly expression, arms relaxed at sides, dark navy overshirt with one pocket over white tee, charcoal straight trousers, white low-top shoes exactly as in reference. Single person, no grid, no panels. Fresh high-quality render, not an enlarged crop of the sheet. No known real person, no brands, no watermark, no altered clothing colors, no distorted hands."
+  },
+  {
+    "asset": "character-chen-expressions.png",
+    "mode": "built-in image_gen / identity-preserve",
+    "status": "generated",
+    "references": [
+      "web/front-web/public/creative-library/character-chen-portrait.png"
+    ],
+    "outputs": [
+      "web/front-web/public/creative-library/character-chen-expressions.png",
+      "web/admin-web/public/creative-library/character-chen-expressions.png"
+    ],
+    "prompt": "Create a square 3×3 expression reference sheet from this fictional adult man's portrait. Exactly nine head-and-shoulders photos of the SAME man, preserving his face, short black hair and navy overshirt over a white T-shirt. Reading order: neutral, smile, laughter, surprise, thoughtful, worried, angry, sad, confident. Every full head fits inside its cell with margin. Consistent frontal camera, pure white background and soft studio light; thin white gutters between nine equal cells. Photorealistic, natural distinct expressions. No text, numbers or watermarks.",
+    "attempts": 4,
+    "history": [
+      {
+        "attempts": [
+          1,
+          2
+        ],
+        "status": "failed",
+        "references": [
+          "web/front-web/public/creative-library/character-chen-portrait.png",
+          "web/front-web/public/creative-library/character-chen.png"
+        ],
+        "prompt": "Use case: identity-preserve. Asset type: character library individual reference asset. Reference Image 1: primary face/identity anchor, fictional adult East Asian man Chen Yu aged 34. Reference Image 2: full wardrobe/body anchor. Keep the same facial features, age, short black hair, skin texture, dark navy overshirt over plain white tee, charcoal trousers and white shoes unchanged. Clean pure white seamless background, soft neutral even studio light, realistic professional photography. Create ONE square 3x3 facial-expression reference sheet: exactly nine equal-size portrait cells showing the SAME person and SAME white t-shirt/navy overshirt in all cells. Expressions in reading order: neutral, gentle smile, laughing, surprised, thoughtful, worried, slightly angry, sad, confident. Clear natural differences, not exaggerated cartoon acting. Each cell includes complete head with margin and upper shoulders, straight-on. Fine clean white gutters, no writing, no labels. All nine faces identical identity, age, haircut, skin tone. No known real person, no brands, no watermark, no altered clothing colors, no distorted hands.",
+        "error": "network error: image editing endpoint unavailable; no image returned"
+      },
+      {
+        "attempt": 3,
+        "date": "2026-09-05",
+        "status": "failed",
+        "references": [
+          "web/front-web/public/creative-library/character-chen-portrait.png"
+        ],
+        "prompt": "Use case: identity-preserve. Create one square photographic 3-by-3 facial expression contact sheet for the character library. Reference Image 1 is the identity and clothing anchor: preserve the same fictional adult East Asian man Chen Yu, his exact facial features, short black hair, natural skin texture, navy overshirt and plain white T-shirt. Exactly nine equal square panels in three rows and three columns, thin white gutters. Each panel shows his complete hair crown, head, neck and upper shoulders with white margin above his head, frontal camera and consistent scale. Expressions from left to right, top to bottom: neutral closed mouth; gentle smile; happy open-mouth laugh; surprise; thoughtful; worried; restrained anger; sadness; confident small smile. Nine visibly different natural expressions, same man in every cell. Pure white studio backgrounds, soft even lighting, realistic photography. No text, labels, numbers, watermarks, decorative frames or hands. Render fresh facial expressions, not nine duplicate crops. Output square, around 1536 by 1536.",
+        "error": "image generation failed: network error: error sending request for url (https://chatgpt.com/backend-api/codex/images/edits)"
+      },
+      {
+        "attempt": 4,
+        "date": "2026-09-05",
+        "status": "generated",
+        "references": [
+          "web/front-web/public/creative-library/character-chen-portrait.png"
+        ],
+        "prompt": "Create a square 3×3 expression reference sheet from this fictional adult man's portrait. Exactly nine head-and-shoulders photos of the SAME man, preserving his face, short black hair and navy overshirt over a white T-shirt. Reading order: neutral, smile, laughter, surprise, thoughtful, worried, angry, sad, confident. Every full head fits inside its cell with margin. Consistent frontal camera, pure white background and soft studio light; thin white gutters between nine equal cells. Photorealistic, natural distinct expressions. No text, numbers or watermarks.",
+        "generatedPath": "/Users/jingxi/.codex/generated_images/01a03ea6-29b1-7a53-9bdf-b7c0ccd21a05/exec-0ff31977-4c97-4632-8153-602fabeb40f0.png",
+        "qa": "Verified exactly 3 columns x 3 rows, distinct expressions, complete heads, same identity/hair/navy shirt, white backgrounds. Smile and thoughtful cells include a hand at chin; face remains visible."
+      }
+    ],
+    "dimensions": {
+      "width": 1254,
+      "height": 1254
+    }
+  },
+  {
+    "asset": "character-chen-turnaround.png",
+    "mode": "built-in image_gen / identity-preserve",
+    "status": "generated",
+    "references": [
+      "web/front-web/public/creative-library/character-chen-portrait.png",
+      "web/front-web/public/creative-library/character-chen.png"
+    ],
+    "outputs": [
+      "web/front-web/public/creative-library/character-chen-turnaround.png",
+      "web/admin-web/public/creative-library/character-chen-turnaround.png"
+    ],
+    "prompt": "Use case: identity-preserve. Asset type: character library individual reference asset. Reference Image 1: primary face/identity anchor, fictional adult East Asian man Chen Yu aged 34. Reference Image 2: full wardrobe/body anchor. Keep the same facial features, age, short black hair, skin texture, dark navy overshirt over plain white tee, charcoal trousers and white shoes unchanged. Clean pure white seamless background, soft neutral even studio light, realistic professional photography. Create ONE landscape 16:9 multi-angle character reference sheet showing the SAME man's identity and outfit consistently. Left half: three full body head-to-shoes photographs front, side and back, evenly spaced, no overlaps, all same scale with white margin. Right half: a neat 2x3 grid of shoulder-up photographs front, left three-quarter, right three-quarter, left profile, right profile, rear head. Neutral expression. No action poses, no duplicate frontal face in side views, no text, no labels. Fresh sheet with detailed correct anatomy. No known real person, no brands, no watermark, no altered clothing colors, no distorted hands."
+  }
+]

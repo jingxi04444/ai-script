@@ -1,0 +1,171 @@
+{
+  "schemaVersion": 1,
+  "character": {
+    "code": "character-lin",
+    "name": "林沐",
+    "fictional": true,
+    "adultAge": 28
+  },
+  "recordedDate": "2026-09-05",
+  "generation": {
+    "mode": "built-in",
+    "tool": "image_gen.imagegen",
+    "operation": "reference-image edit",
+    "cliUsed": false
+  },
+  "notes": [
+    "Prompt strings are the exact prompts submitted to the built-in image tool, without paraphrasing.",
+    "Successful assets are newly generated reference images, not crops of the original character sheet.",
+    "Output dimensions below are measured from the saved PNG files; requested aspect ratios are recorded separately.",
+    "Expressions attempts 1 and 2 failed without an output. The subsequent single-portrait-reference attempt 3 succeeded; historical errors and exact prompts are retained in the asset attempts."
+  ],
+  "assets": [
+    {
+      "key": "fullbody",
+      "filename": "character-lin-fullbody.png",
+      "status": "success",
+      "prompt": "Use case: identity-preserve.\nAsset type: a standalone photorealistic full-body front-view character reference for an AI video production character library.\nInput images: Image 1 is the existing character sheet, the source of the complete outfit and body proportions. Image 2 is the same fictional adult woman's portrait, the primary identity/face anchor. Preserve exactly this woman, Lin Mu, a fictional adult age 28; do not redesign her or substitute a new face.\nPrimary request: make ONE newly composed standalone full-body frontal studio photograph of this same woman on a clean pure white seamless background, portrait aspect ratio 3:4. The crown of her hair through the complete soles of both white shoes must be visible with modest clear margin above and below. She stands naturally facing the camera, weight evenly balanced, both arms and hands relaxed at her sides, calm neutral-friendly expression, looking straight at camera.\nInvariants: preserve her facial features, apparent adult age, natural skin texture, shoulder-length dark side-parted hair tucked behind one ear, body proportions, ivory/off-white long-sleeve linen button-front shirt with a single chest pocket and gently rolled cuffs, sand-beige straight-leg trousers, and plain white low-top sneakers exactly as in the references. Do not change the shirt cut, colors, trousers, or shoes. Keep the styling simple and identical.\nLighting: soft even neutral studio light, realistic fabric weave and gentle contact shadow immediately beneath her feet; otherwise a clean white background, not warm gray.\nComposition: one person centered, single continuous photograph, eye-level straight-on view, full body, no cropping, no panels, no collage, no character sheet, no repeated figures, no labels, no text, no watermark, no additional objects. Use a fresh high-quality rendering, not a crop or enlarged panel from the source sheet.",
+      "referencedImagePaths": [
+        "/Users/jingxi/Desktop/projectmoneny/ai-script/web/front-web/public/creative-library/character-lin.png",
+        "/Users/jingxi/Desktop/projectmoneny/ai-script/web/front-web/public/creative-library/character-lin-portrait.png"
+      ],
+      "requestedAspectRatio": "3:4",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "success"
+        }
+      ],
+      "output": {
+        "width": 1086,
+        "height": 1448,
+        "format": "png",
+        "bytes": 1065026,
+        "generatedPath": "/Users/jingxi/.codex/generated_images/01a06fd3-aca5-7961-80f6-2f5df3a6f916/exec-c6876906-ba83-48ef-b322-63e6272d1c31.png",
+        "savedPaths": [
+          "/Users/jingxi/Desktop/projectmoneny/ai-script/web/front-web/public/creative-library/character-lin-fullbody.png",
+          "/Users/jingxi/Desktop/projectmoneny/ai-script/web/admin-web/public/creative-library/character-lin-fullbody.png"
+        ]
+      }
+    },
+    {
+      "key": "expressions",
+      "filename": "character-lin-expressions.png",
+      "status": "success",
+      "prompt": "Use case: identity-preserve.\nAsset type: a photorealistic facial-expression reference sheet for the fictional adult female character Lin Mu.\nInput image: the single attached portrait is the identity, hairstyle, skin-tone and wardrobe reference. Preserve this same adult woman, age 28, in every panel.\nPrimary request: generate one NEW square image containing exactly NINE head-and-shoulders portraits, arranged in a strict 3 columns by 3 rows grid with nine equal square cells and thin even white gutters.\nExpressions, left to right and top to bottom:\n1. Neutral, relaxed lips and brows.\n2. Gentle closed-mouth smile.\n3. Natural open-mouth laughter, smiling eyes.\n4. Surprised, raised eyebrows and slightly open mouth.\n5. Thoughtful, contemplative gaze and subtly pursed lips.\n6. Concerned, softly knitted inner brows.\n7. Slightly angry, firm mouth and restrained tense brows.\n8. Sad, lowered mouth corners and sorrowful eyes.\n9. Confident, direct gaze and a small assured smile.\nEach expression must be visibly distinct yet natural. All nine portraits are front-facing at the same eye-level camera angle, the same head scale and position. Every cell must include her ENTIRE hair crown with a clear white margin above, her whole head, neck and upper shoulders. Do not cut off hair or head.\nInvariants: preserve the reference face shape and facial features, adult age, natural skin texture and tone, shoulder-length dark side-parted hair tucked behind one ear, and ivory/off-white linen button-up shirt. Do not redesign her, change her age, change clothes, add jewelry, or substitute other people.\nBackground and lighting: clean pure WHITE studio backdrop in all cells; consistent soft neutral studio light, realistic skin and fabric.\nConstraints: exactly 3 rows and 3 columns, exactly nine portraits of the same woman, no extra portraits, no cropped heads, no text, no labels, no numbers, no watermark, no logos, no props or hands covering the face. This is a newly rendered expression sheet, not a repeated copy or crop of the input portrait. Square output, ideally 1536 by 1536.",
+      "referencedImagePaths": [
+        "/Users/jingxi/Desktop/projectmoneny/ai-script/web/front-web/public/creative-library/character-lin-portrait.png"
+      ],
+      "requestedAspectRatio": "1:1",
+      "requestedDimensions": {
+        "width": 1536,
+        "height": 1536
+      },
+      "attempts": [
+        {
+          "number": 1,
+          "status": "failed",
+          "error": "image generation failed: network error: error sending request for url (https://chatgpt.com/backend-api/codex/images/edits)",
+          "prompt": "Use case: identity-preserve.\nAsset type: one square 3-by-3 expression reference contact sheet for the same fictional adult female character Lin Mu.\nInput images: Image 1 is the primary face/identity portrait. Image 2 is the supporting character reference sheet for her identical hair and ivory linen shirt. These show the same fictional 28-year-old adult woman. Preserve her exact identity, face shape, facial features, adult age, skin tone and natural texture, shoulder-length dark side-parted hair tucked behind one ear, and ivory linen button-up collar in ALL nine panels.\nPrimary request: create ONE newly rendered square image, ideally 1536x1536, containing exactly nine equally sized square photographic close-ups arranged in a strict 3 columns by 3 rows grid. Use slim consistent white gutters. Each panel shows her complete hair crown, whole head, neck and upper shoulders, with a little white margin above the hair. Keep the same straight-on camera angle, same face scale, same white studio backdrop, same soft even neutral lighting, and same clothing. Nothing is cropped off at the top.\nExpressions in row-major order, with visible but believable differences:\nRow 1: neutral relaxed closed-mouth; gentle warm closed-mouth smile; genuine open-mouth laughter with eyes naturally smiling.\nRow 2: surprised with raised brows and slightly open mouth; thoughtful with a contemplative gaze and subtle brow movement; concerned with softly knitted brows.\nRow 3: slightly angry with a restrained firm mouth and tense brows, not extreme; sad with gently lowered mouth corners and subtly sorrowful eyes, not crying theatrically; confident with a poised direct gaze and a small assured smile.\nConstraints: the same single identifiable woman in every cell, nine distinct natural facial expressions, all frontal head-and-shoulders views, no props or hands covering the face. Make a fresh expression photography sheet, not crops from the old sheet. Do not redesign her face, beautify her into a different person, change hairstyle, change outfit, add makeup or jewelry, or vary ages. No text, labels, numbers, headers, watermark, logos or decorative borders. White background throughout, not gray or beige.",
+          "referencedImagePaths": [
+            "/Users/jingxi/Desktop/projectmoneny/ai-script/web/front-web/public/creative-library/character-lin-portrait.png",
+            "/Users/jingxi/Desktop/projectmoneny/ai-script/web/front-web/public/creative-library/character-lin.png"
+          ],
+          "generationMode": "built-in",
+          "output": null
+        },
+        {
+          "number": 2,
+          "status": "failed",
+          "error": "image generation failed: network error: error sending request for url (https://chatgpt.com/backend-api/codex/images/edits)",
+          "prompt": "Use case: identity-preserve.\nAsset type: one square 3-by-3 expression reference contact sheet for the same fictional adult female character Lin Mu.\nInput images: Image 1 is the primary face/identity portrait. Image 2 is the supporting character reference sheet for her identical hair and ivory linen shirt. These show the same fictional 28-year-old adult woman. Preserve her exact identity, face shape, facial features, adult age, skin tone and natural texture, shoulder-length dark side-parted hair tucked behind one ear, and ivory linen button-up collar in ALL nine panels.\nPrimary request: create ONE newly rendered square image, ideally 1536x1536, containing exactly nine equally sized square photographic close-ups arranged in a strict 3 columns by 3 rows grid. Use slim consistent white gutters. Each panel shows her complete hair crown, whole head, neck and upper shoulders, with a little white margin above the hair. Keep the same straight-on camera angle, same face scale, same white studio backdrop, same soft even neutral lighting, and same clothing. Nothing is cropped off at the top.\nExpressions in row-major order, with visible but believable differences:\nRow 1: neutral relaxed closed-mouth; gentle warm closed-mouth smile; genuine open-mouth laughter with eyes naturally smiling.\nRow 2: surprised with raised brows and slightly open mouth; thoughtful with a contemplative gaze and subtle brow movement; concerned with softly knitted brows.\nRow 3: slightly angry with a restrained firm mouth and tense brows, not extreme; sad with gently lowered mouth corners and subtly sorrowful eyes, not crying theatrically; confident with a poised direct gaze and a small assured smile.\nConstraints: the same single identifiable woman in every cell, nine distinct natural facial expressions, all frontal head-and-shoulders views, no props or hands covering the face. Make a fresh expression photography sheet, not crops from the old sheet. Do not redesign her face, beautify her into a different person, change hairstyle, change outfit, add makeup or jewelry, or vary ages. No text, labels, numbers, headers, watermark, logos or decorative borders. White background throughout, not gray or beige.",
+          "referencedImagePaths": [
+            "/Users/jingxi/Desktop/projectmoneny/ai-script/web/front-web/public/creative-library/character-lin-portrait.png",
+            "/Users/jingxi/Desktop/projectmoneny/ai-script/web/front-web/public/creative-library/character-lin.png"
+          ],
+          "generationMode": "built-in",
+          "output": null
+        },
+        {
+          "number": 3,
+          "status": "success",
+          "prompt": "Use case: identity-preserve.\nAsset type: a photorealistic facial-expression reference sheet for the fictional adult female character Lin Mu.\nInput image: the single attached portrait is the identity, hairstyle, skin-tone and wardrobe reference. Preserve this same adult woman, age 28, in every panel.\nPrimary request: generate one NEW square image containing exactly NINE head-and-shoulders portraits, arranged in a strict 3 columns by 3 rows grid with nine equal square cells and thin even white gutters.\nExpressions, left to right and top to bottom:\n1. Neutral, relaxed lips and brows.\n2. Gentle closed-mouth smile.\n3. Natural open-mouth laughter, smiling eyes.\n4. Surprised, raised eyebrows and slightly open mouth.\n5. Thoughtful, contemplative gaze and subtly pursed lips.\n6. Concerned, softly knitted inner brows.\n7. Slightly angry, firm mouth and restrained tense brows.\n8. Sad, lowered mouth corners and sorrowful eyes.\n9. Confident, direct gaze and a small assured smile.\nEach expression must be visibly distinct yet natural. All nine portraits are front-facing at the same eye-level camera angle, the same head scale and position. Every cell must include her ENTIRE hair crown with a clear white margin above, her whole head, neck and upper shoulders. Do not cut off hair or head.\nInvariants: preserve the reference face shape and facial features, adult age, natural skin texture and tone, shoulder-length dark side-parted hair tucked behind one ear, and ivory/off-white linen button-up shirt. Do not redesign her, change her age, change clothes, add jewelry, or substitute other people.\nBackground and lighting: clean pure WHITE studio backdrop in all cells; consistent soft neutral studio light, realistic skin and fabric.\nConstraints: exactly 3 rows and 3 columns, exactly nine portraits of the same woman, no extra portraits, no cropped heads, no text, no labels, no numbers, no watermark, no logos, no props or hands covering the face. This is a newly rendered expression sheet, not a repeated copy or crop of the input portrait. Square output, ideally 1536 by 1536.",
+          "referencedImagePaths": [
+            "/Users/jingxi/Desktop/projectmoneny/ai-script/web/front-web/public/creative-library/character-lin-portrait.png"
+          ],
+          "generationMode": "built-in",
+          "strategy": "Use a single portrait reference instead of the two-image references from attempts 1 and 2.",
+          "generatedPath": "/Users/jingxi/.codex/generated_images/01a06fd3-aca5-7961-80f6-2f5df3a6f916/exec-7f1994ed-b7fd-48df-900f-f38050dd3857.png"
+        }
+      ],
+      "output": {
+        "width": 1254,
+        "height": 1254,
+        "format": "png",
+        "bytes": 1787690,
+        "generatedPath": "/Users/jingxi/.codex/generated_images/01a06fd3-aca5-7961-80f6-2f5df3a6f916/exec-7f1994ed-b7fd-48df-900f-f38050dd3857.png",
+        "savedPaths": [
+          "/Users/jingxi/Desktop/projectmoneny/ai-script/web/front-web/public/creative-library/character-lin-expressions.png",
+          "/Users/jingxi/Desktop/projectmoneny/ai-script/web/admin-web/public/creative-library/character-lin-expressions.png"
+        ]
+      },
+      "plannedPaths": [
+        "/Users/jingxi/Desktop/projectmoneny/ai-script/web/front-web/public/creative-library/character-lin-expressions.png",
+        "/Users/jingxi/Desktop/projectmoneny/ai-script/web/admin-web/public/creative-library/character-lin-expressions.png"
+      ],
+      "stopped": false,
+      "note": "Attempts 1 and 2 failed with network errors and produced no file. On the later user-requested run, attempt 3 succeeded using only the existing portrait as the reference. Saved unmodified to both public directories without overwriting existing files. No API/CLI fallback or fabricated composite was used.",
+      "visualValidation": {
+        "passed": true,
+        "grid": {
+          "rows": 3,
+          "columns": 3,
+          "portraits": 9
+        },
+        "expressionsRowMajor": [
+          "neutral",
+          "gentle smile",
+          "laughter",
+          "surprised",
+          "thoughtful",
+          "concerned",
+          "slightly angry",
+          "sad",
+          "confident"
+        ],
+        "completeHeadAndShoulders": true,
+        "whiteBackground": true,
+        "consistentIdentityHairAndIvoryShirt": true,
+        "inspectedOriginalGeneratedImage": true
+      }
+    },
+    {
+      "key": "turnaround",
+      "filename": "character-lin-turnaround.png",
+      "status": "success",
+      "prompt": "Use case: identity-preserve.\nAsset type: one newly rendered photorealistic character turnaround reference image for an AI video production character library.\nInput images: Image 1 is the primary face and identity anchor portrait of Lin Mu. Image 2 is the original character sheet, used only as the reference for her exact body proportions, haircut and complete outfit. She is the same fictional 28-year-old adult woman in every view.\nPrimary request: create a NEW clean white-background landscape 16:9 multi-angle reference photograph sheet, with no text. Allocate the left roughly 58% to three evenly spaced complete full-body views of the same woman: straight front, true left-facing side profile, and straight back. Show the entire hair crown down through both white shoes in each of these three views, at exactly matching scale and ground line, arms relaxed at sides, neutral standing pose. Preserve margin around every figure.\nIn the right roughly 42%, place exactly six equal head-and-shoulder close-ups in a 2 columns by 3 rows arrangement. Angles in row-major order: front; left three-quarter; true left profile; right three-quarter; true right profile; rear three-quarter showing the hair shape. Each portrait includes the complete crown of hair, neck and shoulder line without clipping. Keep a neutral calm expression and a consistent face scale, with subtle white gutters.\nIdentity invariants: preserve precisely her face shape, facial features, apparent adult age, natural skin tone and texture, shoulder-length dark side-parted hair tucked behind one ear, slim-average body proportions, ivory off-white linen button-up shirt with a single chest pocket and gently rolled cuffs, sand-beige straight-leg trousers, and plain white low-top sneakers. No changing her identity or outfit between views.\nLighting/style: photorealistic consistent neutral studio lighting, natural skin and linen texture, very soft contact shadows beneath the full-body feet, pure clean white backdrop throughout rather than gray or beige.\nConstraints: one coherent newly generated turnaround asset, not crops from or reuse of the old sheet. Nine views total: three full-body left, six head-and-shoulder right. No facial expression grid, no different people, no extra people, no text, no labels, no numbers, no logos, no watermark, no props, no decorative frame. Every full-body figure must include head and feet.",
+      "referencedImagePaths": [
+        "/Users/jingxi/Desktop/projectmoneny/ai-script/web/front-web/public/creative-library/character-lin-portrait.png",
+        "/Users/jingxi/Desktop/projectmoneny/ai-script/web/front-web/public/creative-library/character-lin.png"
+      ],
+      "requestedAspectRatio": "16:9",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "success"
+        }
+      ],
+      "output": {
+        "width": 1672,
+        "height": 941,
+        "format": "png",
+        "bytes": 1527730,
+        "generatedPath": "/Users/jingxi/.codex/generated_images/01a06fd3-aca5-7961-80f6-2f5df3a6f916/exec-57d31d31-f680-4cfd-9f12-a853991e321a.png",
+        "savedPaths": [
+          "/Users/jingxi/Desktop/projectmoneny/ai-script/web/front-web/public/creative-library/character-lin-turnaround.png",
+          "/Users/jingxi/Desktop/projectmoneny/ai-script/web/admin-web/public/creative-library/character-lin-turnaround.png"
+        ]
+      }
+    }
+  ]
+}

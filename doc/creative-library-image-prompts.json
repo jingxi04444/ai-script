@@ -1,0 +1,42 @@
+[
+  {
+    "asset": "character-lin.png",
+    "mode": "built-in image_gen generate",
+    "prompt": "Use case: photorealistic-natural. Asset type: original fictional adult character reference sheet for an AI commercial video production library. Create one clean landscape character sheet on an off-white studio background, no interface, no text or watermark. Subject: a fictional East Asian woman aged 28, shoulder-length dark hair tucked behind one ear, friendly understated face, natural skin texture, cream linen shirt with sleeves rolled to wrists, straight sand trousers and white shoes. Identity consistent across every view. Layout: left half has three evenly spaced head-to-toe views front, side and back; right half a neat 2x3 grid of large portrait crops showing neutral, gentle smile, laughing, thinking, surprise and confident expression. Even soft studio daylight, practical wardrobe, accurate hands and anatomy. Realistic photography, not illustration; no resemblance to a known person, no logos, no accessories, no extra characters."
+  },
+  {
+    "asset": "character-lin-portrait.png",
+    "mode": "built-in image_gen edit / identity-preserve",
+    "prompt": "Use case: identity-preserve. Input image: fictional adult character identity reference sheet. Create a single portrait photo of the SAME fictional adult from the reference, shoulder-up facing camera with a gentle natural smile, off-white studio background. Keep facial identity, age, hair, outfit and realistic skin texture unchanged. Vertical 4:5 composition with head fully visible and subtle breathing room. No contact sheet, no grid, no other views, no text, no logos or watermarks. This is a library cover portrait to match the existing character turnaround sheet."
+  },
+  {
+    "asset": "character-chen.png",
+    "mode": "built-in image_gen generate",
+    "prompt": "Use case: photorealistic-natural. Asset type: original fictional adult male character reference sheet for AI commercial video library. One clean landscape contact sheet on off-white studio background, no text or UI. Fictional East Asian man aged 34, neat short black hair, thoughtful approachable face, natural skin texture, dark navy overshirt over white plain tee, charcoal straight trousers, white sneakers. Same identity and clothing across views. Left half three evenly spaced head-to-toe front side back views; right half clean 2x3 grid of large portrait crops neutral, smile, laugh, thinking, surprised, confident. Soft even studio light, restrained editorial photography, accurate hands and anatomy. No resemblance to a known person, no trademarks, no watermarks, no props."
+  },
+  {
+    "asset": "character-chen-portrait.png",
+    "mode": "built-in image_gen edit / identity-preserve",
+    "prompt": "Use case: identity-preserve. Input image: fictional adult character identity reference sheet. Create a single portrait photo of the SAME fictional adult from the reference, shoulder-up facing camera with a gentle natural smile, off-white studio background. Keep facial identity, age, hair, outfit and realistic skin texture unchanged. Vertical 4:5 composition with head fully visible and subtle breathing room. No contact sheet, no grid, no other views, no text, no logos or watermarks. This is a library cover portrait to match the existing character turnaround sheet."
+  },
+  {
+    "asset": "style-daylight.png",
+    "mode": "built-in image_gen generate",
+    "prompt": "Use case: product-mockup. Asset type: original visual style reference thumbnail for an AI product-video library. Portrait 4:5 high-end natural daylight still life photography. Unbranded frosted ivory skincare pump bottle on warm limestone beside a folded linen cloth and one olive branch. Diffused morning sunlight from a window, subtle leaf shadows, warm neutral cream palette, realistic glass, stone texture and quiet editorial composition. Entire object in frame with generous breathing room, refined sparse set. This is a style reference, not a poster. No writing, no label text, no logo, no watermark."
+  },
+  {
+    "asset": "style-editorial.png",
+    "mode": "built-in image_gen generate",
+    "prompt": "Use case: product-mockup. Asset type: original visual style reference for an AI product-video library. Portrait 4:5 sculptural editorial product photograph: single unbranded amber glass fragrance bottle on a dark brown stone plinth, honey-gold rim light, dramatic chiaroscuro, curved translucent glass prop behind the bottle, rich shadows, expensive tactile surfaces and subtle grain. Entire bottle visible, confident asymmetric still-life composition, restrained and realistic, not a UI card. No writing, no brand, no label text, no watermark."
+  },
+  {
+    "asset": "effect-orbit.png",
+    "mode": "built-in image_gen generate",
+    "prompt": "Use case: product-mockup. Asset type: original still illustration of a camera-orbit effect template, for an AI video resource library; single portrait 4:5 frame, no UI. Photorealistic premium unbranded silver over-ear headphones floating upright above a charcoal studio pedestal. Three-quarter angle showing dimensional form, a soft narrow curved arc of white light sweeps behind the product to suggest an orbiting camera; natural high-end materials, clean cinematic rim light, controlled reflections and dark graphite background. Clear single product, no duplicates, no text, no logo, no watermark. Still image only, not a multi-panel storyboard."
+  },
+  {
+    "asset": "effect-splash.png",
+    "mode": "built-in image_gen generate",
+    "prompt": "Use case: product-mockup. Asset type: original illustrative still of a slow-motion water-splash video template, for an AI video resource library; single portrait 4:5 frame, no UI. An unbranded pale-aqua glass skincare bottle floats upright in a sculptural clear-water splash, high-speed macro commercial photography, crisp droplets and believable refraction, pale glacier blue seamless background, brilliant diffused backlight. Keep single bottle complete and visually stable in the center, no deformation or extra bottles. No writing, no labels, no logo, no watermark. A still image indicating the desired look, not a claim of real footage."
+  }
+]
