@@ -1,0 +1,237 @@
+.workflow-mark-backdrop {
+  position: fixed;
+  z-index: 24;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 76px 24px 92px;
+  background: rgba(5, 6, 6, 0.66);
+  backdrop-filter: blur(7px);
+}
+
+.workflow-mark-selector {
+  width: min(760px, calc(100% - 48px));
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 18px;
+  background: #202121;
+  color: #eeeeec;
+  box-shadow: 0 34px 100px rgba(0, 0, 0, 0.58);
+  animation: workflow-mark-in 160ms ease-out both;
+}
+
+.workflow-mark-selector > header,
+.workflow-mark-selector > footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+}
+
+.workflow-mark-selector > header {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.workflow-mark-selector > header > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.workflow-mark-selector > header > div > span {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: #3473f0;
+  color: #fff;
+}
+
+.workflow-mark-selector p,
+.workflow-mark-selector strong,
+.workflow-mark-selector small {
+  margin: 0;
+}
+
+.workflow-mark-selector > header strong,
+.workflow-mark-selector > header small {
+  display: block;
+}
+
+.workflow-mark-selector > header strong {
+  font-size: 13px !important;
+}
+
+.workflow-mark-selector > header small {
+  margin-top: 2px;
+  color: #888c8a;
+  font-size: 9px !important;
+}
+
+.workflow-mark-selector > header > button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #aeb1af;
+}
+
+.workflow-mark-canvas {
+  position: relative;
+  height: min(430px, 52vh);
+  overflow: hidden;
+  margin: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 13px;
+  background:
+    radial-gradient(circle at 50% 44%, rgba(123, 129, 126, 0.18), transparent 34%),
+    linear-gradient(150deg, #171918, #0e1010);
+}
+
+.workflow-mark-canvas > img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.workflow-mark-placeholder {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 7px;
+  color: #767b78;
+}
+
+.workflow-mark-placeholder .anticon {
+  font-size: 64px;
+}
+
+.workflow-mark-placeholder strong {
+  color: #b9bcba;
+  font-size: 15px !important;
+}
+
+.workflow-mark-placeholder small {
+  font-size: 10px !important;
+}
+
+.workflow-mark-region {
+  position: absolute;
+  border: 1px dashed rgba(255, 255, 255, 0.46);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+  color: #e6e8e7;
+  transition: 140ms ease;
+}
+
+.workflow-mark-region:hover,
+.workflow-mark-region.selected {
+  border-style: solid;
+  border-color: #68a0ff;
+  background: rgba(63, 123, 244, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(104, 160, 255, 0.2), 0 0 20px rgba(48, 105, 225, 0.2);
+}
+
+.workflow-mark-region > span {
+  position: absolute;
+  top: -12px;
+  left: 10px;
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border-radius: 7px;
+  background: #333535;
+  color: #d8dbd9;
+  font-size: 9px !important;
+  white-space: nowrap;
+}
+
+.workflow-mark-region.selected > span {
+  background: #3978ee;
+  color: #fff;
+}
+
+.workflow-mark-region.is-product {
+  z-index: 2;
+  left: 34%;
+  top: 17%;
+  width: 32%;
+  height: 62%;
+}
+
+.workflow-mark-region.is-copy {
+  z-index: 3;
+  left: 41%;
+  top: 41%;
+  width: 18%;
+  height: 19%;
+}
+
+.workflow-mark-region.is-background {
+  z-index: 1;
+  left: 8%;
+  top: 9%;
+  width: 84%;
+  height: 82%;
+}
+
+.workflow-mark-selector > footer {
+  padding-top: 0;
+}
+
+.workflow-mark-selector > footer p {
+  color: #898d8b;
+  font-size: 10px !important;
+}
+
+.workflow-mark-selector > footer p b {
+  color: #70a5ff;
+}
+
+.workflow-mark-selector > footer p span {
+  margin-left: 9px;
+  color: #666a68;
+}
+
+.workflow-mark-selector > footer > div {
+  display: flex;
+  gap: 7px;
+}
+
+.workflow-mark-selector > footer button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 13px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #b9bcba;
+  font-size: 10px !important;
+}
+
+.workflow-mark-selector > footer button.primary {
+  background: #3978ee;
+  color: #fff;
+  font-weight: 700;
+}
+
+.workflow-mark-selector > footer button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+@keyframes workflow-mark-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}

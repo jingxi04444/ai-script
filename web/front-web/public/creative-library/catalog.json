@@ -1,0 +1,253 @@
+[
+  {
+    "code": "character-lin",
+    "type": "character",
+    "name": "林沐 · 自然生活",
+    "category": "现代生活",
+    "description": "28 岁虚构女性，短发、米白亚麻衬衫。提供全身图、面部特写、表情九宫格、多角度设定图及旧综合设定板，适合生活方式和护肤内容。",
+    "tags": [
+      "虚构成人",
+      "女",
+      "自然",
+      "生活方式"
+    ],
+    "prompt": "使用参考图中的同一位成年虚构角色林沐：28 岁女性，肩长黑发，一侧别于耳后，自然皮肤纹理，米白亚麻衬衫、沙色长裤。保持脸部五官、发型、年龄、服装和体型一致。根据当前分镜完成自然可信的动作和表情。",
+    "negativePrompt": "不要改变人物身份，不要变成未成年人，不要塑料皮肤、额外手指或扭曲肢体。",
+    "config": {
+      "applicationMode": "image-reference",
+      "identity": "成年女性，肩长黑发，自然五官",
+      "wardrobe": "米白亚麻衬衫、沙色直筒长裤",
+      "referenceViews": [
+        "全身图",
+        "面部特写",
+        "表情九宫格",
+        "多角度设定图",
+        "旧综合设定板（正侧背与六种表情）"
+      ]
+    },
+    "id": "910260905000000101",
+    "coverUrl": "/creative-library/character-lin-portrait.png",
+    "previewVideoUrl": "",
+    "gallery": [
+      {
+        "label": "全身图",
+        "url": "/creative-library/character-lin-fullbody.png"
+      },
+      {
+        "label": "面部特写",
+        "url": "/creative-library/character-lin-portrait.png"
+      },
+      {
+        "label": "表情九宫格",
+        "url": "/creative-library/character-lin-expressions.png"
+      },
+      {
+        "label": "多角度设定图",
+        "url": "/creative-library/character-lin-turnaround.png"
+      },
+      {
+        "label": "旧综合设定板（正侧背与六种表情）",
+        "url": "/creative-library/character-lin.png"
+      }
+    ],
+    "status": "published",
+    "sortOrder": 10,
+    "licenseNote": "AI 生成的原创示例，非 LibLib 素材。用于演示与创作参考；正式发布、广告投放或商用前，请完成内容、肖像近似性及适用授权审核。",
+    "author": "AI Script · AI 原创示例"
+  },
+  {
+    "code": "character-chen",
+    "type": "character",
+    "name": "陈屿 · 都市讲述",
+    "category": "现代生活",
+    "description": "34 岁虚构男性，藏蓝外套与白色内搭。提供全身图、面部特写、表情九宫格、多角度设定图及旧综合设定板，适合产品讲解和日常场景。",
+    "tags": [
+      "虚构成人",
+      "男",
+      "都市",
+      "产品讲解"
+    ],
+    "prompt": "使用参考图中的同一位成年虚构角色陈屿：34 岁男性，整洁黑色短发，自然皮肤纹理，藏蓝色外套、白色无标识内搭、炭灰长裤。保持人物脸型、五官、发型、服装和身形一致，表情亲切克制，动作自然。",
+    "negativePrompt": "不要改变身份、年龄和服装，不要出现名人、品牌标识、额外手指或僵硬表情。",
+    "config": {
+      "applicationMode": "image-reference",
+      "identity": "成年男性，整洁黑色短发，亲切表情",
+      "wardrobe": "藏蓝外套、白色内搭、炭灰长裤",
+      "referenceViews": [
+        "全身图",
+        "面部特写",
+        "表情九宫格",
+        "多角度设定图",
+        "旧综合设定板（正侧背与六种表情）"
+      ]
+    },
+    "id": "910260905000000102",
+    "coverUrl": "/creative-library/character-chen-portrait.png",
+    "previewVideoUrl": "",
+    "gallery": [
+      {
+        "label": "全身图",
+        "url": "/creative-library/character-chen-fullbody.png"
+      },
+      {
+        "label": "面部特写",
+        "url": "/creative-library/character-chen-portrait.png"
+      },
+      {
+        "label": "表情九宫格",
+        "url": "/creative-library/character-chen-expressions.png"
+      },
+      {
+        "label": "多角度设定图",
+        "url": "/creative-library/character-chen-turnaround.png"
+      },
+      {
+        "label": "旧综合设定板（正侧背与六种表情）",
+        "url": "/creative-library/character-chen.png"
+      }
+    ],
+    "status": "published",
+    "sortOrder": 20,
+    "licenseNote": "AI 生成的原创示例，非 LibLib 素材。用于演示与创作参考；正式发布、广告投放或商用前，请完成内容、肖像近似性及适用授权审核。",
+    "author": "AI Script · AI 原创示例"
+  },
+  {
+    "code": "style-daylight",
+    "type": "style",
+    "name": "柔光日常",
+    "category": "产品摄影",
+    "description": "暖白、亚麻与石材的自然摄影风格。参考图用于传达光线、色彩与材质，不要求替换用户的产品。",
+    "tags": [
+      "自然光",
+      "暖白",
+      "电商",
+      "护肤"
+    ],
+    "prompt": "保留用户产品的造型、包装文字和品牌信息，采用柔和晨间自然光、暖白米色调、细腻亚麻与浅色石材、稀疏且真实的生活化布景。阴影柔软有层次，材质真实，画面安静、通透、留白充足。参考图仅提供光线、配色和摄影质感，不复制参考图产品。",
+    "negativePrompt": "不要改变产品结构或包装文字，避免过曝、塑料质感、过度锐化、杂乱道具。",
+    "config": {
+      "applicationMode": "prompt-reference",
+      "lighting": "柔和晨光与柔边阴影",
+      "palette": "暖白、米色、浅石色",
+      "strength": 0.65
+    },
+    "id": "910260905000000103",
+    "coverUrl": "/creative-library/style-daylight.png",
+    "previewVideoUrl": "",
+    "gallery": [
+      {
+        "label": "摄影风格参考",
+        "url": "/creative-library/style-daylight.png"
+      }
+    ],
+    "status": "published",
+    "sortOrder": 30,
+    "licenseNote": "AI 生成的原创示例，非 LibLib 素材。用于演示与创作参考；正式发布、广告投放或商用前，请完成内容、肖像近似性及适用授权审核。",
+    "author": "AI Script · AI 原创示例"
+  },
+  {
+    "code": "style-editorial",
+    "type": "style",
+    "name": "琥珀映画",
+    "category": "产品摄影",
+    "description": "深色棚拍、琥珀侧逆光与雕塑感构图。适合香氛、珠宝和高质感包装展示；不是 LoRA 模型。",
+    "tags": [
+      "暗调",
+      "棚拍",
+      "琥珀",
+      "质感"
+    ],
+    "prompt": "保持用户产品主体不变，采用深棕炭黑背景、琥珀色侧逆光、克制的镜面反射、粗糙深色石台与通透玻璃层次。光线具有明暗对比和雕塑感，产品轮廓清晰，构图留白、材质细腻、具有编辑式商业摄影质感。参考图仅作为视觉风格，不替换原产品。",
+    "negativePrompt": "不要改变标签、Logo或产品结构，避免死黑遮挡主体、过量眩光、艳俗饱和和重复产品。",
+    "config": {
+      "applicationMode": "prompt-reference",
+      "lighting": "琥珀侧逆光、克制轮廓高光",
+      "palette": "炭黑、深棕、琥珀金",
+      "strength": 0.7
+    },
+    "id": "910260905000000104",
+    "coverUrl": "/creative-library/style-editorial.png",
+    "previewVideoUrl": "",
+    "gallery": [
+      {
+        "label": "摄影风格参考",
+        "url": "/creative-library/style-editorial.png"
+      }
+    ],
+    "status": "published",
+    "sortOrder": 40,
+    "licenseNote": "AI 生成的原创示例，非 LibLib 素材。用于演示与创作参考；正式发布、广告投放或商用前，请完成内容、肖像近似性及适用授权审核。",
+    "author": "AI Script · AI 原创示例"
+  },
+  {
+    "code": "effect-orbit",
+    "type": "effect",
+    "name": "产品环绕运镜",
+    "category": "运镜",
+    "description": "镜头平稳环绕主体的提示词模板，强调轮廓和材质。当前为效果示意图，不包含真实视频、3D 文件或可执行特效插件。",
+    "tags": [
+      "运镜",
+      "环绕",
+      "产品展示",
+      "提示词模板"
+    ],
+    "prompt": "以用户指定的产品为唯一主体。镜头以稳定速度围绕产品水平移动约 30 度，从正前方缓慢到三分之四侧面，保持中近景、主体居中、大小基本稳定。柔和轮廓光展示材质，背景安静；产品结构、Logo、文字与颜色始终一致，最后平稳停留。",
+    "negativePrompt": "避免主体旋转变形、产品复制、画面抖动、突兀变焦、文字变化或场景跳切。",
+    "config": {
+      "applicationMode": "prompt-template",
+      "cameraMotion": "水平平稳环绕约30度",
+      "durationSeconds": 5,
+      "strength": 0.55,
+      "preserveSubject": true
+    },
+    "id": "910260905000000105",
+    "coverUrl": "/creative-library/effect-orbit.png",
+    "previewVideoUrl": "",
+    "gallery": [
+      {
+        "label": "效果示意图（非视频）",
+        "url": "/creative-library/effect-orbit.png"
+      }
+    ],
+    "status": "published",
+    "sortOrder": 50,
+    "licenseNote": "AI 生成的原创示例，非 LibLib 素材。用于演示与创作参考；正式发布、广告投放或商用前，请完成内容、肖像近似性及适用授权审核。",
+    "author": "AI Script · AI 原创示例"
+  },
+  {
+    "code": "effect-splash",
+    "type": "effect",
+    "name": "水花慢动作",
+    "category": "产品特效",
+    "description": "透明水花与高速摄影质感的提示词模板。当前提供静态示意图；生成效果取决于所选视频模型，不是现成视频素材。",
+    "tags": [
+      "慢动作",
+      "水花",
+      "护肤",
+      "提示词模板"
+    ],
+    "prompt": "以用户指定产品为主体，产品在画面中心稳定悬浮，保持完整造型与包装细节。透明水花从两侧柔和升起、向后展开，微小水滴以慢动作飞散，水体折射真实、背景清透。镜头缓慢前推，避免水体长时间遮挡产品标签，最后水滴缓缓落下，突出清爽触感。",
+    "negativePrompt": "不要改变产品与包装文字，避免不真实黏稠液体、形体融化、水花遮住主体、突兀切镜。",
+    "config": {
+      "applicationMode": "prompt-template",
+      "cameraMotion": "微幅慢速前推",
+      "durationSeconds": 5,
+      "lighting": "清透柔和逆光",
+      "strength": 0.5,
+      "preserveSubject": true
+    },
+    "id": "910260905000000106",
+    "coverUrl": "/creative-library/effect-splash.png",
+    "previewVideoUrl": "",
+    "gallery": [
+      {
+        "label": "效果示意图（非视频）",
+        "url": "/creative-library/effect-splash.png"
+      }
+    ],
+    "status": "published",
+    "sortOrder": 60,
+    "licenseNote": "AI 生成的原创示例，非 LibLib 素材。用于演示与创作参考；正式发布、广告投放或商用前，请完成内容、肖像近似性及适用授权审核。",
+    "author": "AI Script · AI 原创示例"
+  }
+]

@@ -1,0 +1,86 @@
+.workflow-director-preview {
+  position: relative;
+  height: 220px;
+  overflow: hidden;
+  background: #161b1d;
+  color: #c9d2d6;
+}
+
+.workflow-director-preview > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.workflow-director-placeholder {
+  display: flex;
+  height: 170px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  background: radial-gradient(ellipse at 50% 80%, #283237 0, #161b1d 70%);
+}
+
+.workflow-director-frame {
+  display: grid;
+  width: 58px;
+  height: 42px;
+  place-items: center;
+  border: 1px solid #688897;
+  border-radius: 7px;
+  color: #9dbdca;
+  font-size: 25px;
+}
+
+.workflow-director-placeholder strong { font-size: 13px; font-weight: 500; }
+.workflow-director-placeholder small { color: #7d9099; font-size: 11px; }
+
+.workflow-director-preview .workflow-director-open {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid #4b626d;
+  border-radius: 7px;
+  color: #e1edf2;
+  background: #24333bed;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.workflow-director-open .anticon:last-child { margin-left: auto; }
+.workflow-director-open .anticon:first-child { margin-right: auto; }
+.workflow-director-preview .workflow-director-open:hover { background: #364e5a; }
+.workflow-director-preview .workflow-director-open:focus-visible { outline: 2px solid #9dbdca; outline-offset: 2px; }
+.workflow-node-role.is-director { color: #a4c3d1; }
+
+.director-studio-loading {
+  position: fixed;
+  inset: 0;
+  z-index: 2200;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 20px;
+  color: #dce5e9;
+  background: #13191cf5;
+  font-size: 14px;
+}
+
+.director-studio-loading button {
+  padding: 7px 16px;
+  border: 1px solid #46555d;
+  border-radius: 7px;
+  color: inherit;
+  background: #273239;
+  cursor: pointer;
+}
