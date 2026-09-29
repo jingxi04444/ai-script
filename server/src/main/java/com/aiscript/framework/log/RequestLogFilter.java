@@ -24,6 +24,12 @@ public class RequestLogFilter extends OncePerRequestFilter {
         MDC.put(TraceIdHolder.TRACE_ID, traceId);
         response.setHeader("X-Trace-Id", traceId);
         long start = System.currentTimeMillis();
+        log.info(
+            "[HTTP] start {} {} traceId={}",
+            request.getMethod(),
+            request.getRequestURI(),
+            traceId
+        );
         try {
             filterChain.doFilter(request, response);
         } finally {

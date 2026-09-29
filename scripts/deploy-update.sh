@@ -6,6 +6,7 @@ REMOTE_HOST="${DEPLOY_HOST:-47.96.115.22}"
 REMOTE_USER="${DEPLOY_USER:-root}"
 REMOTE_DIR="${DEPLOY_REMOTE_DIR:-/opt/ai-script}"
 REMOTE_SERVICE="${DEPLOY_SERVICE:-ai-script}"
+REMOTE_CHROME_BIN="${DEPLOY_CHROME_BIN:-/usr/bin/google-chrome-stable}"
 SSH_PORT="${DEPLOY_SSH_PORT:-22}"
 PASSWORD="${DEPLOY_PASSWORD:-}"
 
@@ -83,8 +84,10 @@ log "Building admin-web"
 (cd "$PROJECT_ROOT/web/admin-web" && npm run build)
 
 log "Packaging artifacts"
-mkdir -p "$WORK_DIR/server" "$WORK_DIR/front-web" "$WORK_DIR/admin-web"
+mkdir -p "$WORK_DIR/server/scripts" "$WORK_DIR/front-web" "$WORK_DIR/admin-web"
 cp "$PROJECT_ROOT/server/target/ai-script-server-0.1.0-SNAPSHOT.jar" "$WORK_DIR/server/ai-script-server.jar"
+cp "$PROJECT_ROOT/server/scripts/check-douyin-access.sh" "$WORK_DIR/server/scripts/check-douyin-access.sh"
+chmod +x "$WORK_DIR/server/scripts/check-douyin-access.sh"
 cp -R "$PROJECT_ROOT/web/front-web/dist" "$WORK_DIR/front-web/"
 cp -R "$PROJECT_ROOT/web/admin-web/dist" "$WORK_DIR/admin-web/"
 tar -C "$(dirname "$WORK_DIR")" -czf "$ARCHIVE_PATH" "$(basename "$WORK_DIR")"
@@ -94,6 +97,17 @@ upload_file "$ARCHIVE_PATH" "/tmp/${RELEASE_NAME}.tar.gz"
 
 log "Installing release and restarting service"
 run_ssh "set -euo pipefail
+if [ ! -x ${REMOTE_CHROME_BIN} ]; then
+  echo 'Chrome/Chromium不可用: ${REMOTE_CHROME_BIN}' >&2
+  echo '请先安装浏览器，或通过DEPLOY_CHROME_BIN指定实际可执行文件路径' >&2
+  exit 1
+fi
+if ! command -v ffmpeg >/dev/null 2>&1; then
+  echo 'ffmpeg不可用，请先在服务器安装ffmpeg' >&2
+  exit 1
+fi
+echo \"Browser: \$(${REMOTE_CHROME_BIN} --version)\"
+echo \"FFmpeg: \$(ffmpeg -version | head -n 1)\"
 mkdir -p ${REMOTE_DIR}/logs ${REMOTE_DIR}/uploads ${REMOTE_DIR}/releases
 rm -rf /tmp/${RELEASE_NAME}
 tar -xzf /tmp/${RELEASE_NAME}.tar.gz -C /tmp
@@ -109,6 +123,9 @@ mv /tmp/${RELEASE_NAME}/server ${REMOTE_DIR}/server
 mv /tmp/${RELEASE_NAME}/front-web ${REMOTE_DIR}/front-web
 mv /tmp/${RELEASE_NAME}/admin-web ${REMOTE_DIR}/admin-web
 rm -rf /tmp/${RELEASE_NAME} /tmp/${RELEASE_NAME}.tar.gz
+install -d -m 0755 /etc/systemd/system/${REMOTE_SERVICE}.service.d
+printf '%s\n' '[Service]' 'Environment=\"CHROME_BIN=${REMOTE_CHROME_BIN}\"' > /etc/systemd/system/${REMOTE_SERVICE}.service.d/20-ai-script-browser.conf
+systemctl daemon-reload
 systemctl restart ${REMOTE_SERVICE}
 systemctl reload nginx
 for i in \$(seq 1 30); do

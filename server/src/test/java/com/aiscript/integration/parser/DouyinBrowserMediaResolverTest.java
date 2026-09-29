@@ -44,15 +44,22 @@ class DouyinBrowserMediaResolverTest {
         assertFalse(DouyinBrowserMediaResolver.isPreferredAudioResponse(
             "https://media.example.com/media-video-avc1/", "video/mp4"
         ));
+        assertTrue(DouyinBrowserMediaResolver.isKnownVideoOnlyResponse(
+            "https://media.example.com/media-video-avc1/?mime_type=video_mp4"
+        ));
+        assertFalse(DouyinBrowserMediaResolver.isKnownVideoOnlyResponse(
+            "https://media.example.com/video.mp4"
+        ));
     }
 
     @Test
     @EnabledIfEnvironmentVariable(named = "RUN_DOUYIN_LIVE_TEST", matches = "true")
     void resolvesDownloadsAndConvertsCurrentDouyinMedia() throws Exception {
         DouyinBrowserMediaResolver resolver = new DouyinBrowserMediaResolver();
+        String videoId = System.getenv().getOrDefault("DOUYIN_LIVE_VIDEO_ID", "7614745956806924706");
 
         DouyinBrowserMediaResolver.BrowserMedia result = resolver.resolve(
-            "https://www.douyin.com/video/7614745956806924706"
+            "https://www.douyin.com/video/" + videoId
         ).orElseThrow();
 
         assertTrue(result.mediaUrl().startsWith("https://"));

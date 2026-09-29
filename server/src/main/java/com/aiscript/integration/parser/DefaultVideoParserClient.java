@@ -53,6 +53,28 @@ public class DefaultVideoParserClient implements VideoParserClient {
 
     @Override
     public Map<String, Object> parseShareUrl(String url) {
+        long startedAt = System.nanoTime();
+        log.info("[VIRAL_PARSE_TIMING] stage=link_parse action=start url={}", url);
+        try {
+            Map<String, Object> result = parseShareUrlInternal(url);
+            log.info(
+                "[VIRAL_PARSE_TIMING] stage=link_parse action=success platform={} parseMode={} cost={}ms",
+                result.get("platform"),
+                result.get("parseMode"),
+                elapsedMillis(startedAt)
+            );
+            return result;
+        } catch (RuntimeException exception) {
+            log.warn(
+                "[VIRAL_PARSE_TIMING] stage=link_parse action=failed cost={}ms error={}",
+                elapsedMillis(startedAt),
+                exception.getMessage()
+            );
+            throw exception;
+        }
+    }
+
+    private Map<String, Object> parseShareUrlInternal(String url) {
         String normalizedUrl = UrlUtils.extractFirstUrl(url);
         if (!StringUtils.hasText(normalizedUrl)) {
             throw new BusinessException("未识别到有效视频链接，请粘贴包含 http/https 的分享链接");
@@ -92,6 +114,10 @@ public class DefaultVideoParserClient implements VideoParserClient {
         } catch (Exception ex) {
             throw new BusinessException("视频解析Provider调用失败：" + ex.getMessage());
         }
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return java.util.concurrent.TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
     }
 
     private Optional<Map<String, Object>> localParse(String url) {

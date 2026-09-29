@@ -5,6 +5,7 @@ import com.aiscript.common.api.ResultCode;
 import com.aiscript.common.util.JsonUtils;
 import com.aiscript.common.util.UrlUtils;
 import com.aiscript.framework.tenant.TenantContext;
+import com.aiscript.framework.log.TraceIdHolder;
 import com.aiscript.integration.asr.AsrClient;
 import com.aiscript.integration.llm.LlmClient;
 import com.aiscript.integration.parser.VideoParserClient;
@@ -45,6 +46,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.concurrent.TimeUnit;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -354,62 +356,128 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
         if (!StringUtils.hasText(dto.getProjectId()) || !StringUtils.hasText(dto.getUrl())) {
             throw new BusinessException("项目ID和分享链接不能为空");
         }
-        Map<String, Object> parsed = videoParserClient.parseShareUrl(dto.getUrl());
-        String videoUrl = stringValue(parsed.getOrDefault("videoUrl", dto.getUrl()));
-        String title = stringValue(parsed.get("title"));
-        requireExtractedContent(parsed, videoUrl);
-        String copy = "";
-        if (transcribe && shouldTranscribe(videoUrl, parsed)) {
-            copy = asrClient.transcribe(videoUrl);
+        long totalStartedAt = System.nanoTime();
+        String traceId = TraceIdHolder.getTraceId();
+        String stage = "link_parse";
+        long stageStartedAt = totalStartedAt;
+        log.info(
+            "[VIRAL_PARSE_TIMING] action=start traceId={} projectId={} mode={} transcribe={}",
+            traceId,
+            dto.getProjectId(),
+            dto.getMode(),
+            transcribe
+        );
+        try {
+            Map<String, Object> parsed = videoParserClient.parseShareUrl(dto.getUrl());
+            log.info(
+                "[VIRAL_PARSE_TIMING] stage={} action=success traceId={} cost={}ms",
+                stage,
+                traceId,
+                elapsedMillis(stageStartedAt)
+            );
+            String videoUrl = stringValue(parsed.getOrDefault("videoUrl", dto.getUrl()));
+            String title = stringValue(parsed.get("title"));
+            requireExtractedContent(parsed, videoUrl);
+            String copy = "";
+            if (transcribe && shouldTranscribe(videoUrl, parsed)) {
+                stage = "asr";
+                stageStartedAt = System.nanoTime();
+                log.info("[VIRAL_PARSE_TIMING] stage={} action=start traceId={}", stage, traceId);
+                copy = asrClient.transcribe(videoUrl);
+                log.info(
+                    "[VIRAL_PARSE_TIMING] stage={} action=success traceId={} cost={}ms chars={}",
+                    stage,
+                    traceId,
+                    elapsedMillis(stageStartedAt),
+                    copy == null ? 0 : copy.length()
+                );
+                if (StringUtils.hasText(copy)) {
+                    parsed = new java.util.HashMap<>(parsed);
+                    parsed.put("transcript", copy);
+                    parsed.put("copy", copy);
+                    parsed.put("copySource", "asr");
+                }
+            }
+            if (!StringUtils.hasText(copy)) {
+                copy = firstText(
+                    parsed.get("transcript"),
+                    parsed.get("copy"),
+                    parsed.get("desc"),
+                    parsed.get("description")
+                );
+            }
+            if (!StringUtils.hasText(copy) && StringUtils.hasText(title) && !"外部视频链接".equals(title)) {
+                copy = title;
+            }
+
+            stage = "copy_cleanup_llm";
+            stageStartedAt = System.nanoTime();
+            log.info("[VIRAL_PARSE_TIMING] stage={} action=start traceId={}", stage, traceId);
+            CopyCleanupResult cleanupResult = cleanupCopyWithLlm(copy);
+            String cleanedCopy = cleanupResult.text();
+            log.info(
+                "[VIRAL_PARSE_TIMING] stage={} action=success traceId={} cost={}ms llmApplied={}",
+                stage,
+                traceId,
+                elapsedMillis(stageStartedAt),
+                cleanupResult.llmApplied()
+            );
             if (StringUtils.hasText(copy)) {
                 parsed = new java.util.HashMap<>(parsed);
-                parsed.put("transcript", copy);
-                parsed.put("copy", copy);
-                parsed.put("copySource", "asr");
+                parsed.put("copyCleanupApplied", cleanupResult.llmApplied());
             }
-        }
-        if (!StringUtils.hasText(copy)) {
-            copy = firstText(
-                parsed.get("transcript"),
-                parsed.get("copy"),
-                parsed.get("desc"),
-                parsed.get("description")
+
+            stage = "database_save";
+            stageStartedAt = System.nanoTime();
+            log.info("[VIRAL_PARSE_TIMING] stage={} action=start traceId={}", stage, traceId);
+            AiSourceAnalysis analysis = new AiSourceAnalysis();
+            analysis.setTenantId(currentTenantId());
+            analysis.setProjectId(Integer.valueOf(dto.getProjectId()));
+            analysis.setMode(StringUtils.hasText(dto.getMode()) ? dto.getMode() : "viral");
+            analysis.setSourceUrl(stringValue(parsed.getOrDefault("sourceUrl", dto.getUrl())));
+            analysis.setPlatform(String.valueOf(parsed.getOrDefault("platform", detectPlatform(dto.getUrl()))));
+            analysis.setTitle(StringUtils.hasText(title) ? title : "待解析内容");
+            analysis.setAuthorName(String.valueOf(parsed.getOrDefault("authorName", "")));
+            analysis.setCoverUrl(String.valueOf(parsed.getOrDefault("coverUrl", "")));
+            analysis.setVideoUrl(videoUrl);
+            analysis.setMetricsJson(JsonUtils.toJson(parsed));
+            analysis.setEditableCopy(cleanedCopy);
+            analysis.setStructureSummary(structureSummary(analysis.getEditableCopy(), dto.getMode()));
+            analysis.setStatus(String.valueOf(parsed.getOrDefault("status", "parsed")));
+            analysisMapper.insert(analysis);
+            saveReport(analysis, "link_analysis", parsed);
+            if (StringUtils.hasText(copy)) {
+                saveReport(analysis, "asr", Map.of("text", copy, "videoUrl", videoUrl));
+                saveReport(analysis, "copy_cleanup", Map.of(
+                    "rawCopy", copy,
+                    "cleanedCopy", cleanedCopy,
+                    "llmApplied", cleanupResult.llmApplied()
+                ));
+            }
+            SourceAnalysisVO result = toVOWithDimensions(analysis);
+            log.info(
+                "[VIRAL_PARSE_TIMING] stage={} action=success traceId={} cost={}ms",
+                stage,
+                traceId,
+                elapsedMillis(stageStartedAt)
             );
+            log.info(
+                "[VIRAL_PARSE_TIMING] action=success traceId={} totalCost={}ms",
+                traceId,
+                elapsedMillis(totalStartedAt)
+            );
+            return result;
+        } catch (RuntimeException exception) {
+            log.warn(
+                "[VIRAL_PARSE_TIMING] action=failed traceId={} stage={} stageCost={}ms totalCost={}ms error={}",
+                traceId,
+                stage,
+                elapsedMillis(stageStartedAt),
+                elapsedMillis(totalStartedAt),
+                exception.getMessage()
+            );
+            throw exception;
         }
-        if (!StringUtils.hasText(copy) && StringUtils.hasText(title) && !"外部视频链接".equals(title)) {
-            copy = title;
-        }
-        CopyCleanupResult cleanupResult = cleanupCopyWithLlm(copy);
-        String cleanedCopy = cleanupResult.text();
-        if (StringUtils.hasText(copy)) {
-            parsed = new java.util.HashMap<>(parsed);
-            parsed.put("copyCleanupApplied", cleanupResult.llmApplied());
-        }
-        AiSourceAnalysis analysis = new AiSourceAnalysis();
-        analysis.setTenantId(currentTenantId());
-        analysis.setProjectId(Integer.valueOf(dto.getProjectId()));
-        analysis.setMode(StringUtils.hasText(dto.getMode()) ? dto.getMode() : "viral");
-        analysis.setSourceUrl(stringValue(parsed.getOrDefault("sourceUrl", dto.getUrl())));
-        analysis.setPlatform(String.valueOf(parsed.getOrDefault("platform", detectPlatform(dto.getUrl()))));
-        analysis.setTitle(StringUtils.hasText(title) ? title : "待解析内容");
-        analysis.setAuthorName(String.valueOf(parsed.getOrDefault("authorName", "")));
-        analysis.setCoverUrl(String.valueOf(parsed.getOrDefault("coverUrl", "")));
-        analysis.setVideoUrl(videoUrl);
-        analysis.setMetricsJson(JsonUtils.toJson(parsed));
-        analysis.setEditableCopy(cleanedCopy);
-        analysis.setStructureSummary(structureSummary(analysis.getEditableCopy(), dto.getMode()));
-        analysis.setStatus(String.valueOf(parsed.getOrDefault("status", "parsed")));
-        analysisMapper.insert(analysis);
-        saveReport(analysis, "link_analysis", parsed);
-        if (StringUtils.hasText(copy)) {
-            saveReport(analysis, "asr", Map.of("text", copy, "videoUrl", videoUrl));
-            saveReport(analysis, "copy_cleanup", Map.of(
-                "rawCopy", copy,
-                "cleanedCopy", cleanedCopy,
-                "llmApplied", cleanupResult.llmApplied()
-            ));
-        }
-        return toVOWithDimensions(analysis);
     }
 
     private String firstText(Object... values) {
@@ -773,6 +841,10 @@ public class SourceAnalysisServiceImpl implements SourceAnalysisService {
         report.setReportType(type);
         report.setReportContent(JsonUtils.toJson(content));
         reportMapper.insert(report);
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
     }
 
     private GenerationTaskVO toTaskVO(AiGenerationTask task) {

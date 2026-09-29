@@ -1,6 +1,7 @@
 package com.aiscript.integration.parser;
 
 import com.aiscript.common.util.JsonUtils;
+import com.aiscript.framework.log.TraceIdHolder;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.URI;
@@ -29,31 +30,70 @@ import org.springframework.util.StringUtils;
 @Slf4j
 public class DouyinBrowserMediaResolver {
     private static final Duration START_TIMEOUT = Duration.ofSeconds(10);
-    private static final Duration MEDIA_TIMEOUT = Duration.ofSeconds(25);
+    private static final Duration MEDIA_TIMEOUT = Duration.ofSeconds(45);
     private static final Semaphore BROWSER_SLOT = new Semaphore(1);
     private final HttpClient httpClient = HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(2))
         .build();
 
     public Optional<BrowserMedia> resolve(String canonicalUrl) {
+        long totalStartedAt = System.nanoTime();
+        String traceId = TraceIdHolder.getTraceId();
+        log.info("[VIRAL_PARSE_TIMING] stage=douyin_browser action=start traceId={} url={}", traceId, canonicalUrl);
         Optional<String> browserExecutable = browserExecutable();
         if (browserExecutable.isEmpty()) {
-            log.warn("未找到 Chrome/Chromium，跳过抖音浏览器媒体解析");
+            log.warn(
+                "[VIRAL_PARSE_TIMING] stage=douyin_browser action=skipped traceId={} cost={}ms reason=未找到Chrome/Chromium",
+                traceId,
+                elapsedMillis(totalStartedAt)
+            );
             return Optional.empty();
         }
+        log.info(
+            "[VIRAL_PARSE_TIMING] stage=douyin_browser environment traceId={} os={} executable={} version={}",
+            traceId,
+            System.getProperty("os.name"),
+            browserExecutable.get(),
+            browserVersion(browserExecutable.get())
+        );
         boolean acquired = false;
         try {
+            long slotStartedAt = System.nanoTime();
             acquired = BROWSER_SLOT.tryAcquire(30, TimeUnit.SECONDS);
+            log.info(
+                "[VIRAL_PARSE_TIMING] stage=douyin_browser_slot action={} traceId={} cost={}ms",
+                acquired ? "acquired" : "timeout",
+                traceId,
+                elapsedMillis(slotStartedAt)
+            );
             if (!acquired) {
                 log.warn("抖音浏览器媒体解析繁忙，url={}", canonicalUrl);
                 return Optional.empty();
             }
-            return resolveWithBrowser(browserExecutable.get(), canonicalUrl);
+            Optional<BrowserMedia> result = resolveWithBrowser(browserExecutable.get(), canonicalUrl);
+            log.info(
+                "[VIRAL_PARSE_TIMING] stage=douyin_browser action={} traceId={} cost={}ms",
+                result.isPresent() ? "success" : "empty",
+                traceId,
+                elapsedMillis(totalStartedAt)
+            );
+            return result;
         } catch (InterruptedException exception) {
             Thread.currentThread().interrupt();
+            log.warn(
+                "[VIRAL_PARSE_TIMING] stage=douyin_browser action=interrupted traceId={} cost={}ms",
+                traceId,
+                elapsedMillis(totalStartedAt)
+            );
             return Optional.empty();
         } catch (Exception exception) {
-            log.warn("抖音浏览器媒体解析失败，url={}, reason={}", canonicalUrl, exception.getMessage());
+            log.warn(
+                "[VIRAL_PARSE_TIMING] stage=douyin_browser action=failed traceId={} cost={}ms url={} reason={}",
+                traceId,
+                elapsedMillis(totalStartedAt),
+                canonicalUrl,
+                exception.getMessage()
+            );
             return Optional.empty();
         } finally {
             if (acquired) {
@@ -63,6 +103,7 @@ public class DouyinBrowserMediaResolver {
     }
 
     private Optional<BrowserMedia> resolveWithBrowser(String executable, String canonicalUrl) throws Exception {
+        String traceId = TraceIdHolder.getTraceId();
         int port = availablePort();
         Path profileDir = Files.createTempDirectory("ai-script-douyin-browser-");
         Path browserLog = profileDir.resolve("chrome.log");
@@ -72,9 +113,12 @@ public class DouyinBrowserMediaResolver {
             "--no-sandbox",
             "--disable-gpu",
             "--disable-dev-shm-usage",
+            "--disable-blink-features=AutomationControlled",
             "--no-first-run",
             "--mute-audio",
             "--autoplay-policy=no-user-gesture-required",
+            "--lang=zh-CN",
+            "--window-size=1365,768",
             "--remote-allow-origins=*",
             "--remote-debugging-port=" + port,
             "--user-data-dir=" + profileDir,
@@ -83,7 +127,14 @@ public class DouyinBrowserMediaResolver {
 
         WebSocket webSocket = null;
         try {
+            long chromeStartedAt = System.nanoTime();
             waitForDevTools(port, process);
+            log.info(
+                "[VIRAL_PARSE_TIMING] stage=douyin_chrome_start action=success traceId={} cost={}ms",
+                traceId,
+                elapsedMillis(chromeStartedAt)
+            );
+            long pageStartedAt = System.nanoTime();
             String debuggerUrl = createPage(port);
             CdpListener listener = new CdpListener();
             webSocket = httpClient.newWebSocketBuilder()
@@ -94,13 +145,52 @@ public class DouyinBrowserMediaResolver {
             sendCommand(webSocket, commandId.incrementAndGet(), "Network.enable", Map.of());
             sendCommand(webSocket, commandId.incrementAndGet(), "Page.enable", Map.of());
             sendCommand(webSocket, commandId.incrementAndGet(), "Page.navigate", Map.of("url", canonicalUrl));
+            log.info(
+                "[VIRAL_PARSE_TIMING] stage=douyin_page_open action=success traceId={} cost={}ms",
+                traceId,
+                elapsedMillis(pageStartedAt)
+            );
 
+            long mediaStartedAt = System.nanoTime();
             String mediaUrl = waitForMediaUrl(listener.messages(), MEDIA_TIMEOUT);
             if (!StringUtils.hasText(mediaUrl)) {
+                PageDiagnostics diagnostics = readPageDiagnostics(
+                    webSocket,
+                    listener.messages(),
+                    commandId.incrementAndGet()
+                );
+                log.warn(
+                    "[VIRAL_PARSE_TIMING] stage=douyin_media_capture action=empty traceId={} cost={}ms timeout={}ms "
+                        + "pageUrl={} title={} readyState={} bodyPreview={} chromeAlive={} chromeLog={}",
+                    traceId,
+                    elapsedMillis(mediaStartedAt),
+                    MEDIA_TIMEOUT.toMillis(),
+                    diagnostics.url(),
+                    diagnostics.title(),
+                    diagnostics.readyState(),
+                    diagnostics.bodyPreview(),
+                    process.isAlive(),
+                    readLogTail(browserLog)
+                );
                 return Optional.empty();
             }
+            log.info(
+                "[VIRAL_PARSE_TIMING] stage=douyin_media_capture action=success traceId={} cost={}ms",
+                traceId,
+                elapsedMillis(mediaStartedAt)
+            );
             PageMetadata metadata = readPageMetadata(webSocket, listener.messages(), commandId.incrementAndGet());
             return Optional.of(new BrowserMedia(mediaUrl, metadata.title(), metadata.coverUrl()));
+        } catch (Exception exception) {
+            log.warn(
+                "[VIRAL_PARSE_TIMING] stage=douyin_browser_runtime action=failed traceId={} chromeAlive={} "
+                    + "reason={} chromeLog={}",
+                traceId,
+                process.isAlive(),
+                exception.getMessage(),
+                readLogTail(browserLog)
+            );
+            throw exception;
         } finally {
             if (webSocket != null) {
                 webSocket.sendClose(WebSocket.NORMAL_CLOSURE, "done");
@@ -173,7 +263,7 @@ public class DouyinBrowserMediaResolver {
                 if (isPreferredAudioResponse(url, mimeType)) {
                     return url;
                 }
-                if (!StringUtils.hasText(fallbackMediaUrl)) {
+                if (!isKnownVideoOnlyResponse(url) && !StringUtils.hasText(fallbackMediaUrl)) {
                     fallbackMediaUrl = url;
                     fallbackDeadline = Math.min(deadline, System.nanoTime() + Duration.ofSeconds(5).toNanos());
                 }
@@ -198,6 +288,12 @@ public class DouyinBrowserMediaResolver {
         return normalizedMimeType.startsWith("audio/")
             || normalizedUrl.contains("media-audio")
             || normalizedUrl.contains("mime_type=audio");
+    }
+
+    static boolean isKnownVideoOnlyResponse(String url) {
+        String normalizedUrl = url == null ? "" : url.toLowerCase();
+        return normalizedUrl.contains("media-video")
+            || normalizedUrl.contains("mime_type=video");
     }
 
     private PageMetadata readPageMetadata(WebSocket webSocket, BlockingQueue<String> messages, int commandId) {
@@ -232,6 +328,44 @@ public class DouyinBrowserMediaResolver {
         return new PageMetadata("", "");
     }
 
+    private PageDiagnostics readPageDiagnostics(
+        WebSocket webSocket,
+        BlockingQueue<String> messages,
+        int commandId
+    ) {
+        String expression = "JSON.stringify({url:location.href||'',title:document.title||'',"
+            + "readyState:document.readyState||'',bodyPreview:(document.body?.innerText||'').slice(0,240)})";
+        sendCommand(webSocket, commandId, "Runtime.evaluate", Map.of(
+            "expression", expression,
+            "returnByValue", true
+        ));
+        long deadline = System.nanoTime() + Duration.ofSeconds(2).toNanos();
+        while (System.nanoTime() < deadline) {
+            try {
+                String message = messages.poll(200, TimeUnit.MILLISECONDS);
+                if (!StringUtils.hasText(message)) {
+                    continue;
+                }
+                Map<String, Object> response = JsonUtils.toMap(message);
+                if (!String.valueOf(commandId).equals(stringValue(response.get("id")))) {
+                    continue;
+                }
+                String value = stringValue(getValue(response, "result", "result", "value"));
+                Map<String, Object> diagnostics = JsonUtils.toMap(value);
+                return new PageDiagnostics(
+                    singleLine(stringValue(diagnostics.get("url"))),
+                    singleLine(stringValue(diagnostics.get("title"))),
+                    singleLine(stringValue(diagnostics.get("readyState"))),
+                    singleLine(stringValue(diagnostics.get("bodyPreview")))
+                );
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                break;
+            }
+        }
+        return new PageDiagnostics("", "", "", "");
+    }
+
     private void sendCommand(WebSocket webSocket, int id, String method, Map<String, Object> params) {
         webSocket.sendText(JsonUtils.toJson(Map.of(
             "id", id,
@@ -246,13 +380,37 @@ public class DouyinBrowserMediaResolver {
             configured == null ? "" : configured,
             "/usr/bin/chromium",
             "/usr/bin/chromium-browser",
+            "/snap/bin/chromium",
             "/usr/bin/google-chrome",
+            "/usr/bin/google-chrome-stable",
+            "/opt/google/chrome/google-chrome",
+            "/opt/google/chrome/chrome",
             "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
         );
         return candidates.stream()
             .filter(StringUtils::hasText)
             .filter(candidate -> Files.isExecutable(Path.of(candidate)))
             .findFirst();
+    }
+
+    private String browserVersion(String executable) {
+        Process process = null;
+        try {
+            process = new ProcessBuilder(executable, "--version")
+                .redirectErrorStream(true)
+                .start();
+            if (!process.waitFor(3, TimeUnit.SECONDS)) {
+                process.destroyForcibly();
+                return "version-timeout";
+            }
+            return singleLine(new String(process.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.UTF_8));
+        } catch (Exception exception) {
+            return "version-error:" + singleLine(exception.getMessage());
+        } finally {
+            if (process != null && process.isAlive()) {
+                process.destroyForcibly();
+            }
+        }
     }
 
     private int availablePort() throws IOException {
@@ -292,6 +450,27 @@ public class DouyinBrowserMediaResolver {
         }
     }
 
+    private String readLogTail(Path logPath) {
+        try {
+            String value = Files.readString(logPath);
+            String normalized = singleLine(value);
+            int maxLength = 800;
+            return normalized.length() <= maxLength
+                ? normalized
+                : normalized.substring(normalized.length() - maxLength);
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
+
+    private String singleLine(String value) {
+        return value == null ? "" : value.replaceAll("\\s+", " ").trim();
+    }
+
+    private long elapsedMillis(long startedAt) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+    }
+
     @SuppressWarnings("unchecked")
     private static Map<String, Object> asMap(Object value) {
         if (value instanceof Map<?, ?> map) {
@@ -326,6 +505,9 @@ public class DouyinBrowserMediaResolver {
     }
 
     private record PageMetadata(String title, String coverUrl) {
+    }
+
+    private record PageDiagnostics(String url, String title, String readyState, String bodyPreview) {
     }
 
     private static final class CdpListener implements WebSocket.Listener {

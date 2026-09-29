@@ -15,10 +15,13 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
 @Component
+@Slf4j
 public class DefaultAsrClient implements AsrClient {
     private final ProviderConfigService providerConfigService;
     private final SecretCipherService secretCipherService;
@@ -86,34 +89,115 @@ public class DefaultAsrClient implements AsrClient {
     }
 
     private String transcribeByMultipartProvider(String videoUrl, SysApiProviderConfig provider) {
+        long totalStartedAt = System.nanoTime();
+        long stageStartedAt = totalStartedAt;
+        String stage = "prepare";
+        int timeoutMs = provider.getTimeoutMs() == null ? 120000 : provider.getTimeoutMs();
+        log.info(
+            "[ASR_TIMING] action=start provider={} timeout={}ms",
+            provider.getProviderName(),
+            timeoutMs
+        );
         Path tempDir = null;
         try {
             tempDir = Files.createTempDirectory("ai-script-asr-");
             Path videoFile = tempDir.resolve("input.mp4");
             Path audioFile = tempDir.resolve("audio.mp3");
+
+            stage = "video_download";
+            stageStartedAt = System.nanoTime();
+            log.info("[ASR_TIMING] stage={} action=start", stage);
             download(videoUrl, videoFile, provider.getTimeoutMs());
+            log.info(
+                "[ASR_TIMING] stage={} action=success cost={}ms bytes={}",
+                stage,
+                elapsedMillis(stageStartedAt),
+                Files.size(videoFile)
+            );
+
+            stage = "ffmpeg_extract_audio";
+            stageStartedAt = System.nanoTime();
+            log.info("[ASR_TIMING] stage={} action=start", stage);
             extractAudio(videoFile, audioFile);
+            log.info(
+                "[ASR_TIMING] stage={} action=success cost={}ms inputBytes={} outputBytes={}",
+                stage,
+                elapsedMillis(stageStartedAt),
+                Files.size(videoFile),
+                Files.size(audioFile)
+            );
+
+            stage = "multipart_build";
+            stageStartedAt = System.nanoTime();
             String boundary = "----AiScriptBoundary" + UUID.randomUUID().toString().replace("-", "");
             byte[] body = multipartBody(boundary, audioFile);
+            log.info(
+                "[ASR_TIMING] stage={} action=success cost={}ms bytes={}",
+                stage,
+                elapsedMillis(stageStartedAt),
+                body.length
+            );
             HttpRequest.Builder builder = HttpRequest.newBuilder()
                 .uri(URI.create(provider.getEndpointUrl()))
-                .timeout(Duration.ofMillis(provider.getTimeoutMs() == null ? 120000 : provider.getTimeoutMs()))
+                .timeout(Duration.ofMillis(timeoutMs))
                 .header("Content-Type", "multipart/form-data; boundary=" + boundary)
                 .POST(HttpRequest.BodyPublishers.ofByteArray(body));
             if (StringUtils.hasText(provider.getApiKeyEncrypted())) {
                 builder.header("Authorization", "Bearer " + secretCipherService.decrypt(provider.getApiKeyEncrypted()));
             }
+
+            stage = "asr_provider_request";
+            stageStartedAt = System.nanoTime();
+            log.info(
+                "[ASR_TIMING] stage={} action=start provider={} timeout={}ms",
+                stage,
+                provider.getProviderName(),
+                timeoutMs
+            );
             HttpResponse<String> response = httpClient.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+            log.info(
+                "[ASR_TIMING] stage={} action=response cost={}ms status={}",
+                stage,
+                elapsedMillis(stageStartedAt),
+                response.statusCode()
+            );
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 throw new BusinessException("ASR Provider调用失败：" + response.statusCode() + " " + response.body());
             }
-            return extractText(response.body());
+            String transcript = extractText(response.body());
+            log.info(
+                "[ASR_TIMING] action=success totalCost={}ms transcriptChars={}",
+                elapsedMillis(totalStartedAt),
+                transcript == null ? 0 : transcript.length()
+            );
+            return transcript;
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
+            log.warn(
+                "[ASR_TIMING] action=failed stage={} stageCost={}ms totalCost={}ms error=调用被中断",
+                stage,
+                elapsedMillis(stageStartedAt),
+                elapsedMillis(totalStartedAt)
+            );
             throw new BusinessException("ASR Provider调用被中断");
         } catch (BusinessException ex) {
+            log.warn(
+                "[ASR_TIMING] action=failed stage={} stageCost={}ms totalCost={}ms error={}",
+                stage,
+                elapsedMillis(stageStartedAt),
+                elapsedMillis(totalStartedAt),
+                ex.getMessage()
+            );
             throw ex;
         } catch (Exception ex) {
+            log.warn(
+                "[ASR_TIMING] action=failed stage={} stageCost={}ms totalCost={}ms exception={} error={}",
+                stage,
+                elapsedMillis(stageStartedAt),
+                elapsedMillis(totalStartedAt),
+                ex.getClass().getSimpleName(),
+                ex.getMessage()
+            );
             throw new BusinessException("ASR Provider调用失败：" + ex.getMessage());
         } finally {
             cleanup(tempDir);
@@ -191,7 +275,14 @@ public class DefaultAsrClient implements AsrClient {
             return "未知错误";
         }
         String normalized = value.replaceAll("\\s+", " ").trim();
-        return normalized.length() <= maxLength ? normalized : normalized.substring(0, maxLength) + "...";
+        if (normalized.length() <= maxLength) {
+            return normalized;
+        }
+        int prefixLength = Math.min(180, maxLength / 3);
+        int suffixLength = maxLength - prefixLength - 5;
+        return normalized.substring(0, prefixLength)
+            + " ... "
+            + normalized.substring(normalized.length() - suffixLength);
     }
 
     private byte[] multipartBody(String boundary, Path audioFile) throws Exception {
@@ -240,4 +331,9 @@ public class DefaultAsrClient implements AsrClient {
         } catch (Exception ignored) {
         }
     }
+
+    private long elapsedMillis(long startedAt) {
+        return TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt);
+    }
+
 }

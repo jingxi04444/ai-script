@@ -403,11 +403,6 @@ const parseScriptVisualConfig = (value?: string): ScriptVisualConfig => {
   }
 };
 
-const getTemplateSpecFields = (card: TemplateCard) => ({
-  firstFiveSecondsHook: card.firstFiveSecondsHook?.trim() || '',
-  modelFormula: card.structureFormula?.trim() || card.modelFormula?.trim() || '',
-});
-
 interface ScriptGeneratorPanelProps {
   projectId: string | null;
   ensureProjectId: () => Promise<string>;
@@ -1176,7 +1171,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
   const visibleDeepAnalysisItems = deepAnalysisItems.slice(0, 6);
 
   const templateSpecContent = (card: TemplateCard) => {
-    const spec = getTemplateSpecFields(card);
+    const referenceDesc = card.referenceDesc?.trim();
     return (
       <div className="template-spec-popover">
         <strong>{card.name} 模板说明</strong>
@@ -1198,8 +1193,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
         ) : null}
         <section className="template-source-description" aria-label="来源内容描述">
           <strong>来源内容描述</strong>
-          <p className="template-spec-line"><b>钩子提炼</b><span>：{spec.firstFiveSecondsHook || '暂未维护'}</span></p>
-          <p className="template-spec-line"><b>模型公式</b><span>：{spec.modelFormula || '暂未维护'}</span></p>
+          <p>{referenceDesc || '暂未维护来源内容描述'}</p>
         </section>
       </div>
     );
@@ -2353,7 +2347,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
                         className="template-info-trigger"
                         role="button"
                         tabIndex={0}
-                        aria-label={`${card.name}写作规范`}
+                        aria-label={`查看${card.name}来源内容描述`}
                         onClick={(event) => event.stopPropagation()}
                         onMouseDown={(event) => event.stopPropagation()}
                         onKeyDown={(event) => {
@@ -2361,7 +2355,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
                           if (event.key === 'Enter' || event.key === ' ') event.preventDefault();
                         }}
                       >
-                        <InfoCircleOutlined className="template-info-icon" title="模板说明" />
+                        <InfoCircleOutlined className="template-info-icon" title="查看来源内容描述" />
                       </span>
                     </Popover>
                   </div>
