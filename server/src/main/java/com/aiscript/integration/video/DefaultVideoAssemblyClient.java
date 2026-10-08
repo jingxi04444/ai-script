@@ -43,8 +43,6 @@ public class DefaultVideoAssemblyClient implements VideoAssemblyClient {
             : String.valueOf(options.get("model"));
         SysApiProviderConfig provider = providerConfigService.resolveEnabled("editor", requestedModel);
         if (provider == null) provider = providerConfigService.resolveEnabled("video_editor", requestedModel);
-        if (provider == null && StringUtils.hasText(requestedModel)) provider = providerConfigService.firstEnabled("editor");
-        if (provider == null && StringUtils.hasText(requestedModel)) provider = providerConfigService.firstEnabled("video_editor");
         if (provider == null || !StringUtils.hasText(provider.getEndpointUrl())) {
             throw new BusinessException(ResultCode.PROVIDER_ERROR, "未配置视频合成 Provider（editor/video_editor）");
         }

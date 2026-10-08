@@ -50,7 +50,6 @@ public class DefaultVideoGenerationClient implements VideoGenerationClient {
     @Override
     public Map<String, Object> generateVideoResult(String prompt, String model) {
         SysApiProviderConfig provider = providerConfigService.resolveEnabled("video", model);
-        if (provider == null && StringUtils.hasText(model)) provider = providerConfigService.firstEnabled("video");
         if (provider == null || !StringUtils.hasText(provider.getEndpointUrl())) {
             throw new BusinessException("未配置视频生成Provider");
         }
@@ -76,7 +75,10 @@ public class DefaultVideoGenerationClient implements VideoGenerationClient {
                 return Map.of("assetUrl", String.valueOf(dataMap.get("url")));
             }
             Object url = body.get("url");
-            return Map.of("assetUrl", url == null ? response.body() : String.valueOf(url));
+            if (url == null || !StringUtils.hasText(String.valueOf(url))) {
+                throw new BusinessException("视频 Provider 未返回可识别的视频地址");
+            }
+            return Map.of("assetUrl", String.valueOf(url));
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new BusinessException("视频生成Provider调用被中断");

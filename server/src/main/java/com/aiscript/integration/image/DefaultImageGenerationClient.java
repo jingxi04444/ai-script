@@ -41,8 +41,6 @@ public class DefaultImageGenerationClient implements ImageGenerationClient {
         String requestedModel = stringOption(options, "model");
         SysApiProviderConfig provider = providerConfigService.resolveEnabled("image", requestedModel);
         if (provider == null) provider = providerConfigService.resolveEnabled("vision", requestedModel);
-        if (provider == null && StringUtils.hasText(requestedModel)) provider = providerConfigService.firstEnabled("image");
-        if (provider == null && StringUtils.hasText(requestedModel)) provider = providerConfigService.firstEnabled("vision");
         if (provider == null || !StringUtils.hasText(provider.getEndpointUrl())) {
             throw new BusinessException(ResultCode.PROVIDER_ERROR, "未配置图片生成 Provider（image/vision）");
         }

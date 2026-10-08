@@ -51,6 +51,11 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   referenceNodeIds?: string[];
   referenceLabels?: string[];
   referenceMarks?: WorkflowReferenceMark[];
+  /** Video frame roles are independent; generic references remain compatible with existing runners. */
+  firstFrameNodeId?: string;
+  lastFrameNodeId?: string;
+  firstFrameLabel?: string;
+  lastFrameLabel?: string;
   canvasPickState?: 'origin' | 'eligible' | 'selected';
   canvasPickMode?: 'reference' | 'mark';
   resourceId?: string;
@@ -77,6 +82,14 @@ export interface WorkflowNodeData extends Record<string, unknown> {
   voice?: string;
   speed?: string;
   musicStyle?: string;
+  language?: string;
+  audioSampleRate?: string;
+  audioFormat?: string;
+  pitch?: number;
+  volume?: number;
+  autoLink?: boolean;
+  negativePrompt?: string;
+  seed?: number;
   executionMode?: 'single' | 'batch';
   progress?: number;
   status: WorkflowNodeStatus;

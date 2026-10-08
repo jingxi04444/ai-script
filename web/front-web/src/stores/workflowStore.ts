@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { CreativeResource, CreativeResourceType } from '../types/creativeResource';
 import { isCreativeResourceType } from '../types/creativeResource';
 import { characterResourceImages, creativeResourceNodeData, withoutDeletedNodeReferences } from '../utils/workflowCreativeResource';
+import { arrangeWorkflowNodes } from '../utils/workflowLayout';
 import {
   addEdge,
   applyEdgeChanges,
@@ -43,6 +44,7 @@ interface WorkflowState {
   load: (projectId: string | null, mode: WorkflowMode) => void;
   persist: () => void;
   checkpoint: () => void;
+  arrangeNodes: () => number;
   onNodesChange: (changes: NodeChange<WorkflowNode>[]) => void;
   onEdgesChange: (changes: EdgeChange<WorkflowEdge>[]) => void;
   connect: (connection: Connection) => void;
@@ -162,8 +164,6 @@ const createVideoProductionGraph = (): WorkflowSnapshot => {
   return { nodes, edges };
 };
 
-const createStarterGraph = (_mode: WorkflowMode): WorkflowSnapshot => createVideoProductionGraph();
-
 const storageKey = (projectKey: string) => `${STORAGE_PREFIX}${projectKey}`;
 
 const safeReadDocument = (projectKey: string): WorkflowDocument | null => {
@@ -205,12 +205,11 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       return;
     }
     const saved = safeReadDocument(projectKey);
-    const starter = createStarterGraph(mode);
     set({
       projectKey,
       mode,
-      nodes: hydrateDemoMedia(saved?.nodes || starter.nodes),
-      edges: saved?.edges || starter.edges,
+      nodes: hydrateDemoMedia(saved?.nodes || []),
+      edges: saved?.edges || [],
       past: [],
       future: [],
       pendingRunNodeId: null,
@@ -238,6 +237,16 @@ export const useWorkflowStore = create<WorkflowState>((set, get) => ({
       past: [...past.slice(-(HISTORY_LIMIT - 1)), cloneSnapshot(nodes, edges)],
       future: [],
     });
+  },
+
+  arrangeNodes: () => {
+    const { nodes, edges } = get();
+    const count = nodes.filter(node => !node.hidden).length;
+    if (!count) return 0;
+    const arranged = arrangeWorkflowNodes(nodes, edges);
+    get().checkpoint();
+    set({ nodes: arranged });
+    return count;
   },
 
   onNodesChange: (changes) => {

@@ -38,7 +38,6 @@ public class DefaultMusicGenerationClient implements MusicGenerationClient {
     public Map<String, Object> generate(String prompt, Map<String, Object> options) {
         String requestedModel = text(options, "model");
         SysApiProviderConfig provider = providerConfigService.resolveEnabled("music", requestedModel);
-        if (provider == null && StringUtils.hasText(requestedModel)) provider = providerConfigService.firstEnabled("music");
         if (provider == null || !StringUtils.hasText(provider.getEndpointUrl())) {
             throw new BusinessException(ResultCode.PROVIDER_ERROR, "未配置音乐生成 Provider（music）");
         }

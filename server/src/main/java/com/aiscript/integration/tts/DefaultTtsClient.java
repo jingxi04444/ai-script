@@ -50,7 +50,6 @@ public class DefaultTtsClient implements TtsClient {
     @Override
     public Map<String, Object> synthesizeResult(String text, String voice, String model) {
         SysApiProviderConfig provider = providerConfigService.resolveEnabled("tts", model);
-        if (provider == null && StringUtils.hasText(model)) provider = providerConfigService.firstEnabled("tts");
         if (provider == null || !StringUtils.hasText(provider.getEndpointUrl())) {
             throw new BusinessException("未配置TTS Provider");
         }
@@ -76,7 +75,10 @@ public class DefaultTtsClient implements TtsClient {
                 return Map.of("assetUrl", String.valueOf(dataMap.get("url")));
             }
             Object url = body.get("url");
-            return Map.of("assetUrl", url == null ? response.body() : String.valueOf(url));
+            if (url == null || !StringUtils.hasText(String.valueOf(url))) {
+                throw new BusinessException("TTS Provider 未返回可识别的音频地址");
+            }
+            return Map.of("assetUrl", String.valueOf(url));
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new BusinessException("TTS Provider调用被中断");

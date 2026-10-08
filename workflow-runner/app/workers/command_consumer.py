@@ -37,6 +37,7 @@ class WorkflowCommandConsumer:
                 settings.simulation_delay_ms,
                 provider_gateway=provider_gateway,
                 max_concurrency=settings.max_concurrency,
+                allow_simulation=settings.demo_mode_enabled,
             ),
             max_concurrency=settings.max_concurrency,
             max_node_attempts=settings.node_max_attempts,

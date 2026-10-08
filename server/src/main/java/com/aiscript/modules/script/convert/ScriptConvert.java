@@ -27,7 +27,7 @@ public final class ScriptConvert {
         vo.setOriginalScenarioId(script.getGenerationOriginalScenarioId());
         vo.setOriginalScenarioName(script.getGenerationOriginalScenarioName());
         vo.setStatus(normalizeStatus(script.getStatus()));
-        vo.setContent(script.getContentText());
+        vo.setContent(ScriptPromptColumnNormalizer.ensurePromptColumn(script.getContentText(), null));
         vo.setCreatedAt(script.getCreateTime() == null ? null : script.getCreateTime().toString());
         vo.setUpdatedAt(script.getUpdateTime() == null ? null : script.getUpdateTime().toString());
         return vo;

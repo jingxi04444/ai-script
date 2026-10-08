@@ -116,7 +116,7 @@ interface OriginalScenarioCategory {
 }
 
 const fallbackFormatOptions: ScriptFormatOption[] = [
-  { code: 'storyboard', name: '分镜脚本表', formatRequirement: '第一行输出“标题：<创意标题>”，空一行后按分镜表输出；标题放在表格外。表格包含镜头、画面内容、口播文案、字幕/花字、运镜、时长和备注。', sortOrder: 1, status: 1 },
+  { code: 'storyboard', name: '分镜脚本表', formatRequirement: '第一行输出“标题：<创意标题>”，空一行后按分镜表输出；标题放在表格外。表格包含镜头、画面内容、提示词、口播文案、字幕/花字、运镜、时长和备注。提示词需写明产品/人物锁定、场景动作、景别与运镜。', sortOrder: 1, status: 1 },
   { code: 'oral', name: '口播脚本', formatRequirement: '按口播稿输出，重点保证开头钩子、口语表达、卖点展开和行动引导完整连贯。', sortOrder: 2, status: 1 },
   { code: 'shot', name: '拍摄脚本', formatRequirement: '按拍摄执行稿输出，明确场景、人物动作、镜头调度、道具、字幕和剪辑提示。', sortOrder: 3, status: 1 },
 ];
@@ -1017,6 +1017,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
     if (/景别/.test(header)) return 'storyboard-column-scene';
     if (/运镜/.test(header)) return 'storyboard-column-camera';
     if (/画面|场景描述/.test(header)) return 'storyboard-column-visual';
+    if (/提示词/.test(header)) return 'storyboard-column-prompt';
     if (/字幕|花字/.test(header)) return 'storyboard-column-subtitle';
     if (/台词|旁白|口播|文案/.test(header)) return 'storyboard-column-dialogue';
     if (/时长/.test(header)) return 'storyboard-column-duration';

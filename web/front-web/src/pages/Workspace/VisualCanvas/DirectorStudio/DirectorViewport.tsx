@@ -2,6 +2,8 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 're
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js';
+import { ViewHelper } from 'three/examples/jsm/helpers/ViewHelper.js';
+import { createDirectorActor, updateDirectorActor } from './directorActor';
 import {
   directorAspectValue, evaluateDirectorCamera, evaluateDirectorObject,
   type DirectorCamera, type DirectorObject, type DirectorScene, type DirectorVector3,
@@ -66,51 +68,6 @@ function productLabel(): THREE.CanvasTexture | null {
   return texture;
 }
 
-function createActor(object: DirectorObject, material: THREE.MeshStandardMaterial): THREE.Group {
-  const group = new THREE.Group();
-  const jointMaterial = new THREE.MeshStandardMaterial({ color: new THREE.Color(object.color).multiplyScalar(0.7), roughness: 0.6, metalness: 0.06 });
-  const torso = mesh(new THREE.CapsuleGeometry(0.18, 0.3, 6, 16), material, [0, 1.2, 0]);
-  torso.scale.set(1, 1, 0.66);
-  group.add(torso);
-  group.add(mesh(new THREE.SphereGeometry(0.13, 20, 14), material, [0, 1.73, 0]));
-  group.add(mesh(new THREE.CylinderGeometry(0.06, 0.065, 0.14, 12), jointMaterial, [0, 1.55, 0]));
-  const hips = mesh(new THREE.SphereGeometry(0.16, 16, 12), material, [0, 0.92, 0]);
-  hips.scale.set(1, 0.65, 0.7);
-  group.add(hips);
-  const limb = (start: DirectorVector3, end: DirectorVector3, radius: number) => {
-    const a = new THREE.Vector3(...start);
-    const b = new THREE.Vector3(...end);
-    const direction = b.clone().sub(a);
-    const bone = mesh(new THREE.CylinderGeometry(radius * 0.82, radius, direction.length(), 12), material);
-    bone.position.copy(a.add(b).multiplyScalar(0.5));
-    bone.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction.normalize());
-    group.add(bone);
-    group.add(mesh(new THREE.SphereGeometry(radius * 1.13, 12, 10), jointMaterial, end));
-  };
-  const wave = object.pose === 'wave';
-  const walk = object.pose === 'walk';
-  const leftElbow: DirectorVector3 = [-0.3, 1.12, walk ? -0.16 : 0];
-  const leftWrist: DirectorVector3 = [-0.33, 0.88, walk ? -0.28 : 0.025];
-  const rightElbow: DirectorVector3 = wave ? [0.43, 1.58, 0] : [0.3, 1.12, walk ? 0.18 : 0];
-  const rightWrist: DirectorVector3 = wave ? [0.46, 1.88, 0] : [0.33, 0.88, walk ? 0.32 : 0.025];
-  limb([-0.18, 1.43, 0], leftElbow, 0.063);
-  limb(leftElbow, leftWrist, 0.047);
-  limb([0.18, 1.43, 0], rightElbow, 0.063);
-  limb(rightElbow, rightWrist, 0.047);
-  const leftKnee: DirectorVector3 = [-0.105, 0.5, walk ? 0.21 : 0];
-  const rightKnee: DirectorVector3 = [0.105, 0.5, walk ? -0.16 : 0];
-  const leftAnkle: DirectorVector3 = [-0.12, 0.09, walk ? 0.3 : 0];
-  const rightAnkle: DirectorVector3 = [0.12, 0.09, walk ? -0.29 : 0];
-  limb([-0.095, 0.9, 0], leftKnee, 0.082);
-  limb(leftKnee, leftAnkle, 0.06);
-  limb([0.095, 0.9, 0], rightKnee, 0.082);
-  limb(rightKnee, rightAnkle, 0.06);
-  [leftAnkle, rightAnkle].forEach(ankle => group.add(mesh(new THREE.BoxGeometry(0.13, 0.1, 0.24), material, [ankle[0], 0.055, ankle[2] + 0.05])));
-  // A small face-plane makes the mannequin's facing direction readable from a wide shot.
-  group.add(mesh(new THREE.BoxGeometry(0.065, 0.025, 0.025), jointMaterial, [0, 1.74, 0.125]));
-  return group;
-}
-
 function createObjectVisual(object: DirectorObject): THREE.Group {
   const group = new THREE.Group();
   const material = new THREE.MeshStandardMaterial({ color: object.color, roughness: 0.42, metalness: object.kind === 'product' ? 0.22 : 0.05 });
@@ -129,7 +86,9 @@ function createObjectVisual(object: DirectorObject): THREE.Group {
     label.castShadow = false;
     group.add(label);
   } else if (object.kind === 'actor') {
-    group.add(createActor(object, material));
+    const actor = createDirectorActor(object, material);
+    group.userData.actorRig = actor;
+    group.add(actor);
   } else if (object.kind === 'box') {
     group.add(mesh(new THREE.BoxGeometry(1, 1, 1), material));
   } else if (object.kind === 'sphere') {
@@ -138,7 +97,7 @@ function createObjectVisual(object: DirectorObject): THREE.Group {
     group.add(mesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 48), material));
   }
   group.userData.directorId = object.id;
-  group.userData.signature = `${object.kind}/${object.color}/${object.pose}`;
+  group.userData.signature = `${object.kind}/${object.color}`;
   return group;
 }
 
@@ -239,37 +198,69 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
     const rimLight = new THREE.DirectionalLight('#c0e6ff', 2);
     rimLight.position.set(4, 3, -4);
     stage.add(rimLight);
-    const floorMaterial = new THREE.MeshStandardMaterial({ color: '#5b6662', roughness: 0.92, metalness: 0 });
+    // A neutral previs floor keeps the authored colour independent of the
+    // subject's studio lighting; a separate catcher preserves contact shadows.
+    const floorMaterial = new THREE.MeshBasicMaterial({ color: '#5b6662', toneMapped: false, fog: false });
     const floor = mesh(new THREE.PlaneGeometry(200, 200), floorMaterial, [0, -0.008, 0]);
     floor.rotation.x = -Math.PI / 2;
     floor.castShadow = false;
     stage.add(floor);
-    const grid = new THREE.GridHelper(30, 30, '#8e9b9d', '#819090');
+    const shadowFloor = mesh(new THREE.PlaneGeometry(200, 200), new THREE.ShadowMaterial({ color: '#000000', opacity: 0.3 }), [0, -0.007, 0]);
+    shadowFloor.rotation.x = -Math.PI / 2;
+    shadowFloor.castShadow = false;
+    stage.add(shadowFloor);
+    const grid = new THREE.GridHelper(40, 40, '#394055', '#292e3b');
     grid.position.y = 0.001;
     (grid.material as THREE.Material).transparent = true;
-    (grid.material as THREE.Material).opacity = 0.14;
+    (grid.material as THREE.Material).opacity = 0.4;
     stage.add(grid);
     const selection = new THREE.Box3Helper(new THREE.Box3(), '#96d0bd');
     selection.visible = false;
     stage.add(selection);
 
     const directorCamera = new THREE.PerspectiveCamera(42, 1, 0.03, 300);
-    directorCamera.position.set(5.8, 3.6, 7);
+    directorCamera.position.set(0, 1.6, 12.2);
     const shotCamera = new THREE.PerspectiveCamera(40, 16 / 9, 0.03, 300);
+    // The editor frustum stops around the subject, not the render camera's
+    // 300-metre clipping plane, which otherwise covers the stage in diagonals.
+    const guideCamera = shotCamera.clone();
+    const shotGuide = new THREE.CameraHelper(guideCamera);
+    const guideColor = new THREE.Color('#5b7587');
+    shotGuide.setColors(guideColor, guideColor, guideColor, guideColor, guideColor);
+    (shotGuide.material as THREE.LineBasicMaterial).transparent = true;
+    (shotGuide.material as THREE.LineBasicMaterial).opacity = 0.25;
+    cameraGuides.add(shotGuide);
     const orbit = new OrbitControls(directorCamera, renderer.domElement);
-    orbit.target.set(0, 0.95, 0);
+    orbit.target.set(0, 1.22, 0);
     orbit.enableDamping = true;
     orbit.dampingFactor = 0.08;
     orbit.minDistance = 0.35;
     orbit.maxDistance = 75;
     orbit.maxPolarAngle = Math.PI * 0.49;
     orbit.update();
+    // Three's interactive orientation helper is kept outside exported shots.
+    const orientationRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    orientationRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    orientationRenderer.setSize(128, 128);
+    orientationRenderer.domElement.className = 'director-orientation-canvas';
+    orientationRenderer.domElement.setAttribute('aria-label', '视角方向：点击坐标轴切换视角');
+    container.appendChild(orientationRenderer.domElement);
+    const orientation = new ViewHelper(directorCamera, orientationRenderer.domElement);
+    orientationRenderer.autoClear = false;
+    const orientationClick = (event: PointerEvent) => {
+      if (propsRef.current.view !== 'director') return;
+      clearOrbitInertia();
+      orientation.center.copy(orbit.target);
+      if (orientation.handleClick(event)) { orbit.enabled = false; invalidate(); }
+    };
+    orientationRenderer.domElement.addEventListener('pointerup', orientationClick);
     const transform = new TransformControls(directorCamera, renderer.domElement);
     transform.setSize(0.8);
     const transformHelper = transform.getHelper();
     stage.add(transformHelper);
     const visuals = new Map<string, THREE.Group>();
     const cameraVisuals = new Map<string, THREE.Group>();
+    const labels = new Map<string, HTMLSpanElement>();
     const raycaster = new THREE.Raycaster();
     const cursor = new THREE.Vector2();
     let width = 1;
@@ -279,6 +270,9 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
     let disposed = false;
     let contextLost = false;
     let capturing = false;
+    let panoramaUrl: string | undefined;
+    let panoramaTexture: THREE.Texture | null = null;
+    let panoramaRequest = 0;
     let pointerStart = { x: 0, y: 0, gizmo: false, button: 0 };
     const invalidate = () => { dirty = true; };
     // OrbitControls retains angular/pan deltas while damping. Drain those deltas
@@ -296,7 +290,8 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
     const updateSelection = () => {
       const current = propsRef.current;
       const selected = selectedObject();
-      const data = current.scene.objects.find(item => item.id === current.selectedId);
+      const objectData = current.scene.objects.find(item => item.id === current.selectedId);
+      const data = objectData ?? current.scene.cameras.find(item => item.id === current.selectedId);
       const enabled = current.view === 'director' && selected?.visible && !data?.locked;
       if (selected && enabled) {
         if (transform.object !== selected) transform.attach(selected);
@@ -308,14 +303,30 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
         transform.enabled = false;
         transformHelper.visible = false;
       }
-      selection.visible = Boolean(selected?.visible && current.view === 'director');
+      selection.visible = Boolean(selected?.visible && current.view === 'director' && objectData?.kind !== 'actor');
       if (selection.visible && selected) selection.box.setFromObject(selected);
     };
 
     const sync = () => {
       if (disposed || contextLost) return;
       const current = propsRef.current;
-      stage.background = new THREE.Color(current.scene.background);
+      const nextPanorama = current.scene.panoramaUrl;
+      if (nextPanorama !== panoramaUrl) {
+        panoramaUrl = nextPanorama;
+        const request = ++panoramaRequest;
+        panoramaTexture?.dispose(); panoramaTexture = null;
+        if (nextPanorama) new THREE.TextureLoader().load(nextPanorama, texture => {
+          if (disposed || request !== panoramaRequest) { texture.dispose(); return; }
+          texture.mapping = THREE.EquirectangularReflectionMapping;
+          texture.colorSpace = THREE.SRGBColorSpace;
+          panoramaTexture = texture; stage.background = texture; invalidate();
+        }, undefined, () => {
+          if (disposed || request !== panoramaRequest) return;
+          setError('全景图片加载失败，请移除背景或换一张支持跨域访问的图片。');
+        });
+        setError('');
+      }
+      stage.background = panoramaTexture || new THREE.Color(current.scene.background);
       (stage.fog as THREE.Fog).color.set(current.scene.background);
       floorMaterial.color.set(current.scene.floorColor);
       const ids = new Set(current.scene.objects.map(object => object.id));
@@ -325,11 +336,13 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
           world.remove(visual);
           disposeTree(visual);
           visuals.delete(id);
+          labels.get(id)?.remove();
+          labels.delete(id);
         }
       });
       current.scene.objects.forEach(object => {
         let visual = visuals.get(object.id);
-        const signature = `${object.kind}/${object.color}/${object.pose}`;
+        const signature = `${object.kind}/${object.color}`;
         if (!visual || visual.userData.signature !== signature) {
           if (visual) {
             if (transform.object === visual) transform.detach();
@@ -341,8 +354,11 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
           world.add(visual);
         }
         visual.visible = object.visible;
+        if (!labels.has(object.id)) { const label = document.createElement('span'); label.className = 'director-object-label'; container.appendChild(label); labels.set(object.id, label); }
+        labels.get(object.id)!.textContent = object.name;
         if (!(transform.dragging && transform.object === visual)) {
           const evaluated = evaluateDirectorObject(object, current.playhead);
+          if (object.kind === 'actor') updateDirectorActor(visual.userData.actorRig as THREE.Group, evaluated);
           visual.position.fromArray(evaluated.position);
           visual.rotation.set(...evaluated.rotation.map(THREE.MathUtils.degToRad) as DirectorVector3);
           visual.scale.fromArray(evaluated.scale);
@@ -364,12 +380,14 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
           cameraVisuals.set(camera.id, visual);
           cameraGuides.add(visual);
         }
+        visual.visible = camera.visible;
         if (!(transform.dragging && transform.object === visual)) {
           const evaluated = evaluateDirectorCamera(camera, current.playhead);
           visual.position.fromArray(evaluated.position);
           const rotationCamera = new THREE.PerspectiveCamera();
           rotationCamera.position.copy(visual.position);
           rotationCamera.lookAt(new THREE.Vector3(...evaluated.target));
+          rotationCamera.rotateZ(THREE.MathUtils.degToRad(evaluated.roll || 0));
           visual.quaternion.copy(rotationCamera.quaternion);
         }
       });
@@ -378,11 +396,22 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
         const evaluated = evaluateDirectorCamera(active, current.playhead);
         shotCamera.position.fromArray(evaluated.position);
         shotCamera.lookAt(new THREE.Vector3(...evaluated.target));
+        shotCamera.rotateZ(THREE.MathUtils.degToRad(evaluated.roll || 0));
         shotCamera.fov = evaluated.fov;
-        shotCamera.aspect = directorAspectValue(current.scene.aspectRatio);
+        shotCamera.aspect = directorAspectValue(current.scene.aspectRatio, width / height);
         shotCamera.updateProjectionMatrix();
+        shotCamera.updateMatrixWorld(true);
+        guideCamera.copy(shotCamera);
+        guideCamera.far = Math.max(0.5, shotCamera.position.distanceTo(new THREE.Vector3(...evaluated.target)) + 0.75);
+        guideCamera.updateProjectionMatrix();
+        shotGuide.update();
       }
-      orbit.enabled = current.view === 'director' && !transform.dragging;
+      orbit.enabled = current.view === 'director' && !transform.dragging && !orientation.animating;
+      orientationRenderer.domElement.hidden = current.view !== 'director';
+      // Three sets an inline display:block when sizing a canvas, overriding the
+      // normal [hidden] rule. Shot preview must not expose director-only axes.
+      orientationRenderer.domElement.style.display = current.view === 'director' ? 'block' : 'none';
+      if (current.view !== 'director') orientation.animating = false;
       cameraGuides.visible = current.view === 'director';
       grid.visible = current.scene.grid && current.view === 'director';
       stage.updateMatrixWorld(true);
@@ -403,7 +432,7 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
         if (selected && selection.visible && cameraVisuals.has(selected.userData.directorId)) selection.box.setFromObject(selected);
       }
       if (propsRef.current.view === 'camera') {
-        const aspect = directorAspectValue(propsRef.current.scene.aspectRatio);
+        const aspect = directorAspectValue(propsRef.current.scene.aspectRatio, width / height);
         const shotWidth = Math.min(width, height * aspect);
         const shotHeight = Math.min(height, width / aspect);
         renderer.setScissorTest(false);
@@ -420,6 +449,9 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
         renderer.setScissorTest(false);
         renderer.render(stage, directorCamera);
       }
+      orientationRenderer.clear();
+      if (propsRef.current.view === 'director') orientation.render(orientationRenderer);
+      visuals.forEach((visual, id) => { const label = labels.get(id); if (!label) return; const bounds = new THREE.Box3().setFromObject(visual); const point = bounds.getCenter(new THREE.Vector3()); point.y = bounds.max.y + 0.14; point.project(directorCamera); label.hidden = !visual.visible || propsRef.current.view !== 'director' || point.z > 1 || point.z < -1; label.style.transform = `translate(${(point.x + 1) * width / 2}px, ${(1 - point.y) * height / 2}px) translate(-50%, -100%)`; });
       dirty = false;
     };
     const resize = () => {
@@ -429,6 +461,11 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
       renderer.setSize(width, height);
       directorCamera.aspect = width / height;
       directorCamera.updateProjectionMatrix();
+      shotCamera.aspect = directorAspectValue(propsRef.current.scene.aspectRatio, width / height);
+      shotCamera.updateProjectionMatrix();
+      guideCamera.aspect = shotCamera.aspect;
+      guideCamera.updateProjectionMatrix();
+      shotGuide.update();
       invalidate();
     };
     const observer = new ResizeObserver(resize);
@@ -505,8 +542,9 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
       sync,
       resetView: () => {
         clearOrbitInertia();
-        directorCamera.position.set(5.8, 3.6, 7);
-        orbit.target.set(0, 0.95, 0);
+        orientation.animating = false;
+        directorCamera.position.set(0, 1.6, 12.2);
+        orbit.target.set(0, 1.22, 0);
         orbit.update();
         invalidate();
       },
@@ -515,6 +553,7 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
         if (contextLost || disposed) throw new Error('3D 视图不可用，无法导出构图。');
         if (capturing) throw new Error('正在导出，请稍候。');
         sync();
+        if (propsRef.current.scene.panoramaUrl && !panoramaTexture) throw new Error('全景背景尚未加载成功，请稍后重试，或移除背景。');
         capturing = true;
         const pixelRatio = renderer.getPixelRatio();
         const gridWasVisible = grid.visible;
@@ -526,7 +565,7 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
           cameraGuides.visible = false;
           selection.visible = false;
           transformHelper.visible = false;
-          const aspect = directorAspectValue(propsRef.current.scene.aspectRatio);
+          const aspect = directorAspectValue(propsRef.current.scene.aspectRatio, width / height);
           const captureWidth = Math.round(aspect >= 1 ? 1600 : 1600 * aspect);
           const captureHeight = Math.round(aspect >= 1 ? 1600 / aspect : 1600);
           renderer.setPixelRatio(1);
@@ -552,10 +591,17 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
         }
       },
     };
+    let lastTick = performance.now();
     const tick = () => {
       if (disposed) return;
       animation = requestAnimationFrame(tick);
-      if (!capturing && orbit.enabled) orbit.update();
+      const now = performance.now();
+      if (orientation.animating && !capturing) {
+        orientation.update(Math.min((now - lastTick) / 1000, 0.1));
+        if (!orientation.animating) { orbit.target.copy(orientation.center); orbit.enabled = propsRef.current.view === 'director'; orbit.update(); }
+        invalidate();
+      } else if (!capturing && orbit.enabled) orbit.update();
+      lastTick = now;
       if (dirty) render();
     };
     resize();
@@ -563,6 +609,7 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
     tick();
     return () => {
       disposed = true;
+      panoramaTexture?.dispose();
       runtimeRef.current = null;
       cancelAnimationFrame(animation);
       observer.disconnect();
@@ -578,6 +625,12 @@ export const DirectorViewport = forwardRef<DirectorViewportHandle, DirectorViewp
       stage.remove(transformHelper);
       transform.dispose();
       orbit.dispose();
+      orientationRenderer.domElement.removeEventListener('pointerup', orientationClick);
+      orientation.dispose();
+      orientationRenderer.dispose();
+      orientationRenderer.forceContextLoss();
+      orientationRenderer.domElement.remove();
+      labels.forEach(label => label.remove());
       disposeTree(stage);
       keyLight.shadow.dispose();
       renderer.dispose();

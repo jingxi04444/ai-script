@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     command_max_attempts: int = 3
     commands_dead_letter_stream: str = "aiscript:workflow:commands:dead-letter"
     provider_gateway_enabled: bool = False
+    demo_mode_enabled: bool = False
     provider_gateway_url: str = "http://127.0.0.1:8080/api/internal/workflow/providers/execute"
     provider_gateway_token: str = ""
     provider_gateway_timeout_seconds: float = 320.0

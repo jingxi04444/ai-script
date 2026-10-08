@@ -19,6 +19,7 @@ import com.aiscript.modules.generation.service.PaidOperationFailure;
 import com.aiscript.modules.generation.service.PaidOperationFingerprint;
 import com.aiscript.modules.generation.service.PaidOperationSpec;
 import com.aiscript.modules.script.convert.ScriptConvert;
+import com.aiscript.modules.script.convert.ScriptPromptColumnNormalizer;
 import com.aiscript.modules.script.dto.GenerateScriptDTO;
 import com.aiscript.modules.script.dto.PolishScriptDTO;
 import com.aiscript.modules.script.dto.ScriptSaveDTO;
@@ -1170,11 +1171,12 @@ public class ScriptServiceImpl implements ScriptService {
         String contentContext = buildScriptContentContext(dto, productInfo, templateText, userPrompt, formatInfo);
         String isolationRule = generationIsolationRule(dto.getType());
         TitlePromptRules titlePromptRules = titlePromptRules(variables);
-        String modelSystemPrompt = renderedPrompt.getSystemPrompt() + "\n\n" + isolationRule + titlePromptRules.generationRule();
+        String executableShotRule = "\n\n【分镜 AI 提示词列（必须执行）】如果输出分镜或拍摄表格，每一行必须在‘画面内容/画面描述’之后增加‘提示词’列。提示词不是重复画面描述，应写为可直接交给图片或视频模型的执行指令：明确主体与场景、动作、景别、机位和运镜；锁定本次产品 Brief 的型号、外观、结构、包装文字与 Logo，出现人物时锁定身份和服饰；注明不得添加无关产品、文字、水印或畸形。镜头之间保持产品、人物与风格一致。不要凭空编造未提供的产品外观细节。";
+        String modelSystemPrompt = renderedPrompt.getSystemPrompt() + "\n\n" + isolationRule + titlePromptRules.generationRule() + executableShotRule;
         String modelUserPrompt = renderedPrompt.getUserPrompt()
             + "\n\n【本次生成内容信息】\n" + contentContext
             + "\n\n" + isolationRule
-            + titlePromptRules.generationRule();
+            + titlePromptRules.generationRule() + executableShotRule;
         long promptBuildMs = elapsedMs(promptBuildStartedAt);
         try {
             LlmChatResult metrics = llmClient.chatWithMetrics(modelSystemPrompt, modelUserPrompt);
@@ -1194,36 +1196,24 @@ public class ScriptServiceImpl implements ScriptService {
             );
             if (StringUtils.hasText(content) && !"{}".equals(content.trim())) {
                 return new GeneratedScriptContent(
-                    ScriptContentTitleNormalizer.ensureTitle(content, fallbackContentTitle(dto, brief)),
+                    ScriptPromptColumnNormalizer.ensurePromptColumn(
+                        ScriptContentTitleNormalizer.ensureTitle(content, fallbackContentTitle(dto, brief)),
+                        brief == null ? null : brief.getProductName()),
                     metrics,
                     promptBuildMs,
                     false
                 );
             }
-            String fallbackContent = "【AI脚本草稿】" + (StringUtils.hasText(productInfo) ? productInfo : userPrompt) + "\n镜头1：产品核心卖点开场，引出用户痛点。\n镜头2：展示使用场景和利益点。\n镜头3：用行动号召收束。";
-            return new GeneratedScriptContent(
-                ScriptContentTitleNormalizer.ensureTitle(fallbackContent, fallbackContentTitle(dto, brief)),
-                metrics,
-                promptBuildMs,
-                true
-            );
+            throw new BusinessException(ResultCode.PROVIDER_ERROR, "脚本模型未返回有效内容，请稍后重试");
         } catch (RuntimeException ex) {
-            log.warn(
-                "[SCRIPT_GENERATE_STAGE] stage=model requestNo={} taskId={} status=fallback errorType={} errorMessage={}",
+            log.error(
+                "[SCRIPT_GENERATE_STAGE] stage=model requestNo={} taskId={} status=failed errorType={} errorMessage={}",
                 requestNo,
                 taskId,
                 ex.getClass().getSimpleName(),
                 ex.getMessage()
             );
-            return new GeneratedScriptContent(
-                ScriptContentTitleNormalizer.ensureTitle(
-                    fallbackScriptContent(dto, StringUtils.hasText(productInfo) ? productInfo : userPrompt),
-                    fallbackContentTitle(dto, brief)
-                ),
-                null,
-                promptBuildMs,
-                true
-            );
+            throw ex;
         }
     }
 
@@ -1533,21 +1523,6 @@ public class ScriptServiceImpl implements ScriptService {
 
     private String trimToNull(String value) {
         return StringUtils.hasText(value) ? value.trim() : null;
-    }
-
-    private String fallbackScriptContent(GenerateScriptDTO dto, String prompt) {
-        String duration = StringUtils.hasText(dto.getDuration()) ? dto.getDuration() : "30s";
-        ScriptFormatInfo formatInfo = scriptFormatInfo(dto);
-        return "【AI脚本草稿】\n"
-            + "脚本时长：" + duration + "\n"
-            + "脚本格式：" + formatInfo.name() + "\n"
-            + "脚本格式要求：" + formatInfo.requirement() + "\n"
-            + ("original".equals(dto.getType()) ? "用户提示词：" : "创作需求：") + prompt + "\n\n"
-            + "开场钩子：别再用普通方式介绍产品了，先让用户看到真实痛点。\n"
-            + "痛点共鸣：把目标人群每天都会遇到的麻烦说清楚，让用户产生代入感。\n"
-            + "卖点展开：围绕核心卖点给出具体场景，展示产品如何解决问题。\n"
-            + "信任证明：补充使用反馈、效果变化或对比细节，降低用户决策顾虑。\n"
-            + "行动引导：用一句明确的利益点收尾，引导点击、咨询或下单。";
     }
 
     private void fillTemplate(AiScriptTemplate template, TemplateSaveDTO dto) {

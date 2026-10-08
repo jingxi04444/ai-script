@@ -1,20 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import { message } from 'antd';
-import {
-  ArrowLeftOutlined, ArrowRightOutlined, CameraOutlined, CheckOutlined, CloseOutlined,
-  CopyOutlined, DownloadOutlined, EyeInvisibleOutlined, EyeOutlined, FullscreenOutlined,
-  LockOutlined, PlusOutlined, RedoOutlined, SaveOutlined, SettingOutlined,
-  UndoOutlined, UnlockOutlined, UploadOutlined, UserOutlined, VideoCameraOutlined,
-  AppstoreOutlined, LoadingOutlined, DragOutlined, RetweetOutlined, ExpandOutlined,
-} from '@ant-design/icons';
+import CanvasIcon from '../CanvasIcon';
 import { fileApi } from '../../../../api/asset';
 import { workflowApi } from '../../../../api/workflow';
+import { config } from '../../../../config';
 import { useWorkflowStore } from '../../../../stores/workflowStore';
 import { useAuthStore } from '../../../../stores/authStore';
 import { createWorkflowNodeData, type WorkflowNode } from '../../../../types/workflow';
 import DirectorViewport, { type DirectorViewportHandle } from './DirectorViewport';
 import DirectorInspector from './DirectorInspector';
 import DirectorTimeline from './DirectorTimeline';
+import DirectorLibrary from './DirectorLibrary';
+import DirectorSceneComposer from './DirectorSceneComposer';
+import { DIRECTOR_CAMERA_PRESETS } from './directorLibraryConfig';
+import { planDirectorLayout } from './directorLayout';
+import { applyDirectorAiLayout, directorLayoutRequest } from './directorAiLayout';
 import { useDirectorEditor } from './useDirectorEditor';
 import {
   createDirectorCamera, createDirectorId, createDirectorObject, evaluateDirectorCamera,
@@ -22,15 +22,9 @@ import {
   type DirectorCamera, type DirectorObject, type DirectorObjectKind, type DirectorScene,
 } from './directorScene';
 import './director-studio.css';
+import { useEditorPopover } from '../useEditorPopover';
 
 interface DirectorStudioProps { nodeId: string; onClose: () => void }
-const OBJECT_LIBRARY: { kind: DirectorObjectKind; name: string; detail: string }[] = [
-  { kind: 'product', name: '产品瓶', detail: '包装主体' },
-  { kind: 'actor', name: '人物', detail: '姿势白模' },
-  { kind: 'cylinder', name: '圆形展台', detail: '陈列道具' },
-  { kind: 'box', name: '方块', detail: '空间搭建' },
-  { kind: 'sphere', name: '球体', detail: '构图点缀' },
-];
 const isTyping = (target: EventTarget | null) => target instanceof HTMLElement && (['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable);
 const snapTime = (time: number) => Math.round(time * 24) / 24;
 function upsertFrame<T extends { time: number }>(frames: T[], frame: T): T[] {
@@ -52,17 +46,20 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 export default function DirectorStudio({ nodeId, onClose }: DirectorStudioProps) {
   const [initial] = useState(() => useWorkflowStore.getState().nodes.find(node => node.id === nodeId)?.data.directorScene);
   const { scene, past, future, revision, change, undo, redo } = useDirectorEditor(initial);
-  const [selectedId, setSelectedId] = useState<string | null>(scene.activeCameraId);
+  const [selectedId, setSelectedId] = useState<string | null>(scene.objects.find(object => object.kind === 'actor')?.id || scene.activeCameraId);
   const [view, setView] = useState<'director' | 'camera'>('director');
   const [transformMode, setTransformMode] = useState<'translate' | 'rotate' | 'scale'>('translate');
   const [playhead, setPlayhead] = useState(0);
   const [playing, setPlaying] = useState(false);
-  const [busy, setBusy] = useState<'save' | 'capture' | null>(null);
+  const [busy, setBusy] = useState<'save' | 'capture' | 'layout' | null>(null);
   const [saveState, setSaveState] = useState('正在保存本地草稿');
-  const [libraryOpen, setLibraryOpen] = useState(true);
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [libraryCollapsed, setLibraryCollapsed] = useState(() => window.matchMedia('(max-width: 720px)').matches);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const movementMenu = useEditorPopover();
+  const captureMenu = useEditorPopover();
   const viewportRef = useRef<DirectorViewportHandle>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
-  const importRef = useRef<HTMLInputElement>(null);
   const sceneRef = useRef(scene);
   const onCloseRef = useRef(onClose);
   const mountedRef = useRef(true);
@@ -76,6 +73,16 @@ export default function DirectorStudio({ nodeId, onClose }: DirectorStudioProps)
   const activeCamera = scene.cameras.find(camera => camera.id === scene.activeCameraId) || scene.cameras[0];
   const evaluatedObject = selectedObject ? evaluateDirectorObject(selectedObject, playhead) : undefined;
   const evaluatedCamera = selectedCamera ? evaluateDirectorCamera(selectedCamera, playhead) : undefined;
+  const nodes = useWorkflowStore(state => state.nodes);
+  const canvasImages = nodes.filter(node => node.id !== nodeId && ['image', 'result', 'character', 'style', 'scene', 'product'].includes(node.data.kind) && (node.data.outputUrl || node.data.assetUrl)).map(node => ({ id: node.id, name: node.data.title, url: (node.data.outputUrl || node.data.assetUrl)! }));
+
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 720px)');
+    const adaptPanels = () => setLibraryCollapsed(media.matches);
+    adaptPanels();
+    media.addEventListener('change', adaptPanels);
+    return () => media.removeEventListener('change', adaptPanels);
+  }, []);
 
   useEffect(() => {
     const previousFocus = document.activeElement as HTMLElement | null;
@@ -123,19 +130,25 @@ export default function DirectorStudio({ nodeId, onClose }: DirectorStudioProps)
       change(current => current.activeCameraId === id ? current : { ...current, activeCameraId: id });
     }
   }, [change]);
+  const previewCamera = (id: string) => {
+    if (operationRef.current || !sceneRef.current.cameras.some(camera => camera.id === id)) return;
+    select(id);
+    setPlaying(false);
+    setView('camera');
+  };
   const patchScene = (patch: Partial<DirectorScene>) => { if (!operationRef.current) change(current => ({ ...current, ...patch })); };
   const patchObject = useCallback((id: string, patch: Partial<DirectorObject>) => {
     if (operationRef.current) return;
     setPlaying(false);
     change(current => ({ ...current, objects: current.objects.map(object => {
       if (object.id !== id || (object.locked && patch.locked !== false && patch.visible === undefined)) return object;
-      const transformed = Boolean(patch.position || patch.rotation || patch.scale);
+      const transformed = Boolean(patch.position || patch.rotation || patch.scale || patch.pose || 'joints' in patch);
       if (!object.keyframes.length || !transformed) return { ...object, ...patch };
       if (object.keyframes.length >= 240 && !object.keyframes.some(frame => Math.abs(frame.time - snapTime(playhead)) < 1 / 48)) {
         message.warning('单轨最多 240 个关键帧，请先删除不需要的帧'); return object;
       }
       const evaluated = { ...evaluateDirectorObject(object, playhead), ...patch };
-      const keyframe = { id: createDirectorId('key'), time: snapTime(playhead), position: evaluated.position, rotation: evaluated.rotation, scale: evaluated.scale };
+      const keyframe = { id: createDirectorId('key'), time: snapTime(playhead), position: evaluated.position, rotation: evaluated.rotation, scale: evaluated.scale, ...(object.kind === 'actor' ? { pose: evaluated.pose, joints: evaluated.joints } : {}) };
       return { ...object, keyframes: upsertFrame(object.keyframes, keyframe) };
     }) }));
   }, [change, playhead]);
@@ -143,7 +156,7 @@ export default function DirectorStudio({ nodeId, onClose }: DirectorStudioProps)
     if (operationRef.current) return;
     setPlaying(false);
     change(current => ({ ...current, cameras: current.cameras.map(camera => {
-      if (camera.id !== id) return camera;
+      if (camera.id !== id || (camera.locked && patch.locked !== false && patch.visible === undefined)) return camera;
       if (!camera.keyframes.length || !(patch.position || patch.target || patch.fov !== undefined)) return { ...camera, ...patch };
       if (camera.keyframes.length >= 240 && !camera.keyframes.some(frame => Math.abs(frame.time - snapTime(playhead)) < 1 / 48)) {
         message.warning('单轨最多 240 个关键帧，请先删除不需要的帧'); return camera;
@@ -161,32 +174,64 @@ export default function DirectorStudio({ nodeId, onClose }: DirectorStudioProps)
     object.position[0] = (scene.objects.length % 4) * 0.7 - 0.7;
     change(current => ({ ...current, objects: [...current.objects, object] })); setSelectedId(object.id); setPlaying(false);
   };
-  const addCamera = () => {
+  const addActor = (name: string, scale: DirectorObject['scale']) => {
+    if (operationRef.current) return;
+    if (scene.objects.length >= 100) { message.warning('每个场景最多 100 个对象'); return; }
+    const actor = { ...createDirectorObject('actor'), name: `${name} ${scene.objects.filter(item => item.kind === 'actor').length + 1}`, scale: [...scale] as DirectorObject['scale'] };
+    actor.position[0] = (scene.objects.length % 4) * 0.7;
+    change(current => ({ ...current, objects: [...current.objects, actor] })); setSelectedId(actor.id); setPlaying(false);
+  };
+  const addCrowd = () => {
+    if (operationRef.current) return;
+    if (scene.objects.length + 9 > 100) { message.warning('空间不足，3×3 群众需要 9 个对象位置'); return; }
+    const crowdOffset = scene.objects.length ? 4 + Math.floor(scene.objects.length / 9) * 4 : 0;
+    const actors = Array.from({ length: 9 }, (_, index) => ({ ...createDirectorObject('actor', scene.objects.filter(item => item.kind === 'actor').length + index + 1), position: [crowdOffset + (index % 3 - 1) * 1.2, 0, (Math.floor(index / 3) - 1) * 1.2] as DirectorObject['position'] }));
+    change(current => ({ ...current, objects: [...current.objects, ...actors] })); setSelectedId(actors[0].id); setPlaying(false);
+  };
+  const addCamera = (index = 0) => {
     if (operationRef.current) return;
     if (scene.cameras.length >= 16) { message.warning('每个场景最多 16 个机位'); return; }
-    const camera = { ...createDirectorCamera(scene.cameras.length + 1), ...viewportRef.current?.getViewCamera() };
-    change(current => ({ ...current, cameras: [...current.cameras, camera], activeCameraId: camera.id })); setSelectedId(camera.id);
+    const preset = DIRECTOR_CAMERA_PRESETS[index] || DIRECTOR_CAMERA_PRESETS[0];
+    const camera = { ...createDirectorCamera(scene.cameras.length + 1), ...(preset.values || viewportRef.current?.getViewCamera()), name: `机位${scene.cameras.length + 1} · ${preset.name}` };
+    change(current => ({ ...current, cameras: [...current.cameras, camera], activeCameraId: camera.id }));
+    setSelectedId(camera.id);
+    setPlaying(false);
+    // Creating a shot is also a preview action; leave the free director camera
+    // untouched so returning to the editor restores the user's working view.
+    setView('camera');
   };
-  const removeSelected = () => {
+  const removeItem = (id: string) => {
     if (operationRef.current) return;
-    if (selectedObject && !selectedObject.locked) {
-      change(current => ({ ...current, objects: current.objects.filter(object => object.id !== selectedId) })); setSelectedId(null);
-    } else if (selectedCamera && scene.cameras.length > 1) {
-      change(current => { const cameras = current.cameras.filter(camera => camera.id !== selectedId); return { ...current, cameras, activeCameraId: current.activeCameraId === selectedId ? cameras[0].id : current.activeCameraId }; }); setSelectedId(null);
+    const object = sceneRef.current.objects.find(item => item.id === id);
+    const camera = sceneRef.current.cameras.find(item => item.id === id);
+    if (object && !object.locked) {
+      change(current => ({ ...current, objects: current.objects.filter(item => item.id !== id) }));
+      if (selectedId === id) setSelectedId(null);
+    } else if (camera && !camera.locked && sceneRef.current.cameras.length > 1) {
+      change(current => { const cameras = current.cameras.filter(item => item.id !== id); return { ...current, cameras, activeCameraId: current.activeCameraId === id ? cameras[0].id : current.activeCameraId }; });
+      if (selectedId === id) setSelectedId(null);
     }
   };
-  const duplicate = () => {
+  const removeSelected = () => { if (selectedId) removeItem(selectedId); };
+  const duplicateItem = (id: string) => {
     if (operationRef.current) return;
-    if (!selectedObject || scene.objects.length >= 100) return;
-    const object = { ...selectedObject, id: createDirectorId('object'), name: `${selectedObject.name} 副本`, position: [selectedObject.position[0] + 0.8, selectedObject.position[1], selectedObject.position[2]] as DirectorObject['position'], locked: false, keyframes: [] };
-    change(current => ({ ...current, objects: [...current.objects, object] })); setSelectedId(object.id);
+    const sourceObject = sceneRef.current.objects.find(item => item.id === id);
+    const sourceCamera = sceneRef.current.cameras.find(item => item.id === id);
+    if (sourceObject && sceneRef.current.objects.length < 100) {
+      const object = { ...sourceObject, id: createDirectorId('object'), name: `${sourceObject.name} 副本`, position: [sourceObject.position[0] + 0.8, sourceObject.position[1], sourceObject.position[2]] as DirectorObject['position'], locked: false, keyframes: [] };
+      change(current => ({ ...current, objects: [...current.objects, object] })); setSelectedId(object.id);
+    } else if (sourceCamera && sceneRef.current.cameras.length < 16) {
+      const camera = { ...sourceCamera, id: createDirectorId('camera'), name: `${sourceCamera.name} 副本`, position: [sourceCamera.position[0] + 0.8, sourceCamera.position[1], sourceCamera.position[2]] as DirectorCamera['position'], locked: false, visible: true, keyframes: [] };
+      change(current => ({ ...current, cameras: [...current.cameras, camera], activeCameraId: camera.id })); setSelectedId(camera.id);
+    }
   };
+  const duplicate = () => { if (selectedId) duplicateItem(selectedId); };
 
   const addKeyframe = () => {
     if (operationRef.current) return;
     if (selectedObject && !selectedObject.locked && evaluatedObject) {
       if (selectedObject.keyframes.length >= 240) { message.warning('单轨最多 240 个关键帧'); return; }
-      const frame = { id: createDirectorId('key'), time: snapTime(playhead), position: evaluatedObject.position, rotation: evaluatedObject.rotation, scale: evaluatedObject.scale };
+      const frame = { id: createDirectorId('key'), time: snapTime(playhead), position: evaluatedObject.position, rotation: evaluatedObject.rotation, scale: evaluatedObject.scale, ...(selectedObject.kind === 'actor' ? { pose: evaluatedObject.pose, joints: evaluatedObject.joints } : {}) };
       const frames = !selectedObject.keyframes.length && playhead > 0 ? [{ ...frame, id: createDirectorId('key'), time: 0, position: selectedObject.position, rotation: selectedObject.rotation, scale: selectedObject.scale }] : selectedObject.keyframes;
       patchObject(selectedObject.id, { keyframes: upsertFrame(frames, frame) });
     } else if (selectedCamera && evaluatedCamera) {
@@ -223,7 +268,7 @@ export default function DirectorStudio({ nodeId, onClose }: DirectorStudioProps)
   const saveProject = async () => {
     const current = useWorkflowStore.getState();
     if (current.projectKey !== projectKey.current) throw new Error('当前项目已切换，请在原项目重新打开导演台');
-    if (!useAuthStore.getState().isAuthenticated || !current.projectKey || current.projectKey === 'draft' || current.projectKey.startsWith('director-demo')) {
+    if (config.useMock || !useAuthStore.getState().isAuthenticated || !current.projectKey || current.projectKey === 'draft' || current.projectKey.startsWith('director-demo')) {
       return false;
     }
     await workflowApi.save(current.projectKey, { name: '产品视频生产工作流', mode: current.mode, graphJson: JSON.stringify({ nodes: current.nodes.map(node => ({ ...node, selected: false })), edges: current.edges.map(edge => ({ ...edge, selected: false })) }) });
@@ -251,7 +296,7 @@ export default function DirectorStudio({ nodeId, onClose }: DirectorStudioProps)
       const blob = await viewportRef.current.capture();
       const name = `${scene.name.replace(/[\\/:*?"<>|]/g, '-')}-${activeCamera.name.replace(/[\\/:*?"<>|]/g, '-')}.png`;
       if (!toCanvas) { download(blob, name); return; }
-      const demo = !useAuthStore.getState().isAuthenticated || projectKey.current?.startsWith('director-demo');
+      const demo = config.useMock || !useAuthStore.getState().isAuthenticated || projectKey.current?.startsWith('director-demo');
       let url: string;
       if (demo) {
         if (blob.size > 600_000) throw new Error('本地截图过大，请下载 PNG，登录后再上传至画布');
@@ -275,7 +320,7 @@ export default function DirectorStudio({ nodeId, onClose }: DirectorStudioProps)
       let cloud = false;
       try { cloud = await saveProject(); } catch { message.warning('截图已加入画布，云端同步失败，可稍后点击保存'); }
       if (local || cloud) {
-        message.success(demo ? '构图图已加入本地画布；登录后重新导出可用于真实生成' : '构图图已上传并连回画布，可以作为画布参考素材');
+        message.success(demo ? '构图图已加入演示画布；正式生成前请在真实服务中重新导出' : '构图图已上传并连回画布，可以作为画布参考素材');
         onCloseRef.current();
       } else { setSaveState('截图在内存中，请保存或下载 PNG'); }
     } catch (error) { message.error(error instanceof Error ? error.message : '导出失败，请重试'); }
@@ -293,8 +338,65 @@ export default function DirectorStudio({ nodeId, onClose }: DirectorStudioProps)
       message.success('工程已导入，可撤销恢复之前场景');
     } catch (error) { message.error(error instanceof Error ? error.message : '无法读取工程'); }
   };
+  const uploadPanorama = async (file?: File) => {
+    if (!file || operationRef.current) return;
+    try {
+      if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 10_000_000) throw new Error('请选择 10 MB 以内的 PNG、JPEG 或 WebP 图片');
+      const bitmap = await createImageBitmap(file);
+      let blob: Blob | null;
+      try {
+        const factor = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height));
+        const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.round(bitmap.width * factor)); canvas.height = Math.max(1, Math.round(bitmap.height * factor));
+        const context = canvas.getContext('2d');
+        if (!context) throw new Error('浏览器无法处理图片');
+        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/jpeg', 0.82));
+      } finally { bitmap.close(); }
+      if (!blob || blob.size > 700_000) throw new Error('图片压缩后仍过大，请使用更小的全景图');
+      const url = await blobToDataUrl(blob);
+      if (!mountedRef.current || operationRef.current) return;
+      patchScene({ panoramaUrl: url }); message.success('全景背景已应用，可撤销或移除');
+    } catch (error) { message.error(error instanceof Error ? error.message : '图片读取失败'); }
+  };
 
-  return <div className="director-studio" ref={dialogRef} role="dialog" aria-modal="true" aria-label="3D 导演台" tabIndex={-1}
+  const applyLayoutPrompt = async (prompt: string) => {
+    if (operationRef.current) throw new Error('导演台正在处理上一项操作');
+    if (config.useMock) {
+      const result = planDirectorLayout(sceneRef.current, prompt, selectedId);
+      if (result.changed) { setPlaying(false); change(() => result.scene); }
+      return { changed: result.changed, summary: `本地预览：${result.summary}` };
+    }
+    if (!useAuthStore.getState().isAuthenticated || !projectKey.current || projectKey.current === 'draft') {
+      throw new Error('请先登录并保存项目，才能调用真实 AI 布局');
+    }
+    operationRef.current = true; setBusy('layout');
+    try {
+      const projectId = projectKey.current;
+      const request = directorLayoutRequest(sceneRef.current, prompt);
+      const graphJson = JSON.stringify({ nodes: [{ id: createDirectorId('layout-ai'), data: {
+        kind: 'text', title: '导演台 AI 布局', systemPrompt: request.systemPrompt, prompt: request.prompt,
+      } }], edges: [] });
+      const run = await workflowApi.startRun(projectId, {
+        mode: useWorkflowStore.getState().mode, graphJson,
+        idempotencyKey: `director-layout-${projectId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      });
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        await new Promise(resolve => window.setTimeout(resolve, 1500));
+        const latest = await workflowApi.getRun(projectId, run.id);
+        if (latest.status === 'failed' || latest.status === 'canceled') throw new Error(latest.errorMessage || '导演台 AI 布局失败');
+        if (latest.status !== 'success') continue;
+        const output = latest.nodes[0]?.outputJson ? JSON.parse(latest.nodes[0].outputJson) as { text?: string } : {};
+        if (!output.text) throw new Error('AI 没有返回布局方案');
+        if (!mountedRef.current || useWorkflowStore.getState().projectKey !== projectId) throw new Error('项目已切换，布局方案未应用');
+        const result = applyDirectorAiLayout(sceneRef.current, output.text);
+        if (result.changed) { setPlaying(false); change(() => result.scene); }
+        return { changed: result.changed, summary: result.summary };
+      }
+      throw new Error('布局任务仍在运行，请稍后重试；任务记录已保存在项目中');
+    } finally { operationRef.current = false; if (mountedRef.current) setBusy(null); }
+  };
+
+  return <div className={`director-studio${timelineOpen ? ' has-timeline' : ''}${libraryCollapsed ? ' is-library-collapsed' : ''}${inspectorOpen ? ' is-inspector-open' : ''}`} ref={dialogRef} role="dialog" aria-modal="true" aria-label="3D 导演台" tabIndex={-1}
     onKeyDown={event => {
       event.stopPropagation();
       if (operationRef.current) { event.preventDefault(); return; }
@@ -310,37 +412,37 @@ export default function DirectorStudio({ nodeId, onClose }: DirectorStudioProps)
       else if (event.key.toLowerCase() === 'k' && !event.metaKey && !event.ctrlKey) { event.preventDefault(); addKeyframe(); }
       else if (event.code === 'Space' && !(event.target instanceof HTMLButtonElement)) { event.preventDefault(); setPlaying(current => !current); }
     }}>
-    <header className="director-header">
-      <div className="director-brand"><button aria-label="返回画布" title="返回画布" disabled={Boolean(busy)} onClick={close}><ArrowLeftOutlined /></button><span className="director-brand-icon"><VideoCameraOutlined /></span><div><strong>导演台</strong><small>3D PREVIS STUDIO</small></div><span className="director-header-divider" /><input aria-label="场景名称" maxLength={100} disabled={Boolean(busy)} value={scene.name} onChange={event => patchScene({ name: event.target.value })} /></div>
-      <div className="director-header-actions"><span className="director-save-status"><CheckOutlined />{saveState}</span><button aria-label="撤销导演台操作" title="撤销 ⌘Z" disabled={!past.length || Boolean(busy)} onClick={() => { setPlaying(false); undo(); }}><UndoOutlined /></button><button aria-label="重做导演台操作" title="重做 ⌘⇧Z" disabled={!future.length || Boolean(busy)} onClick={() => { setPlaying(false); redo(); }}><RedoOutlined /></button><button className="director-save-button" disabled={Boolean(busy)} onClick={() => { void save(); }}>{busy === 'save' ? <LoadingOutlined /> : <SaveOutlined />}保存项目</button><button className="director-primary" disabled={Boolean(busy)} onClick={() => { void capture(true); }}>{busy === 'capture' ? <LoadingOutlined /> : <CameraOutlined />}截图到画布<ArrowRightOutlined /></button></div>
-    </header>
-
     <div className="director-workbench" aria-busy={Boolean(busy)}>
-      <aside className="director-library" aria-label="导演台场景资源">
-        <header className="director-panel-heading"><span>场景</span><button aria-label="场景设置" title="场景设置" onClick={() => setSelectedId(null)}><SettingOutlined /></button></header>
-        <div className="director-library-tools"><button className={libraryOpen ? 'is-active' : ''} onClick={() => setLibraryOpen(current => !current)}><PlusOutlined />添加对象</button><button onClick={addCamera}><VideoCameraOutlined />机位</button></div>
-        {libraryOpen ? <div className="director-object-library">{OBJECT_LIBRARY.map(item => <button key={item.kind} onClick={() => addObject(item.kind)} aria-label={`添加${item.name}`}><span className={`director-object-shape is-${item.kind}`}>{item.kind === 'actor' ? <UserOutlined /> : item.kind === 'product' ? <span /> : null}</span><strong>{item.name}</strong><small>{item.detail}</small></button>)}</div> : null}
-        <div className="director-tree-heading">场景对象 <span>{scene.objects.length + scene.cameras.length}</span></div>
-        <div className="director-object-tree">{scene.cameras.map(camera => <div className={`director-tree-item${selectedId === camera.id ? ' is-selected' : ''}`} key={camera.id}><button className="director-tree-select" onClick={() => select(camera.id)}><VideoCameraOutlined /><span>{camera.name}</span></button><button className={scene.activeCameraId === camera.id ? 'director-active-camera' : ''} aria-label={`预览${camera.name}`} title={`预览${camera.name}`} onClick={() => { select(camera.id); setView('camera'); }}><EyeOutlined /></button></div>)}<div className="director-tree-separator" />{scene.objects.map(object => <div className={`director-tree-item${selectedId === object.id ? ' is-selected' : ''}${!object.visible ? ' is-hidden' : ''}`} key={object.id}><button className="director-tree-select" onClick={() => setSelectedId(object.id)}>{object.kind === 'actor' ? <UserOutlined /> : <AppstoreOutlined />}<span>{object.name}</span></button><button aria-label={`${object.visible ? '隐藏' : '显示'}${object.name}`} onClick={() => patchObject(object.id, { visible: !object.visible })}>{object.visible ? <EyeOutlined /> : <EyeInvisibleOutlined />}</button><button aria-label={`${object.locked ? '解锁' : '锁定'}${object.name}`} onClick={() => patchObject(object.id, { locked: !object.locked })}>{object.locked ? <LockOutlined /> : <UnlockOutlined />}</button></div>)}</div>
-        <div className="director-library-footer"><p>白模构图 → AI 画面</p><span>先确认空间、站位与镜头，再生成最终素材。</span><div><button onClick={() => importRef.current?.click()}><UploadOutlined />导入工程</button><button onClick={() => download(new Blob([JSON.stringify(scene, null, 2)], { type: 'application/json' }), 'director-scene.json')}><DownloadOutlined />导出工程</button></div><input ref={importRef} type="file" accept=".json,application/json" hidden onChange={event => { void importScene(event.target.files?.[0]); event.target.value = ''; }} /></div>
-      </aside>
+      <DirectorLibrary scene={scene} selectedId={selectedId} collapsed={libraryCollapsed} busy={Boolean(busy)} canUndo={Boolean(past.length)} canRedo={Boolean(future.length)} saveState={saveState} images={canvasImages}
+        onDuplicateItem={duplicateItem} onDeleteItem={removeItem} onCameraChange={patchCamera}
+        onClose={close} onCollapsedChange={setLibraryCollapsed} onSelect={select} onPreview={previewCamera} onObjectChange={patchObject} onSceneChange={patchScene}
+        onAddActor={addActor} onAddCrowd={addCrowd} onAddObject={addObject} onAddCamera={addCamera} onUploadPanorama={file => { void uploadPanorama(file); }}
+        onUndo={() => { setPlaying(false); undo(); }} onRedo={() => { setPlaying(false); redo(); }} onSave={() => { void save(); }} onImport={file => { void importScene(file); }} onExport={() => download(new Blob([JSON.stringify(sceneRef.current, null, 2)], { type: 'application/json' }), 'director-scene.json')} />
 
       <main className="director-stage">
-        <div className="director-stage-toolbar"><div className="director-view-switch" role="group" aria-label="切换视角"><button className={view === 'director' ? 'is-active' : ''} onClick={() => setView('director')}>导演视角</button><button className={view === 'camera' ? 'is-active' : ''} onClick={() => setView('camera')}>机位视角</button></div><div className="director-stage-options"><select aria-label="活动机位" value={scene.activeCameraId} onChange={event => select(event.target.value)}>{scene.cameras.map(camera => <option key={camera.id} value={camera.id}>{camera.name}</option>)}</select><button aria-label="重置导演视角" title="重置导演视角" onClick={() => { setView('director'); viewportRef.current?.resetView(); }}><FullscreenOutlined /></button></div></div>
-        <div className="director-stage-viewport"><DirectorViewport ref={viewportRef} scene={scene} selectedId={selectedId} view={view} transformMode={transformMode} playhead={playhead} onSelect={select} onObjectChange={patchObject} onCameraChange={patchCamera} />
-          <div className="director-stage-badge"><span />{view === 'director' ? '自由布景' : activeCamera.name}<small>{scene.aspectRatio}</small></div>
-          <div className="director-transform-tools" role="group" aria-label="3D 编辑工具"><button className={transformMode === 'translate' ? 'is-active' : ''} title="移动" aria-label="移动工具" onClick={() => setTransformMode('translate')}><DragOutlined /><span>移动</span></button><button className={transformMode === 'rotate' ? 'is-active' : ''} title="旋转" aria-label="旋转工具" onClick={() => setTransformMode('rotate')}><RetweetOutlined /><span>旋转</span></button><button className={transformMode === 'scale' ? 'is-active' : ''} title="缩放" aria-label="缩放工具" onClick={() => setTransformMode('scale')}><ExpandOutlined /><span>缩放</span></button><i /><button aria-label="复制对象" title="复制对象" disabled={!selectedObject} onClick={duplicate}><CopyOutlined /></button><button aria-label="下载当前机位 PNG" title="下载当前机位 PNG" disabled={Boolean(busy)} onClick={() => { void capture(false); }}><CameraOutlined /></button></div>
+        <div className="director-stage-toolbar"><div className="director-view-switch" role="group" aria-label="切换视角"><button aria-pressed={view === 'director'} disabled={Boolean(busy)} className={view === 'director' ? 'is-active' : ''} onClick={() => setView('director')}>导演视角</button><button aria-pressed={view === 'camera'} disabled={Boolean(busy)} className={view === 'camera' ? 'is-active' : ''} onClick={() => previewCamera(scene.activeCameraId)}>机位视角</button></div><div className="director-stage-options">{view === 'director' ? <button aria-label="重置导演视角" title="重置导演视角" onClick={() => viewportRef.current?.resetView()}>重置视角</button> : null}{scene.cameras.length > 1 && <select aria-label="活动机位" disabled={Boolean(busy)} value={scene.activeCameraId} onChange={event => previewCamera(event.target.value)}>{scene.cameras.map(camera => <option key={camera.id} value={camera.id}>{camera.name}</option>)}</select>}</div></div>
+        <div className="director-stage-viewport" style={{ '--director-scene-bg': scene.background } as CSSProperties}><DirectorViewport ref={viewportRef} scene={scene} selectedId={selectedId} view={view} transformMode={transformMode} playhead={playhead} onSelect={select} onObjectChange={patchObject} onCameraChange={patchCamera} />
+          <div className="director-stage-badge" role="status" aria-live="polite">{view === 'camera' ? activeCamera.name : scene.name}<small>{scene.aspectRatio}</small></div>
+          <div className="director-bottom-bar">
+            <div className="director-transform-tools" role="group" aria-label="3D 编辑工具">
+              <div className="director-action-menu" ref={movementMenu.ref}><button title="移动、旋转与缩放" aria-label="变换工具菜单" aria-haspopup="listbox" aria-expanded={movementMenu.open} onClick={() => movementMenu.setOpen(value => !value)}><CanvasIcon name={transformMode === 'translate' ? 'DragOutlined' : transformMode === 'rotate' ? 'RetweetOutlined' : 'ExpandOutlined'} /></button>{movementMenu.open ? <div className="director-action-popover" role="listbox" aria-label="变换工具" style={movementMenu.menuStyle}>{([{ value: 'translate', label: '移动', icon: 'DragOutlined' }, { value: 'rotate', label: '旋转', icon: 'RetweetOutlined' }, { value: 'scale', label: '缩放', icon: 'ExpandOutlined' }] as const).map(item => <button role="option" aria-selected={transformMode === item.value} key={item.value} onClick={() => { setTransformMode(item.value); movementMenu.setOpen(false); }}><CanvasIcon name={item.icon} />{item.label}{transformMode === item.value ? <CanvasIcon name="CheckOutlined" /> : null}</button>)}<button aria-label="复制对象" disabled={!selectedObject} onClick={() => { duplicate(); movementMenu.setOpen(false); }}><CanvasIcon name="CopyOutlined" />复制对象</button></div> : null}</div>
+              <div className="director-action-menu" ref={captureMenu.ref}><button aria-label="截图菜单" title="截图" aria-haspopup="listbox" aria-expanded={captureMenu.open} disabled={Boolean(busy)} onClick={() => captureMenu.setOpen(value => !value)}><CanvasIcon name="CameraOutlined" /></button>{captureMenu.open ? <div className="director-action-popover" role="listbox" aria-label="截图方式" style={captureMenu.menuStyle}><button aria-label="截图到画布" onClick={() => { captureMenu.setOpen(false); void capture(true); }}><CanvasIcon name="CameraOutlined" />截图到画布</button><button aria-label="下载当前机位 PNG" onClick={() => { captureMenu.setOpen(false); void capture(false); }}><CanvasIcon name="DownloadOutlined" />下载 PNG</button></div> : null}</div>
+              <button aria-label="切换动画时间轴" title="动画时间轴" aria-pressed={timelineOpen} onClick={() => { setTimelineOpen(value => !value); setPlaying(false); }}><CanvasIcon name="HistoryOutlined" /></button>
+            </div>
+            <DirectorSceneComposer disabled={Boolean(busy)} onApply={applyLayoutPrompt} />
+          </div>
         </div>
         <footer className="director-stage-footer"><span>拖动旋转视角 · 右键平移 · 滚轮缩放</span><span>{scene.objects.length} 对象 <i />{scene.cameras.length} 机位</span></footer>
       </main>
 
       <DirectorInspector scene={scene} object={evaluatedObject} camera={evaluatedCamera} onSceneChange={patchScene} onObjectChange={patchObject} onCameraChange={patchCamera} onDelete={removeSelected} onCaptureView={() => { if (selectedCamera && viewportRef.current) patchCamera(selectedCamera.id, viewportRef.current.getViewCamera()); }} onCameraPreset={cameraPreset} />
     </div>
-    <DirectorTimeline scene={scene} selectedId={selectedId} playhead={playhead} playing={playing} onSelect={select} onSeek={time => { setPlaying(false); setPlayhead(time); }} onTogglePlay={() => setPlaying(current => !current)} onKeyframe={addKeyframe} onRemoveKeyframe={removeKeyframe} onDuration={duration => {
+    {timelineOpen ? <DirectorTimeline scene={scene} selectedId={selectedId} playhead={playhead} playing={playing} onSelect={select} onSeek={time => { setPlaying(false); setPlayhead(time); }} onTogglePlay={() => setPlaying(current => !current)} onKeyframe={addKeyframe} onRemoveKeyframe={removeKeyframe} onDuration={duration => {
       if ([...scene.objects, ...scene.cameras].some(item => item.keyframes.some(frame => frame.time > duration))) { message.warning('新时长短于已有关键帧，请先移除超出时长的关键帧'); return; }
       patchScene({ duration }); setPlayhead(current => Math.min(current, duration));
-    }} />
+    }} /> : null}
     {busy ? <div className="director-busy-shield" aria-label="正在处理，请稍候" /> : null}
-    <button className="director-mobile-close" aria-label="关闭导演台" onClick={close}><CloseOutlined /></button>
+    <button className="director-mobile-close" aria-label="关闭导演台" onClick={close}><CanvasIcon name="CloseOutlined" /></button>
+    <button className="director-mobile-properties" aria-label={inspectorOpen ? '关闭属性面板' : '打开属性面板'} aria-expanded={inspectorOpen} onClick={() => setInspectorOpen(value => !value)}><CanvasIcon name={inspectorOpen ? 'CloseOutlined' : 'SettingOutlined'} /></button>
   </div>;
 }

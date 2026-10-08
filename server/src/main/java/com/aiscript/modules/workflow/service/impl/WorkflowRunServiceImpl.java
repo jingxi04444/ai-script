@@ -3,6 +3,7 @@ package com.aiscript.modules.workflow.service.impl;
 import com.aiscript.common.api.ResultCode;
 import com.aiscript.common.exception.BusinessException;
 import com.aiscript.framework.tenant.TenantContext;
+import com.aiscript.modules.script.service.ScriptReviewService;
 import com.aiscript.modules.workflow.dto.WorkflowRunCreateDTO;
 import com.aiscript.modules.workflow.entity.AiWorkflowNodeRun;
 import com.aiscript.modules.workflow.entity.AiWorkflowOutbox;
@@ -39,6 +40,7 @@ public class WorkflowRunServiceImpl implements WorkflowRunService {
     private final AiWorkflowNodeRunMapper nodeRunMapper;
     private final AiWorkflowOutboxMapper outboxMapper;
     private final WorkflowService workflowService;
+    private final ScriptReviewService projectAccessService;
     private final ObjectMapper objectMapper;
 
     public WorkflowRunServiceImpl(
@@ -46,18 +48,21 @@ public class WorkflowRunServiceImpl implements WorkflowRunService {
         AiWorkflowNodeRunMapper nodeRunMapper,
         AiWorkflowOutboxMapper outboxMapper,
         WorkflowService workflowService,
+        ScriptReviewService projectAccessService,
         ObjectMapper objectMapper
     ) {
         this.runMapper = runMapper;
         this.nodeRunMapper = nodeRunMapper;
         this.outboxMapper = outboxMapper;
         this.workflowService = workflowService;
+        this.projectAccessService = projectAccessService;
         this.objectMapper = objectMapper;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public WorkflowRunVO start(Integer projectId, WorkflowRunCreateDTO dto) {
+        projectAccessService.internalAccessForProject(projectId);
         LoginUser user = currentUser();
         Integer tenantId = currentTenantId(user);
         WorkflowValidationVO validation = workflowService.validate(dto.getGraphJson());

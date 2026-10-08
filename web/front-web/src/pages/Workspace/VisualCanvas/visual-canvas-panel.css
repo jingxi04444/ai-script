@@ -1273,9 +1273,9 @@
   padding: 10px 8px 9px;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
-  background: rgba(38, 38, 38, 0.98);
+  background: var(--workflow-bg, #111111);
   box-shadow: 0 28px 70px rgba(0, 0, 0, 0.46);
-  backdrop-filter: blur(22px);
+  backdrop-filter: none;
 }
 
 .canvas-add-menu > header,
@@ -2602,9 +2602,9 @@
   padding: 7px;
   border: 1px solid rgba(255, 255, 255, 0.11);
   border-radius: 12px;
-  background: rgba(38, 39, 39, 0.98);
+  background: var(--workflow-bg, #111111);
   box-shadow: 0 24px 66px rgba(0, 0, 0, 0.48);
-  backdrop-filter: blur(22px);
+  backdrop-filter: none;
   animation: workflow-context-in 120ms ease-out both;
 }
 
@@ -4025,7 +4025,7 @@
   padding: 10px;
   border: 1px solid #303538;
   border-radius: 16px;
-  background: #1c1f21;
+  background: var(--workflow-bg, #111111);
   box-shadow: 0 22px 54px rgba(0, 0, 0, 0.48);
 }
 

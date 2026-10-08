@@ -590,13 +590,16 @@ body:has(.visual-canvas-workspace-main) .task-center-launcher {
   width: auto;
   height: auto !important;
   min-height: 0 !important;
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 0;
   border: 0;
   background: transparent;
   pointer-events: none;
 }
 
+.visual-canvas-workspace-main .creation-topbar > .previous-step-button,
 .visual-canvas-workspace-main .creation-topbar > .next-step-button {
   height: 34px;
   min-height: 34px;
@@ -613,9 +616,136 @@ body:has(.visual-canvas-workspace-main) .task-center-launcher {
   pointer-events: auto;
 }
 
+.visual-canvas-workspace-main .creation-topbar > .previous-step-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  color: #d6d6d6;
+  cursor: pointer;
+}
+
+.visual-canvas-workspace-main .creation-topbar > .previous-step-button:hover {
+  border-color: rgba(255, 255, 255, 0.25);
+  background: #292929 !important;
+}
+
+.visual-canvas-workspace-main .creation-topbar > .previous-step-button:focus-visible,
+.visual-canvas-workspace-main .creation-topbar > .next-step-button:focus-visible {
+  outline: 2px solid #b9b9b9;
+  outline-offset: 2px;
+}
+
+.scene-planning-view-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  width: fit-content;
+  border: 1px solid #4b574e;
+  border-radius: 9px;
+  padding: 3px;
+  background: #252c27;
+}
+
+.scene-planning-view-switch button {
+  border: 0;
+  border-radius: 6px;
+  padding: 6px 11px;
+  background: transparent;
+  color: #a9b5aa;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.scene-planning-view-switch button.active {
+  background: var(--theme-accent, #62e670);
+  color: #102015;
+}
+
+.scene-planning-view-switch button:focus-visible {
+  outline: 2px solid var(--theme-accent, #62e670);
+  outline-offset: 2px;
+}
+
+.scene-planning-workspace-main .creation-topbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 18px;
+  background: #141817;
+}
+
+.scene-planning-workspace-main .workbench-card.creation-panel {
+  overflow: hidden;
+  padding: 0;
+}
+
+.scene-planning-workspace-main .creation-topbar > .previous-step-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #4b574e;
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: #252c27;
+  color: #dce5d8;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.scene-planning-workspace-main .creation-topbar > .next-step-button {
+  border: 1px solid var(--theme-accent, #62e670);
+  background: var(--theme-accent, #62e670);
+  color: #102015;
+  font-size: 11px;
+}
+
+html[data-color-mode='light'] .scene-planning-workspace-main .creation-topbar {
+  border-color: #d9e3db;
+  background: #fff;
+}
+
+html[data-color-mode='light'] .scene-planning-workspace-main .scene-planning-view-switch {
+  border-color: #d9e3db;
+  background: #f2f6f3;
+}
+
+html[data-color-mode='light'] .scene-planning-workspace-main .scene-planning-view-switch button:not(.active) {
+  color: #5d6c62;
+}
+
+html[data-color-mode='light'] .scene-planning-workspace-main .creation-topbar > .previous-step-button {
+  border-color: #d9e3db;
+  background: #fff;
+  color: #26352a;
+}
+
+.visual-canvas-workspace-main .scene-planning-view-switch {
+  pointer-events: auto;
+  border-color: rgba(255, 255, 255, .1);
+  background: rgba(33, 33, 33, .92);
+}
+
+.visual-canvas-workspace-main .scene-planning-view-switch button.active {
+  background: #404743;
+  color: #f1f5f0;
+}
+
 /* Reserve the separate step action's space so it cannot cover Save or Agent. */
 .visual-canvas-workspace-main .workflow-canvas-chrome .workflow-canvas-header {
-  right: 154px;
+  right: 420px;
+}
+
+@media (max-width: 1000px) {
+  .visual-canvas-workspace-main .workflow-canvas-chrome .workflow-canvas-header {
+    right: 8px;
+  }
+
+  .visual-canvas-workspace-main .creation-topbar {
+    top: 62px;
+    right: 8px;
+  }
 }
 
 .visual-canvas-workspace-main .workbench-card.creation-panel {

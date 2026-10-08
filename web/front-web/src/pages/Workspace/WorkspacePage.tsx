@@ -33,6 +33,7 @@ import ScriptGeneratorPanel from './ScriptGenerator/ScriptGeneratorPanel';
 import StoryboardPanel from './Storyboard/StoryboardPanel';
 import DevelopmentPanel from './Development/DevelopmentPanel';
 import VisualCanvasPanel from './VisualCanvas/VisualCanvasPanel';
+import ScenePlanningPanel from './ScenePlanning/ScenePlanningPanel';
 import './workspace-page.css';
 
 const isWorkspaceStep = (value: string | null): value is StepKey => !!value && steps.some((step) => step.id === value);
@@ -88,6 +89,7 @@ const WorkspacePage = () => {
   const briefOrigin = searchParams.get('briefOrigin');
   const assetBriefProjectId = searchParams.get('assetProjectId');
   const currentProjectId = searchParams.get('projectId') || projectId;
+  const visualView = searchParams.get('visualView') === 'canvas' ? 'canvas' : 'plan';
   const isAssetBriefDetail = briefOrigin === 'assets'
     && searchParams.get('briefDialog') === '1'
     && !!requestedBriefId;
@@ -96,7 +98,8 @@ const WorkspacePage = () => {
     activeStep === 'script-generator' ? 'script-workspace-main' : '',
     activeStep === 'selling-points' ? 'selling-workspace-main' : '',
     activeStep === 'storyboard' ? 'storyboard-workspace-main' : '',
-    activeStep === 'visual' || activeStep === 'video' ? 'visual-canvas-workspace-main' : '',
+    (activeStep === 'visual' && visualView === 'canvas') || activeStep === 'video' ? 'visual-canvas-workspace-main' : '',
+    activeStep === 'visual' && visualView === 'plan' ? 'scene-planning-workspace-main' : '',
   ].filter(Boolean).join(' ');
   const activeScriptModeVisual = scriptModeVisuals.find((item) => item.key === activeScriptMode);
 
@@ -170,7 +173,15 @@ const WorkspacePage = () => {
     setActiveStep(step);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set('step', step);
+    if (step !== 'visual') nextParams.delete('visualView');
     if (projectId) nextParams.set('projectId', projectId);
+    setSearchParams(nextParams, { replace: true });
+  };
+
+  const setVisualView = (view: 'plan' | 'canvas') => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (view === 'canvas') nextParams.set('visualView', 'canvas');
+    else nextParams.delete('visualView');
     setSearchParams(nextParams, { replace: true });
   };
 
@@ -287,7 +298,9 @@ const WorkspacePage = () => {
           </>
         );
       case 'visual':
-        return <VisualCanvasPanel mode="image" projectId={projectId} projectTitle={projectTitle} ensureProjectId={ensureProjectId} />;
+        return visualView === 'canvas'
+          ? <VisualCanvasPanel mode="image" projectId={projectId} projectTitle={projectTitle} ensureProjectId={ensureProjectId} />
+          : <ScenePlanningPanel key={projectId || 'draft'} projectId={projectId} projectTitle={projectTitle} onOpenCanvas={() => setVisualView('canvas')} />;
       case 'video':
         return <VisualCanvasPanel mode="video" projectId={projectId} projectTitle={projectTitle} ensureProjectId={ensureProjectId} />;
       case 'preview':
@@ -434,6 +447,17 @@ const WorkspacePage = () => {
                 <PlusCircleOutlined />新增脚本
               </button>
             </>
+          )}
+          {activeStep === 'visual' && (
+            <div className="scene-planning-view-switch" role="tablist" aria-label="第 4 步工作视图">
+              <button type="button" role="tab" aria-selected={visualView === 'plan'} className={visualView === 'plan' ? 'active' : ''} onClick={() => setVisualView('plan')}>场景规划</button>
+              <button type="button" role="tab" aria-selected={visualView === 'canvas'} className={visualView === 'canvas' ? 'active' : ''} onClick={() => setVisualView('canvas')}>画布制作</button>
+            </div>
+          )}
+          {(activeStep === 'visual' || activeStep === 'video') && activeIndex > 0 && (
+            <button className="previous-step-button" type="button" aria-label={`上一步：${steps[activeIndex - 1].name}`} title={`返回${steps[activeIndex - 1].name}`} onClick={() => handleStepChange(steps[activeIndex - 1].id)}>
+              <LeftOutlined />上一步
+            </button>
           )}
           <button className="next-step-button" onClick={handleNextStep}>
             下一步：{steps[activeIndex + 1]?.name || '完成'}

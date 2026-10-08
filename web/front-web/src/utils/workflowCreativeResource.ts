@@ -5,6 +5,8 @@ import { createWorkflowNodeData, type WorkflowNode, type WorkflowNodeData } from
 export function workflowResourceImageUrl(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined;
   const url = value.trim();
+  // Control bytes must be rejected before URL parsing normalizes them away.
+  // eslint-disable-next-line no-control-regex
   if (!url || url.length > 2048 || /[\s\\\u0000-\u001f\u007f-\u009f]/.test(url)) return undefined;
   if (url.startsWith('/') && !url.startsWith('//')) return url;
   if (!/^https?:\/\//i.test(url)) return undefined;
@@ -61,7 +63,9 @@ export function withoutDeletedNodeReferences(nodes: WorkflowNode[], deletedIds: 
     const marks = node.data.referenceMarks;
     const changedReferences = references?.some(id => deletedIds.has(id));
     const changedMarks = marks?.some(mark => deletedIds.has(mark.nodeId));
-    if (!changedReferences && !changedMarks) return node;
+    const changedFirstFrame = Boolean(node.data.firstFrameNodeId && deletedIds.has(node.data.firstFrameNodeId));
+    const changedLastFrame = Boolean(node.data.lastFrameNodeId && deletedIds.has(node.data.lastFrameNodeId));
+    if (!changedReferences && !changedMarks && !changedFirstFrame && !changedLastFrame) return node;
     const data = { ...node.data };
     if (changedReferences) {
       const kept = references!.flatMap((id, index) => deletedIds.has(id) ? [] : [{ id, label: node.data.referenceLabels?.[index] || titles.get(id) || '画布资源' }]);
@@ -69,6 +73,8 @@ export function withoutDeletedNodeReferences(nodes: WorkflowNode[], deletedIds: 
       data.referenceLabels = kept.map(item => item.label);
     }
     if (changedMarks) data.referenceMarks = marks!.filter(mark => !deletedIds.has(mark.nodeId));
+    if (changedFirstFrame) { data.firstFrameNodeId = undefined; data.firstFrameLabel = undefined; }
+    if (changedLastFrame) { data.lastFrameNodeId = undefined; data.lastFrameLabel = undefined; }
     return { ...node, data };
   });
 }

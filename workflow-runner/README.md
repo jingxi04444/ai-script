@@ -26,7 +26,7 @@ tail -f .run/workflow-runner.log
 cp .env.example .env
 ```
 
-编辑 `.env` 中的 MySQL、Redis 和 `WORKFLOW_PROVIDER_GATEWAY_TOKEN`，其中网关令牌必须与 Spring Boot 使用的值一致。不创建 `.env` 也可以启动，此时使用内置本地默认值并运行 Demo Skill。
+编辑 `.env` 中的 MySQL、Redis 和 `WORKFLOW_PROVIDER_GATEWAY_TOKEN`，其中网关令牌必须与 Spring Boot 使用的值一致。不创建 `.env` 也可以启动，但生成节点会明确失败，不会把 Demo 素材当作真实结果。只有显式设置 `WORKFLOW_DEMO_MODE_ENABLED=true` 才允许模拟生成。
 
 也可以手动启动：
 
@@ -62,7 +62,7 @@ WORKFLOW_PROVIDER_GATEWAY_TOKEN=replace-with-a-long-random-token
 WORKFLOW_PROVIDER_GATEWAY_ENABLED=true
 ```
 
-已支持 LLM 文本/脚本、图片、视频、TTS、批量 1—100 个素材镜头以及调用 `editor` / `video_editor` Provider 合成 1—20 条视频。关闭真实网关时仍会使用 Demo Skill，方便无模型配置的本地 UI 联调。
+已支持 LLM 文本/脚本、图片、视频、TTS、批量 1—100 个素材镜头以及调用 `editor` / `video_editor` Provider 合成 1—20 条视频。关闭真实网关时默认拒绝生成；若要做纯演示联调，需显式开启 `WORKFLOW_DEMO_MODE_ENABLED=true`。
 
 画布节点与 `provider_type` 的映射：
 

@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aiscript.modules.workflow.dto.WorkflowRunCreateDTO;
+import com.aiscript.modules.script.service.ScriptReviewService;
 import com.aiscript.modules.workflow.entity.AiWorkflowOutbox;
 import com.aiscript.modules.workflow.entity.AiWorkflowRun;
 import com.aiscript.modules.workflow.mapper.AiWorkflowNodeRunMapper;
@@ -36,13 +37,15 @@ class WorkflowRunServiceImplTest {
     private AiWorkflowOutboxMapper outboxMapper;
     @Mock
     private WorkflowService workflowService;
+    @Mock
+    private ScriptReviewService projectAccessService;
 
     private WorkflowRunServiceImpl service;
 
     @BeforeEach
     void setUp() {
         service = new WorkflowRunServiceImpl(
-            runMapper, nodeRunMapper, outboxMapper, workflowService, new ObjectMapper()
+            runMapper, nodeRunMapper, outboxMapper, workflowService, projectAccessService, new ObjectMapper()
         );
         LoginUser user = LoginUser.builder().userId(2).tenantId(1).build();
         SecurityContextHolder.getContext().setAuthentication(
@@ -73,6 +76,7 @@ class WorkflowRunServiceImplTest {
         assertThat(result.getId()).isEqualTo("9001");
         assertThat(result.getStatus()).isEqualTo("queued");
         assertThat(result.getTotalNodes()).isEqualTo(3);
+        verify(projectAccessService).internalAccessForProject(7);
         verify(outboxMapper).insert(any(AiWorkflowOutbox.class));
     }
 

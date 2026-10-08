@@ -60,6 +60,15 @@ const { workflowResourceImageUrl, characterResourceImages, withoutDeletedNodeRef
   await sourceModuleUrl(new URL('../src/utils/workflowCreativeResource.ts', import.meta.url)),
 );
 const initialState = store.getState();
+test('deleting a video frame source clears only affected roles and preserves other references', () => {
+  const remaining = { id: 'b', type: 'workflow', position: { x: 0, y: 0 }, data: createWorkflowNodeData('image') };
+  const video = { id: 'video', type: 'workflow', position: { x: 0, y: 0 }, data: { ...createWorkflowNodeData('video'), firstFrameNodeId: 'a', firstFrameLabel: '首帧', lastFrameNodeId: 'b', lastFrameLabel: '尾帧', referenceNodeIds: ['a', 'b'], referenceLabels: ['首帧', '尾帧'] } };
+  const cleaned = withoutDeletedNodeReferences([remaining, video], new Set(['a']));
+  assert.equal(cleaned[1].data.firstFrameNodeId, undefined);
+  assert.equal(cleaned[1].data.firstFrameLabel, undefined);
+  assert.equal(cleaned[1].data.lastFrameNodeId, 'b');
+  assert.deepEqual(cleaned[1].data.referenceLabels, ['尾帧']);
+});
 let savedStorageDescriptor;
 let memoryStorage;
 
@@ -123,6 +132,25 @@ function seedTarget(kind = 'image') {
   });
   return target.id;
 }
+
+test('a new canvas opens empty instead of silently inserting a video demo', () => {
+  store.getState().load('new-canvas-preview', 'image');
+  assert.equal(store.getState().projectKey, 'new-canvas-preview');
+  assert.deepEqual(graph(), { nodes: [], edges: [] });
+});
+
+test('loading a saved canvas preserves its nodes and connections', () => {
+  const savedGraph = {
+    version: 3,
+    nodes: [makeNode('saved-text', 'text', { prompt: '保留已有输入' }), makeNode('saved-video', 'video')],
+    edges: [{ id: 'saved-edge', source: 'saved-text', target: 'saved-video' }],
+  };
+  memoryStorage.setItem('ai-script:visual-workflow:v5:saved-canvas-preview', JSON.stringify(savedGraph));
+  store.getState().load('saved-canvas-preview', 'image');
+  assert.equal(nodeById('saved-text').data.prompt, '保留已有输入');
+  assert.deepEqual(store.getState().edges, savedGraph.edges);
+  assert.deepEqual(store.getState().nodes.map(node => node.id), ['saved-text', 'saved-video']);
+});
 
 test('one application creates independent gallery nodes including custom references with one checkpoint and a shared bundle', () => {
   const resource = character();
@@ -500,6 +528,16 @@ test('a complete five-view set round-trips through storage without collapsing in
   assert.equal(store.getState().edges.length, 6);
 });
 
+test('node-specific generation settings and independent frame roles survive storage reload', () => {
+  const targetId = seedTarget('video');
+  const settings = { firstFrameNodeId: 'previous-source', firstFrameLabel: '已有产品参考', lastFrameNodeId: 'previous-source', lastFrameLabel: '已有产品参考', language: 'English', audioSampleRate: '48k', audioFormat: 'mp3', speed: '1.10x', pitch: 2, volume: 0.8, negativePrompt: '模糊', seed: 42, autoLink: false };
+  store.getState().updateNodeData(targetId, settings);
+  store.getState().persist();
+  store.setState({ ...initialState, nodes: [], edges: [], past: [], future: [] }, true);
+  store.getState().load('character-store-test', 'video');
+  for (const [field, value] of Object.entries(settings)) assert.equal(nodeById(targetId).data[field], value, field);
+});
+
 test('persist/load preserves every independent view, bundle and references, including a deleted view remaining deleted', () => {
   const targetId = seedTarget('video');
   store.getState().applyCreativeResource(character(), { targetNodeId: targetId });
@@ -526,6 +564,27 @@ test('persist/load preserves every independent view, bundle and references, incl
   assert.ok(characterNodes().every(node => node.data.resourceBundleId && node.data.resourceViewLabel));
   assert.equal(store.getState().past.length, 0, 'loading resets history without rebuilding missing views');
   assert.equal(store.getState().mode, 'video');
+});
+
+test('arrange preserves every resource and edge and supports a single undo/redo', () => {
+  seedTarget('image');
+  const before = graph();
+  const history = store.getState().past.length;
+  assert.equal(store.getState().arrangeNodes(), 2);
+  const after = graph();
+  assert.notDeepEqual(after.nodes.map(n => n.position), before.nodes.map(n => n.position));
+  assert.deepEqual(after.edges, before.edges);
+  assert.deepEqual(after.nodes.map(n => n.data), before.nodes.map(n => n.data));
+  assert.equal(store.getState().past.length, history + 1);
+  store.getState().undo();
+  assert.deepEqual(graph(), before);
+  store.getState().redo();
+  assert.deepEqual(graph(), after);
+});
+
+test('arrange on an empty canvas does not add undo history', () => {
+  assert.equal(store.getState().arrangeNodes(), 0);
+  assert.equal(store.getState().past.length, 0);
 });
 
 for (const type of ['style', 'effect']) {

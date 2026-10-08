@@ -12,16 +12,18 @@ class SkillRegistry:
         simulation_delay_ms: int = 180,
         provider_gateway: SpringProviderGateway | None = None,
         max_concurrency: int = 4,
+        allow_simulation: bool = True,
     ):
         self._simulation_delay_ms = simulation_delay_ms
+        self._allow_simulation = allow_simulation
         self._skills: dict[str, Skill] = {}
         # A director is a real browser-authored resource, even in runner demo mode.
         self.register(DirectorResourceSkill())
         for kind in ("character", "style", "effect"):
             self.register(CreativeResourceSkill(kind))
+        for kind in ("product", "scene", "result", "note"):
+            self.register(ResourceSkill(kind))
         if provider_gateway is not None:
-            for kind in ("product", "scene", "result"):
-                self.register(ResourceSkill(kind))
             for kind in (
                 "text", "scriptGenerator", "prompt", "categorySkill", "storyboard",
                 "image", "video", "music", "voice", "audio", "editor", "export",
@@ -44,6 +46,8 @@ class SkillRegistry:
             return self._skills[resource_code]
         if kind == "batchMaterial" and "provider.batch-material" in self._skills:
             return self._skills["provider.batch-material"]
+        if not self._allow_simulation:
+            raise ValueError(f"节点 {kind} 未配置真实模型适配器，不能用演示结果代替生成")
         if builtin_code not in self._skills:
             self._skills[builtin_code] = SimulatedSkill(kind, self._simulation_delay_ms)
         return self._skills[builtin_code]

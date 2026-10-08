@@ -1,38 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  AimOutlined,
-  ApartmentOutlined,
-  AppstoreOutlined,
-  ClearOutlined,
-  CloseOutlined,
-  CloudOutlined,
-  CopyOutlined,
-  DeleteOutlined,
-  DashboardOutlined,
-  DownloadOutlined,
-  DragOutlined,
-  EyeOutlined,
-  HistoryOutlined,
-  LayoutOutlined,
-  LoadingOutlined,
-  NodeIndexOutlined,
-  PictureOutlined,
-  PlayCircleFilled,
-  PlusOutlined,
-  QuestionCircleOutlined,
-  RedoOutlined,
-  RobotOutlined,
-  SaveOutlined,
-  SendOutlined,
-  ShareAltOutlined,
-  ShopOutlined,
-  TagsOutlined,
-  ThunderboltOutlined,
-  UndoOutlined,
-  VideoCameraOutlined,
-} from '@ant-design/icons';
-import { message, Modal } from 'antd';
+import CanvasIcon from './CanvasIcon';
+import { message, Modal, Tooltip } from 'antd';
 import {
   MiniMap,
   ConnectionMode,
@@ -45,11 +14,11 @@ import {
   useReactFlow,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { generationApi } from '../../../api/generation';
 import { workflowApi } from '../../../api/workflow';
 import { useWorkflowStore } from '../../../stores/workflowStore';
 import { useAuthStore } from '../../../stores/authStore';
 import { config } from '../../../config';
+import { referenceKinds, referenceSelectionPatch } from '../../../utils/workflowReferences';
 import { isCreativeResourceType, isLegacyUploadedCharacterResource, type CreativeResourceType } from '../../../types/creativeResource';
 import type { WorkflowEdge, WorkflowMode, WorkflowNode, WorkflowNodeKind, WorkflowRun, WorkflowRunEvent } from '../../../types/workflow';
 import NodeLibrary from './NodeLibrary';
@@ -58,6 +27,7 @@ import WorkflowMarkSelector from './WorkflowMarkSelector';
 import WorkflowResourceInspector from './WorkflowResourceInspector';
 import WorkflowRunMonitor from './WorkflowRunMonitor';
 import './visual-canvas-panel.css';
+import './canvas-studio.css';
 
 interface VisualCanvasPanelProps {
   mode: WorkflowMode;
@@ -102,13 +72,8 @@ interface CanvasSelectionState {
   mode: 'reference' | 'mark';
   originNodeId: string;
   selectedNodeIds: string[];
+  role?: 'firstFrame' | 'lastFrame';
 }
-
-const referenceEligibleKinds = new Set<WorkflowNodeKind>([
-  'storyboard', 'character', 'style', 'effect', 'scene', 'product', 'director', 'categorySkill', 'prompt', 'image', 'batchMaterial', 'result', 'video', 'editor', 'export',
-]);
-
-const markEligibleKinds = new Set<WorkflowNodeKind>(['character', 'scene', 'product', 'image', 'result']);
 
 const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工作区', ensureProjectId }: VisualCanvasPanelProps) => {
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -116,10 +81,14 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
   const localPersistFailedRef = useRef(false);
   const clipboardRef = useRef<WorkflowClipboard | null>(null);
   const workflowRunAbortRef = useRef<AbortController | null>(null);
+  const arrangeFitFrameRef = useRef<number>();
   const [agentPrompt, setAgentPrompt] = useState('');
   const [libraryOpen, setLibraryOpen] = useState(false);
   const [agentOpen, setAgentOpen] = useState(false);
   const [showMinimap, setShowMinimap] = useState(false);
+  const [activeTool, setActiveTool] = useState<'select' | 'pan'>('select');
+  const [canvasZoom, setCanvasZoom] = useState(1);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [workflowRunning, setWorkflowRunning] = useState(false);
   const [runMonitorOpen, setRunMonitorOpen] = useState(false);
   const [activeRun, setActiveRun] = useState<WorkflowRun | null>(null);
@@ -162,7 +131,11 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
   const consumeRunRequest = useWorkflowStore((state) => state.consumeRunRequest);
   const createAgentDraft = useWorkflowStore((state) => state.createAgentDraft);
   const createVideoProductionDraft = useWorkflowStore((state) => state.createVideoProductionDraft);
-  const { fitView, fitBounds, screenToFlowPosition } = useReactFlow<WorkflowNode>();
+  const { fitView, fitBounds, screenToFlowPosition, zoomTo, setCenter, getZoom } = useReactFlow<WorkflowNode>();
+
+  useEffect(() => () => {
+    if (arrangeFitFrameRef.current !== undefined) cancelAnimationFrame(arrangeFitFrameRef.current);
+  }, []);
 
   const selectedEditorNode = useMemo(() => {
     const selectedNodes = nodes.filter((node) => node.selected);
@@ -182,7 +155,8 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
   );
   const canvasNodes = useMemo<WorkflowNode[]>(() => {
     if (!canvasSelection) return nodes;
-    const eligibleKinds = canvasSelection.mode === 'mark' ? markEligibleKinds : referenceEligibleKinds;
+    const originKind = nodes.find(node => node.id === canvasSelection.originNodeId)?.data.kind;
+    const eligibleKinds = referenceKinds(originKind, canvasSelection.mode, canvasSelection.role);
     const selectedIds = new Set(canvasSelection.selectedNodeIds);
     return nodes.map((node) => ({
       ...node,
@@ -197,6 +171,15 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
       },
     }));
   }, [canvasSelection, nodes]);
+  const canvasEdges = useMemo(() => edges.map(edge => ({
+    ...edge,
+    type: 'default',
+    animated: workflowRunning,
+  })), [edges, workflowRunning]);
+
+  useEffect(() => {
+    if (moreOpen) wrapperRef.current?.querySelector<HTMLButtonElement>('.canvas-more-menu button:not(:disabled)')?.focus();
+  }, [moreOpen]);
 
   const updateSelectionEditorAnchor = useCallback(() => {
     const wrapper = wrapperRef.current;
@@ -212,7 +195,7 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
     const wrapperRect = wrapper.getBoundingClientRect();
     const nodeRect = nodeElement.getBoundingClientRect();
     const isVideoEditor = selectedEditorNodeKind === 'video';
-    const preferredWidth = isVideoEditor ? 820 : 660;
+    const preferredWidth = 660;
     const horizontalInset = 16;
     const visibleLeft = Math.max(0, -wrapperRect.left);
     const visibleRight = Math.min(wrapperRect.width, window.innerWidth - wrapperRect.left);
@@ -225,12 +208,12 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
       Math.min(nodeCenter, visibleRight - horizontalInset - halfWidth),
     );
     const renderedEditorHeight = wrapper.querySelector<HTMLElement>('.workflow-editor-overlay')?.getBoundingClientRect().height;
-    const estimatedHeight = renderedEditorHeight || (selectedEditorNodeKind === 'text' ? 250
-      : isVideoEditor ? 300 : 250);
+    const estimatedHeight = renderedEditorHeight || (selectedEditorNodeKind === 'text' ? 152
+      : isVideoEditor ? 210 : 194);
     const below = nodeRect.bottom - wrapperRect.top + 8;
     const above = nodeRect.top - wrapperRect.top - estimatedHeight - 8;
     const bottomReserve = 72;
-    const top = below + estimatedHeight <= wrapperRect.height - bottomReserve ? below : Math.max(16, above);
+    const top = below + estimatedHeight <= wrapperRect.height - bottomReserve ? below : Math.max(64, Math.min(above, wrapperRect.height - estimatedHeight - bottomReserve));
     setSelectionEditorAnchor({ left, top, width });
   }, [selectedEditorNodeId, selectedEditorNodeKind]);
 
@@ -239,6 +222,7 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
     return () => window.cancelAnimationFrame(frame);
   }, [selectedEditorNode?.position.x, selectedEditorNode?.position.y, updateSelectionEditorAnchor]);
 
+  const editorOverlayMounted = Boolean(selectionEditorAnchor) && !canvasSelection;
   useEffect(() => {
     window.addEventListener('resize', updateSelectionEditorAnchor);
     return () => window.removeEventListener('resize', updateSelectionEditorAnchor);
@@ -251,7 +235,7 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
     const observer = new ResizeObserver(() => updateSelectionEditorAnchor());
     observer.observe(overlay);
     return () => observer.disconnect();
-  }, [selectedEditorNodeId, selectedEditorNodeKind, updateSelectionEditorAnchor]);
+  }, [editorOverlayMounted, selectedEditorNodeId, selectedEditorNodeKind, updateSelectionEditorAnchor]);
 
   const selectedCount = useMemo(
     () => nodes.reduce((count, node) => count + (node.selected ? 1 : 0), 0) + edges.reduce((count, edge) => count + (edge.selected ? 1 : 0), 0),
@@ -320,8 +304,16 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
 
   useEffect(() => {
     load(projectId, mode);
-    window.setTimeout(() => fitView({ padding: 0.1, minZoom: 0.18, maxZoom: 0.82, duration: 520 }), 80);
-  }, [fitView, load, mode, projectId]);
+    const timer = window.setTimeout(() => {
+      if (useWorkflowStore.getState().nodes.length) {
+        void fitView({ padding: 0.1, minZoom: 0.18, maxZoom: 0.82, duration: 520 });
+      } else {
+        void zoomTo(1);
+        setCanvasZoom(1);
+      }
+    }, 80);
+    return () => window.clearTimeout(timer);
+  }, [fitView, load, mode, projectId, zoomTo]);
 
   useEffect(() => () => workflowRunAbortRef.current?.abort(), []);
 
@@ -356,6 +348,21 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
       window.clearInterval(timer);
     };
   }, [activeRun?.id, activeRun?.status, activeRunProjectId]);
+
+  useEffect(() => {
+    if (!activeRun || !activeRunProjectId) return;
+    activeRun.nodes.forEach(nodeRun => {
+      let output: Record<string, unknown> = {};
+      try { output = nodeRun.outputJson ? JSON.parse(nodeRun.outputJson) as Record<string, unknown> : {}; }
+      catch { output = {}; }
+      updateNodeData(nodeRun.nodeId, {
+        status: nodeRun.status === 'success' ? 'success' : nodeRun.status === 'failed' ? 'failed' : nodeRun.status === 'running' ? 'running' : 'queued',
+        progress: nodeRun.progress, taskId: activeRun.id,
+        ...(typeof output.assetUrl === 'string' ? { outputUrl: output.assetUrl } : {}),
+        ...(readTextOutput(output) ? { outputText: readTextOutput(output) } : {}),
+      });
+    });
+  }, [activeRun, activeRunProjectId, updateNodeData]);
 
   useEffect(() => {
     window.clearTimeout(persistTimerRef.current);
@@ -437,70 +444,55 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
       return;
     }
     const runNode = async () => {
-      updateNodeData(node.id, { status: 'running', progress: 18, taskId: undefined });
+      const executable = new Set<WorkflowNodeKind>(['text', 'scriptGenerator', 'prompt', 'categorySkill', 'storyboard', 'image', 'video', 'music', 'voice', 'batchMaterial', 'editor', 'export']);
+      if (!executable.has(node.data.kind)) {
+        message.info('这是资源或编辑节点，请在画布中配置后运行其下游生成节点');
+        return;
+      }
+      if (config.useMock) {
+        message.warning('当前为演示模式，未连接真实模型；请切换到正式后端后运行');
+        return;
+      }
+      updateNodeData(node.id, { status: 'queued', progress: 0, taskId: undefined });
       try {
-        if (node.data.kind === 'text') {
-          await wait(520);
-          updateNodeData(node.id, {
-            status: 'success',
-            progress: 100,
-            taskId: `preview-text-${Date.now()}`,
-            outputText: '这是文本模型返回结果的演示位置。接入并启动真实模型服务后，这里会显示模型生成的完整文本，而输入指令仍保留在下方编辑框中。',
-          });
-          message.success('文本生成完成，结果已写回节点');
-          return;
+        const currentProjectId = await ensureProjectId();
+        const current = useWorkflowStore.getState();
+        const selected = new Set([node.id]);
+        const references = (item: WorkflowNode) => [
+          ...(item.data.referenceNodeIds || []), item.data.firstFrameNodeId, item.data.lastFrameNodeId,
+        ].filter((id): id is string => typeof id === 'string' && !!id);
+        const allEdges = [...current.edges];
+        current.nodes.forEach(item => references(item).forEach(source => {
+          if (source !== item.id && !allEdges.some(edge => edge.source === source && edge.target === item.id)) {
+            allEdges.push({ id: `reference-${source}-${item.id}`, source, target: item.id });
+          }
+        }));
+        let changed = true;
+        while (changed) {
+          const size = selected.size;
+          allEdges.forEach(edge => { if (selected.has(edge.target)) selected.add(edge.source); });
+          changed = selected.size !== size;
         }
-        if (node.data.kind === 'image') {
-          await wait(680);
-          updateNodeData(node.id, {
-            status: 'success',
-            progress: 100,
-            taskId: `preview-image-${Date.now()}`,
-            outputUrl: '/demo-media/skincare-lifestyle.jpg',
-          });
-          message.success('图片生成完成，已写回画布节点');
-          return;
-        }
-        if (node.data.kind === 'video') {
-          const currentProjectId = await ensureProjectId();
-          const result = await generationApi.generateVideo({
-            projectId: currentProjectId,
-            prompt: node.data.prompt,
-            durationSeconds: node.data.durationSeconds || 5,
-            tagsJson: JSON.stringify({
-              source: 'visual-canvas',
-              nodeId: node.id,
-              model: node.data.model,
-              batchSize: node.data.batchSize,
-            }),
-          });
-          updateNodeData(node.id, { status: 'queued', progress: 28, taskId: result.taskId || result.id });
-          message.success('视频镜头已进入 Provider 生成队列');
-          return;
-        }
-        if (node.data.kind === 'voice') {
-          const currentProjectId = await ensureProjectId();
-          const result = await generationApi.createDubbing({
-            projectId: currentProjectId,
-            text: node.data.prompt || '读取上游脚本生成口播音轨',
-            mode: 'tts',
-            voice: node.data.voice,
-            speed: node.data.speed,
-          });
-          updateNodeData(node.id, { status: 'queued', progress: 28, taskId: result.taskId || result.id });
-          message.success('配音任务已进入生成队列');
-          return;
-        }
-        await wait(520);
-        updateNodeData(node.id, { status: 'success', progress: 100, taskId: `preview-${Date.now()}` });
-        message.success(`${node.data.title}试运行完成`);
-      } catch {
+        const graphJson = JSON.stringify({
+          nodes: current.nodes.filter(item => selected.has(item.id)).map(item => ({ ...item, selected: false })),
+          edges: allEdges.filter(edge => selected.has(edge.source) && selected.has(edge.target)).map(edge => ({ ...edge, selected: false })),
+        });
+        const validation = await workflowApi.validate(currentProjectId, graphJson);
+        if (!validation.valid) throw new Error(validation.errors[0] || '节点依赖关系无效');
+        const run = await workflowApi.startRun(currentProjectId, {
+          mode, graphJson,
+          idempotencyKey: `node-${currentProjectId}-${node.id}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        });
+        setActiveRun(run); setActiveRunProjectId(currentProjectId); setRunMonitorOpen(true);
+        selected.forEach(id => updateNodeData(id, { status: 'queued', progress: 0, taskId: run.id }));
+        message.info(`已提交 ${validation.nodeCount} 个节点（包含必要上游），执行状态可在监控面板查看`);
+      } catch (error) {
         updateNodeData(node.id, { status: 'failed', progress: 0 });
-        message.error(`${node.data.title}运行失败`);
+        message.error(error instanceof Error ? error.message : `${node.data.title}运行失败`);
       }
     };
     void runNode();
-  }, [consumeRunRequest, ensureProjectId, openCreativeLibrary, openDirector, pendingRunNodeId, updateNodeData]);
+  }, [consumeRunRequest, ensureProjectId, mode, openCreativeLibrary, openDirector, pendingRunNodeId, updateNodeData]);
 
   const isValidConnection: IsValidConnection = useCallback((connection) => {
     if (!connection.source || !connection.target || connection.source === connection.target) return false;
@@ -519,7 +511,7 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
   const handleConnect: OnConnect = useCallback((connection) => connect(connection), [connect]);
   const handleNodeDragStart: OnNodeDrag<WorkflowNode> = useCallback(() => checkpoint(), [checkpoint]);
 
-  const startCanvasSelection = useCallback((mode: 'reference' | 'mark') => {
+  const startCanvasSelection = useCallback((mode: 'reference' | 'mark', role?: 'firstFrame' | 'lastFrame') => {
     if (!selectedEditorNode) return;
     setContextMenu(null);
     setLibraryOpen(false);
@@ -529,7 +521,8 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
     setCanvasSelection({
       mode,
       originNodeId: selectedEditorNode.id,
-      selectedNodeIds: mode === 'reference' ? selectedEditorNode.data.referenceNodeIds || [] : [],
+      role,
+      selectedNodeIds: mode === 'reference' ? role ? [role === 'firstFrame' ? selectedEditorNode.data.firstFrameNodeId : selectedEditorNode.data.lastFrameNodeId].filter((id): id is string => Boolean(id)) : selectedEditorNode.data.referenceNodeIds || [] : [],
     });
   }, [selectedEditorNode]);
 
@@ -544,7 +537,8 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
     if (!canvasSelection) return;
     event.preventDefault();
     event.stopPropagation();
-    const eligibleKinds = canvasSelection.mode === 'mark' ? markEligibleKinds : referenceEligibleKinds;
+    const originKind = nodes.find(node => node.id === canvasSelection.originNodeId)?.data.kind;
+    const eligibleKinds = referenceKinds(originKind, canvasSelection.mode, canvasSelection.role);
     if (node.id === canvasSelection.originNodeId || !eligibleKinds.has(node.data.kind)) {
       keepOriginSelected(canvasSelection.originNodeId);
       message.info(canvasSelection.mode === 'mark' ? '请选择一个图片资源节点' : '这个节点不能作为当前输入的参考');
@@ -567,7 +561,7 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
         ...current,
         selectedNodeIds: exists
           ? current.selectedNodeIds.filter((id) => id !== node.id)
-          : [...current.selectedNodeIds, node.id],
+          : current.role ? [node.id] : [...current.selectedNodeIds, node.id],
       };
     });
   }, [canvasSelection, keepOriginSelected, nodes]);
@@ -576,11 +570,9 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
     if (!canvasSelection) return;
     if (canvasSelection.mode === 'reference') {
       const selectedIds = new Set(canvasSelection.selectedNodeIds);
-      updateNodeData(canvasSelection.originNodeId, {
-        referenceNodeIds: canvasSelection.selectedNodeIds,
-        referenceLabels: nodes.filter((node) => selectedIds.has(node.id)).map((node) => node.data.title),
-      });
-      message.success(canvasSelection.selectedNodeIds.length ? `已添加 ${canvasSelection.selectedNodeIds.length} 个画布参考` : '已清空画布参考');
+      const origin = nodes.find(node => node.id === canvasSelection.originNodeId);
+      if (origin) updateNodeData(canvasSelection.originNodeId, referenceSelectionPatch(origin.data, canvasSelection.selectedNodeIds, id => nodes.find(node => node.id === id)?.data.title || '参考素材', canvasSelection.role));
+      message.success(selectedIds.size ? `已添加 ${selectedIds.size} 个画布参考` : '已清空画布参考');
     }
     keepOriginSelected(canvasSelection.originNodeId);
     setCanvasSelection(null);
@@ -637,10 +629,11 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
     const rect = wrapperRef.current?.getBoundingClientRect();
     const maxWidth = rect?.width || window.innerWidth;
     const maxHeight = rect?.height || window.innerHeight;
+    const menuHeight = Math.min(660, Math.max(0, window.innerHeight - 190));
     setLibraryAnchor({
       ...menu,
       x: Math.max(10, Math.min(menu.x, maxWidth - 258)),
-      y: Math.max(10, Math.min(menu.y, maxHeight - Math.min(520, maxHeight - 20))),
+      y: Math.max(10, Math.min(menu.y, maxHeight - menuHeight - 76)),
     });
     setLibraryOpen(true);
     setContextMenu(null);
@@ -655,40 +648,33 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
   }, [addNode, openDirector, screenToFlowPosition]);
 
   const arrangeNodes = useCallback(() => {
-    checkpoint();
-    const columnOrder: Record<WorkflowNodeKind, number> = {
-      storyboard: 0,
-      scriptGenerator: 1,
-      text: 1,
-      character: 0,
-      style: 0,
-      effect: 0,
-      scene: 0,
-      director: 1,
-      product: 0,
-      note: 0,
-      music: 2,
-      categorySkill: 1,
-      image: 1,
-      prompt: 1,
-      batchMaterial: 2,
-      result: 1,
-      video: 2,
-      voice: 2,
-      editor: 3,
-      export: 4,
-    };
-    const nextYByColumn = new Map<number, number>();
-    useWorkflowStore.setState((state) => ({
-      nodes: state.nodes.map((node) => {
-        const column = columnOrder[node.data.kind];
-        const y = nextYByColumn.get(column) || 80;
-        nextYByColumn.set(column, y + 250);
-        return { ...node, position: { x: 90 + column * 350, y } };
-      }),
-    }));
-    window.setTimeout(() => fitView({ padding: 0.16, duration: 480 }), 30);
-  }, [checkpoint, fitView]);
+    const count = useWorkflowStore.getState().arrangeNodes();
+    if (!count) {
+      message.info('画布暂无节点，添加节点后即可整理');
+      return;
+    }
+    if (arrangeFitFrameRef.current !== undefined) cancelAnimationFrame(arrangeFitFrameRef.current);
+    // Wait for React Flow to receive the new positions before fitting the viewport.
+    arrangeFitFrameRef.current = requestAnimationFrame(() => {
+      arrangeFitFrameRef.current = requestAnimationFrame(() => {
+        void fitView({ padding: 0.2, duration: 420, maxZoom: 1 });
+      });
+    });
+    message.success(`已整理 ${count} 个节点，可通过 ⌘ / Ctrl + Z 撤销`);
+  }, [fitView]);
+
+  const navigateMinimap = useCallback((_event: React.MouseEvent, position: { x: number; y: number }) => {
+    void setCenter(position.x, position.y, { zoom: getZoom(), duration: 200 });
+  }, [getZoom, setCenter]);
+
+  const focusMinimapNode = useCallback((event: React.MouseEvent, node: WorkflowNode) => {
+    event.stopPropagation();
+    void setCenter(
+      node.position.x + (node.measured?.width || node.width || 340) / 2,
+      node.position.y + (node.measured?.height || node.height || 300) / 2,
+      { zoom: getZoom(), duration: 200 },
+    );
+  }, [getZoom, setCenter]);
 
   const submitAgentDraft = () => {
     const prompt = agentPrompt.trim();
@@ -1036,7 +1022,7 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
       {activeDirectorNodeId ? createPortal(
         <Suspense fallback={
           <div className="director-studio-loading" role="status">
-            <span><LoadingOutlined spin /> 正在加载 3D 导演台…</span>
+            <span><CanvasIcon name="LoadingOutlined" spin /> 正在加载 3D 导演台…</span>
             <button type="button" onClick={closeDirector}>返回画布</button>
           </div>
         }>
@@ -1045,10 +1031,14 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
         document.body,
       ) : null}
       <div className="workflow-canvas-stage">
-        <div className="workflow-flow-wrap" onDrop={handleDrop} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }}>
+        <div className="workflow-flow-wrap" onDoubleClick={event => {
+          if ((event.target as HTMLElement).classList.contains('react-flow__pane')) {
+            openLibraryAtContext(menuPosition(event));
+          }
+        }} onDrop={handleDrop} onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = 'move'; }}>
           <ReactFlow<WorkflowNode>
             nodes={canvasNodes}
-            edges={edges}
+            edges={canvasEdges}
             nodeTypes={nodeTypes}
             onNodesChange={onNodesChange}
             onEdgesChange={onEdgesChange}
@@ -1064,26 +1054,36 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
             }}
             onNodeContextMenu={handleNodeContextMenu}
             onPaneContextMenu={handlePaneContextMenu}
-            onPaneClick={() => { setContextMenu(null); setLibraryAnchor(null); }}
+            onPaneClick={() => { setContextMenu(null); setLibraryAnchor(null); setLibraryOpen(false); setMoreOpen(false); }}
             onMoveStart={() => setContextMenu(null)}
-            onMove={updateSelectionEditorAnchor}
+            onMove={(_event, viewport) => { updateSelectionEditorAnchor(); setCanvasZoom(viewport.zoom); }}
             isValidConnection={isValidConnection}
             deleteKeyCode={null}
-            selectionOnDrag={!canvasSelection}
+            selectionOnDrag={!canvasSelection && activeTool === 'select'}
+            panOnDrag={activeTool === 'pan' ? true : [1, 2]}
             nodesDraggable={!canvasSelection}
             nodesConnectable={!canvasSelection}
             panOnScroll
+            zoomOnDoubleClick={false}
             minZoom={0.18}
             maxZoom={1.8}
             connectionLineStyle={{ stroke: '#88bfff', strokeWidth: 2 }}
-            defaultEdgeOptions={{ type: 'smoothstep', animated: true }}
+            defaultEdgeOptions={{ type: 'default', animated: false }}
             proOptions={{ hideAttribution: true }}
           >
             {showMinimap ? (
               <MiniMap
                 className="workflow-minimap"
+                position="bottom-left"
+                ariaLabel="画布小地图"
                 pannable
                 zoomable
+                onClick={navigateMinimap}
+                onNodeClick={focusMinimapNode}
+                nodeStrokeColor="#a6a6a6"
+                nodeStrokeWidth={1}
+                maskStrokeColor="#858585"
+                maskStrokeWidth={1}
                 nodeColor={(node) => {
                   const kind = (node.data as { kind?: WorkflowNodeKind })?.kind;
                   if (kind === 'image' || kind === 'result') return '#e8e8e8';
@@ -1098,7 +1098,12 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
             ) : null}
           </ReactFlow>
 
-          {selectedEditorNode && selectionEditorAnchor ? (
+          {showMinimap ? <>
+            <div className="canvas-minimap-hint">点击定位 · 拖动平移 · 滚轮缩放</div>
+            {!nodes.some(node => !node.hidden) ? <div className="canvas-minimap-empty">添加节点后显示概览</div> : null}
+          </> : null}
+
+          {selectedEditorNode && selectionEditorAnchor && !canvasSelection ? (
             <div
               className={`workflow-editor-overlay kind-${selectedEditorNode.data.kind}`}
               style={{ left: selectionEditorAnchor.left, top: selectionEditorAnchor.top, width: selectionEditorAnchor.width }}
@@ -1113,20 +1118,20 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
             <>
               <div className="workflow-canvas-selection-shade" aria-hidden="true" />
               <div className={`workflow-canvas-selection-banner mode-${canvasSelection.mode}`} role="status">
-                <span>{canvasSelection.mode === 'reference' ? <PictureOutlined /> : <TagsOutlined />}</span>
+                <span>{canvasSelection.mode === 'reference' ? <CanvasIcon name="PictureOutlined" /> : <CanvasIcon name="TagsOutlined" />}</span>
                 <p>
                   <strong>{canvasSelection.mode === 'reference' ? '从画布选择参考' : '元素选择模式'}</strong>
-                  <small>{canvasSelection.mode === 'reference' ? '点击画布中的资源节点，可多选' : '点击图片选择局部元素'}</small>
+                  <small>{canvasSelection.mode === 'reference' ? canvasSelection.role ? `选择一张${canvasSelection.role === 'firstFrame' ? '首帧' : '尾帧'}图片` : '点击画布中的资源节点，可多选' : '点击图片选择局部元素'}</small>
                 </p>
                 <button type="button" onClick={finishReferenceSelection}>返回节点</button>
                 <button
                   type="button"
                   aria-label="退出选择模式"
                   onClick={() => { keepOriginSelected(canvasSelection.originNodeId); setCanvasSelection(null); }}
-                ><CloseOutlined /></button>
+                ><CanvasIcon name="CloseOutlined" /></button>
               </div>
               <div className="workflow-canvas-selection-tip">
-                {canvasSelection.mode === 'reference' ? <><PlusOutlined />在当前画布中添加参考</> : <><TagsOutlined />选择图片后标记产品、文字或背景</>}
+                {canvasSelection.mode === 'reference' ? <><CanvasIcon name="PlusOutlined" />在当前画布中添加参考</> : <><CanvasIcon name="TagsOutlined" />选择图片后标记产品、文字或背景</>}
               </div>
             </>
           ) : null}
@@ -1162,19 +1167,19 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
             <aside className="workflow-result-tray" aria-label="成片结果">
               <header>
                 <div><small>DEMO OUTPUT</small><strong>15 条视频已完成</strong></div>
-                <button type="button" aria-label="关闭成片结果" onClick={() => setResultOpen(false)}><CloseOutlined /></button>
+                <button type="button" aria-label="关闭成片结果" onClick={() => setResultOpen(false)}><CanvasIcon name="CloseOutlined" /></button>
               </header>
               <div className="workflow-result-grid">
                 {['卖点直给版', '场景种草版', '成分专业版'].map((name, index) => (
                   <button type="button" key={name} onClick={() => message.success(`正在预览：${name}`)}>
-                    <span><VideoCameraOutlined /><em>0{index + 1}</em><i>{index === 0 ? '00:28' : index === 1 ? '00:32' : '00:25'}</i></span>
+                    <span><CanvasIcon name="VideoCameraOutlined" /><em>0{index + 1}</em><i>{index === 0 ? '00:28' : index === 1 ? '00:32' : '00:25'}</i></span>
                     <strong>{name}</strong><small>9:16 · 1080P</small>
                   </button>
                 ))}
               </div>
               <footer>
-                <button type="button" onClick={() => message.info('Demo 已模拟打包 15 条成片')}><DownloadOutlined />批量导出</button>
-                <button type="button" className="primary" onClick={() => message.success('正在预览第一条成片')}><EyeOutlined />预览成片</button>
+                <button type="button" onClick={() => message.info('Demo 已模拟打包 15 条成片')}><CanvasIcon name="DownloadOutlined" />批量导出</button>
+                <button type="button" className="primary" onClick={() => message.success('正在预览第一条成片')}><CanvasIcon name="EyeOutlined" />预览成片</button>
               </footer>
             </aside>
           ) : null}
@@ -1207,33 +1212,33 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
             >
               {contextMenu.nodeId ? (
                 <>
-                  <button onClick={() => { message.success('节点配置已保存到当前画布'); setContextMenu(null); }}><SaveOutlined /><span>保存到我的资产</span></button>
-                  <button onClick={() => showCreativeLibrary('character', contextMenu.flowPosition)}><RobotOutlined /><span>角色库</span></button>
+                  <button onClick={() => { message.success('节点配置已保存到当前画布'); setContextMenu(null); }}><CanvasIcon name="SaveOutlined" /><span>保存到我的资产</span></button>
+                  <button onClick={() => showCreativeLibrary('character', contextMenu.flowPosition)}><CanvasIcon name="RobotOutlined" /><span>角色库</span></button>
                   <i />
-                  <button onClick={() => { copySelection(); setContextMenu(null); }}><CopyOutlined /><span>复制节点</span><kbd>⌘C</kbd></button>
-                  <button onClick={() => { duplicateSelection(); setContextMenu(null); }}><PlusOutlined /><span>创建副本</span><kbd>⌘D</kbd></button>
-                  <button onClick={() => { pasteClipboard(contextMenu.flowPosition); setContextMenu(null); }}><AppstoreOutlined /><span>粘贴</span><kbd>⌘V</kbd></button>
-                  <button className="is-danger" onClick={() => { deleteSelection(); setContextMenu(null); }}><DeleteOutlined /><span>删除</span><kbd>⌫</kbd></button>
+                  <button onClick={() => { copySelection(); setContextMenu(null); }}><CanvasIcon name="CopyOutlined" /><span>复制节点</span><kbd>⌘C</kbd></button>
+                  <button onClick={() => { duplicateSelection(); setContextMenu(null); }}><CanvasIcon name="PlusOutlined" /><span>创建副本</span><kbd>⌘D</kbd></button>
+                  <button onClick={() => { pasteClipboard(contextMenu.flowPosition); setContextMenu(null); }}><CanvasIcon name="AppstoreOutlined" /><span>粘贴</span><kbd>⌘V</kbd></button>
+                  <button className="is-danger" onClick={() => { deleteSelection(); setContextMenu(null); }}><CanvasIcon name="DeleteOutlined" /><span>删除</span><kbd>⌫</kbd></button>
                 </>
               ) : (
                 <>
-                  <button onClick={() => { addNode('product', contextMenu.flowPosition); setContextMenu(null); }}><PictureOutlined /><span>上传产品素材</span></button>
-                  <button onClick={() => showCreativeLibrary('character', contextMenu.flowPosition)}><RobotOutlined /><span>角色库</span></button>
-                  <button onClick={() => showCreativeLibrary('style', contextMenu.flowPosition)}><PictureOutlined /><span>风格库</span></button>
-                  <button onClick={() => showCreativeLibrary('effect', contextMenu.flowPosition)}><ThunderboltOutlined /><span>特效库</span></button>
+                  <button onClick={() => { addNode('product', contextMenu.flowPosition); setContextMenu(null); }}><CanvasIcon name="PictureOutlined" /><span>上传产品素材</span></button>
+                  <button onClick={() => showCreativeLibrary('character', contextMenu.flowPosition)}><CanvasIcon name="RobotOutlined" /><span>角色库</span></button>
+                  <button onClick={() => showCreativeLibrary('style', contextMenu.flowPosition)}><CanvasIcon name="PictureOutlined" /><span>风格库</span></button>
+                  <button onClick={() => showCreativeLibrary('effect', contextMenu.flowPosition)}><CanvasIcon name="ThunderboltOutlined" /><span>特效库</span></button>
                   <button onClick={() => {
                     const nodeId = addNode('director', contextMenu.flowPosition);
                     setContextMenu(null);
                     openDirector(nodeId);
-                  }}><VideoCameraOutlined /><span>创建导演台</span></button>
-                  <button onClick={() => openLibraryAtContext(contextMenu)}><PlusOutlined /><span>添加节点</span></button>
+                  }}><CanvasIcon name="VideoCameraOutlined" /><span>创建导演台</span></button>
+                  <button onClick={() => openLibraryAtContext(contextMenu)}><CanvasIcon name="PlusOutlined" /><span>添加节点</span></button>
                   <i />
-                  <button disabled={!pastCount} onClick={() => { undo(); setContextMenu(null); }}><UndoOutlined /><span>撤销</span><kbd>⌘Z</kbd></button>
-                  <button disabled={!futureCount} onClick={() => { redo(); setContextMenu(null); }}><RedoOutlined /><span>重做</span><kbd>⇧⌘Z</kbd></button>
-                  <button onClick={() => { pasteClipboard(contextMenu.flowPosition); setContextMenu(null); }}><CopyOutlined /><span>粘贴</span><kbd>⌘V</kbd></button>
-                  <button onClick={() => { selectAll(); setContextMenu(null); }}><DragOutlined /><span>全选节点</span><kbd>⌘A</kbd></button>
-                  <button onClick={() => { arrangeNodes(); setContextMenu(null); }}><LayoutOutlined /><span>自动排版</span></button>
-                  <button onClick={() => { fitView({ padding: 0.14, duration: 420 }); setContextMenu(null); }}><AimOutlined /><span>适配画布</span></button>
+                  <button disabled={!pastCount} onClick={() => { undo(); setContextMenu(null); }}><CanvasIcon name="UndoOutlined" /><span>撤销</span><kbd>⌘Z</kbd></button>
+                  <button disabled={!futureCount} onClick={() => { redo(); setContextMenu(null); }}><CanvasIcon name="RedoOutlined" /><span>重做</span><kbd>⇧⌘Z</kbd></button>
+                  <button onClick={() => { pasteClipboard(contextMenu.flowPosition); setContextMenu(null); }}><CanvasIcon name="CopyOutlined" /><span>粘贴</span><kbd>⌘V</kbd></button>
+                  <button onClick={() => { selectAll(); setContextMenu(null); }}><CanvasIcon name="DragOutlined" /><span>全选节点</span><kbd>⌘A</kbd></button>
+                  <button onClick={() => { arrangeNodes(); setContextMenu(null); }}><CanvasIcon name="Arrange" /><span>整理画布</span></button>
+                  <button onClick={() => { fitView({ padding: 0.14, duration: 420 }); setContextMenu(null); }}><CanvasIcon name="AimOutlined" /><span>适配画布</span></button>
                 </>
               )}
             </div>
@@ -1241,16 +1246,26 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
 
           {!nodes.length ? (
             <div className="workflow-empty-canvas">
-              <ApartmentOutlined />
-              <h2>从一个创作节点开始</h2>
-              <p>点击底部的加号添加能力，或让画布助手搭建流程。</p>
-              <button onClick={() => setLibraryOpen(true)}>添加第一个节点</button>
+              <p><CanvasIcon name="Cursor" />双击画布，自由添加节点</p>
+              <div className="canvas-quick-start" aria-label="开始创作">
+                {([
+                  { kind: 'image', icon: 'Image', label: '图片生成' },
+                  { kind: 'video', icon: 'Video', label: '视频生成' },
+                  { kind: 'music', icon: 'Music', label: '音频生成' },
+                  { kind: 'text', icon: 'Text', label: '脚本生成' },
+                  { kind: 'editor', icon: 'Edit', label: '智能剪辑' },
+                ] as const).map(item => <button type="button" key={item.kind} onClick={() => {
+                  const rect = wrapperRef.current?.getBoundingClientRect();
+                  const position = rect ? screenToFlowPosition({ x: rect.left + rect.width / 2 - 150, y: rect.top + rect.height / 2 - 130 }) : undefined;
+                  addNode(item.kind, position);
+                }}><span><CanvasIcon name={item.icon} /></span>{item.label}</button>)}
+              </div>
             </div>
           ) : null}
 
           {agentOpen ? (
             <div className="workflow-agent-bar">
-              <span className="workflow-agent-avatar"><RobotOutlined /></span>
+              <span className="workflow-agent-avatar"><CanvasIcon name="RobotOutlined" /></span>
               <input
                 autoFocus
                 value={agentPrompt}
@@ -1258,77 +1273,93 @@ const VisualCanvasWorkspace = ({ mode, projectId, projectTitle = '未命名工�
                 onKeyDown={(event) => { if (event.key === 'Enter') submitAgentDraft(); }}
                 placeholder="描述你的创意，自动搭建图片或视频工作流…"
               />
-              <button onClick={submitAgentDraft}><SendOutlined />发送</button>
+              <button onClick={submitAgentDraft}><CanvasIcon name="SendOutlined" />发送</button>
             </div>
           ) : null}
         </div>
 
         <div className="workflow-canvas-chrome" aria-label="画布固定工具层">
           <header className="workflow-canvas-header">
-            <div className="workflow-canvas-title" title={projectTitle}>
-              <AppstoreOutlined className="workflow-canvas-brand" />
-              <strong>{projectTitle}</strong>
-              <i />
-              <span>{mode === 'image' ? '画布 1' : '视频画布 1'}</span>
-              <NodeIndexOutlined />
+            <div className="canvas-project-controls">
+              <div className="workflow-canvas-title" title={projectTitle}>
+                <CanvasIcon name="Video" className="workflow-canvas-brand" />
+                <strong>{projectTitle}</strong>
+                <i />
+                <span>{mode === 'image' ? '画布 1' : '视频画布 1'}</span>
+              </div>
+              <button type="button" aria-label="更多画布操作" aria-expanded={moreOpen} onClick={() => { setMoreOpen(value => !value); setLibraryOpen(false); }} title="更多操作"><CanvasIcon name="More" /></button>
             </div>
             <div className="workflow-header-actions">
               {activeStage ? <span className={`workflow-active-stage${activeStage === 'DONE' ? ' is-done' : ''}`}>{activeStage === 'DONE' ? '已完成' : `${activeStage} 阶段`}</span> : null}
-              <span className="workflow-production-summary">
-                <b>{productionSummary.materialCount || 0}</b> 镜头
-                <i />
-                <b>{productionSummary.outputCount || 0}</b> 成片
-              </span>
-              <button className="workflow-template-button" aria-label="重置视频画布 Demo" onClick={resetProductionTemplate} title="恢复精简视频画布 Demo"><ThunderboltOutlined /><span>重置 Demo</span></button>
-              <button className="workflow-run-all-button" aria-label="运行完整工作流" disabled={workflowRunning} onClick={() => { void runWorkflowPreview(); }} title="校验并试运行完整工作流">
-                {workflowRunning ? <LoadingOutlined spin /> : <PlayCircleFilled />}<span>{workflowRunning ? '执行中' : '运行全链路'}</span>
+              <span className="workflow-save-state"><CanvasIcon name="CloudOutlined" />已保存</span>
+              <button type="button" aria-label="分享画布" onClick={() => { void navigator.clipboard?.writeText(window.location.href); message.success('画布链接已复制'); }} title="分享画布"><CanvasIcon name="ShareAltOutlined" /></button>
+              <button type="button" aria-label="素材库" onClick={() => showCreativeLibrary('character')} title="角色、风格与特效库"><CanvasIcon name="Cube" /></button>
+              <button type="button" className="workflow-run-all-button" aria-label="运行完整工作流" disabled={workflowRunning || !nodes.length} onClick={() => { void runWorkflowPreview(); }} title="运行完整工作流">
+                <CanvasIcon name={workflowRunning ? 'LoadingOutlined' : 'PlayCircleFilled'} spin={workflowRunning} /><span>{workflowRunning ? '执行中' : '运行工作流'}</span>
               </button>
-              <button
-                className={`workflow-monitor-trigger${runMonitorOpen ? ' active' : ''}`}
-                aria-label="执行监控"
-                onClick={() => setRunMonitorOpen((open) => !open)}
-                title="查看执行状态与耗时"
-              >
-                <DashboardOutlined />
-                {activeRun ? <i className={`is-${activeRun.status}`} /> : null}
+              <button type="button" className={`workflow-monitor-trigger${runMonitorOpen ? ' active' : ''}`} aria-label="执行监控" aria-pressed={runMonitorOpen} onClick={() => setRunMonitorOpen(value => !value)} title="执行状态与耗时">
+                <CanvasIcon name="DashboardOutlined" />{activeRun ? <i className={`is-${activeRun.status}`} /> : null}
               </button>
-              <button className="workflow-header-secondary-action" aria-label="分享画布" onClick={() => { void navigator.clipboard?.writeText(window.location.href); message.success('画布链接已复制'); }} title="分享画布"><ShareAltOutlined /></button>
-              <button className="workflow-header-secondary-action" aria-label="素材库" onClick={() => showCreativeLibrary('character')} title="角色、风格与特效库"><ShopOutlined /></button>
-              <span className="workflow-save-state"><CloudOutlined />已保存</span>
-              <button className="workflow-header-secondary-action" aria-label="复制所选节点" disabled={!selectedCount} onClick={duplicateSelection} title="复制所选"><CopyOutlined /></button>
-              <button className="workflow-header-secondary-action" aria-label="删除所选节点" disabled={!selectedCount} onClick={deleteSelection} title="删除所选"><DeleteOutlined /></button>
-              <button className="workflow-header-secondary-action" aria-label="保存画布" onClick={() => { void saveWorkflow(); }} title="保存到项目"><SaveOutlined /></button>
-              <button aria-label="画布助手" className={agentOpen ? 'active' : ''} onClick={() => setAgentOpen((open) => !open)} title="Agent 画布助手"><RobotOutlined /><span>Agent</span></button>
+              <button type="button" aria-label="画布助手" className={agentOpen ? 'active canvas-agent-trigger' : 'canvas-agent-trigger'} aria-pressed={agentOpen} onClick={() => setAgentOpen(value => !value)} title="Agent 画布助手"><CanvasIcon name="RobotOutlined" /><span>Agent</span></button>
             </div>
           </header>
 
+          {moreOpen ? <div className="canvas-more-menu" role="menu" aria-label="画布操作" onKeyDown={event => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              event.stopPropagation();
+              setMoreOpen(false);
+              wrapperRef.current?.querySelector<HTMLButtonElement>('button[aria-label="更多画布操作"]')?.focus();
+              return;
+            }
+            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+            event.preventDefault();
+            event.stopPropagation();
+            const items = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button:not(:disabled)'));
+            const index = items.indexOf(document.activeElement as HTMLButtonElement);
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? items.length - 1
+              : (index + (event.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+            items[next]?.focus();
+          }}>
+            <button type="button" role="menuitem" onClick={() => { void saveWorkflow(); setMoreOpen(false); }}><CanvasIcon name="SaveOutlined" />保存画布<kbd>⌘S</kbd></button>
+            <button type="button" role="menuitem" disabled={!selectedCount} onClick={() => { duplicateSelection(); setMoreOpen(false); }}><CanvasIcon name="CopyOutlined" />复制所选节点<kbd>⌘D</kbd></button>
+            <button type="button" role="menuitem" disabled={!selectedCount} onClick={() => { deleteSelection(); setMoreOpen(false); }}><CanvasIcon name="DeleteOutlined" />删除所选节点<kbd>⌫</kbd></button>
+            <div className="canvas-menu-divider" />
+            <button type="button" role="menuitem" disabled={!pastCount} onClick={undo}><CanvasIcon name="UndoOutlined" />撤销<kbd>⌘Z</kbd></button>
+            <button type="button" role="menuitem" disabled={!futureCount} onClick={redo}><CanvasIcon name="RedoOutlined" />重做<kbd>⇧⌘Z</kbd></button>
+            <button type="button" role="menuitem" onClick={() => { arrangeNodes(); setMoreOpen(false); }}><CanvasIcon name="Arrange" />整理画布</button>
+            <div className="canvas-menu-divider" />
+            <button type="button" role="menuitem" onClick={() => { resetProductionTemplate(); setMoreOpen(false); }}><CanvasIcon name="ThunderboltOutlined" />恢复视频 Demo</button>
+            <button type="button" role="menuitem" className="is-danger" onClick={() => { setMoreOpen(false); Modal.confirm({ title: '清空当前画布？', content: '可以通过撤销恢复本次清空。', okText: '清空', cancelText: '取消', onOk: clearCanvas }); }}><CanvasIcon name="ClearOutlined" />清空画布</button>
+          </div> : null}
+
+          <div className="canvas-bottom-status" aria-label="画布导航与缩放">
+            <button type="button" aria-label="资产管理" onClick={() => showCreativeLibrary('character')}><CanvasIcon name="Assets" /><span>资产管理</span></button>
+            <span className="canvas-status-divider" />
+            <Tooltip title="整理画布" placement="top" overlayClassName="canvas-navigation-tooltip">
+              <button type="button" aria-label="整理画布" onClick={arrangeNodes}><CanvasIcon name="Arrange" /></button>
+            </Tooltip>
+            <Tooltip title="小地图" placement="top" overlayClassName="canvas-navigation-tooltip">
+              <button type="button" aria-label="小地图" aria-pressed={showMinimap} onClick={() => setShowMinimap(value => !value)}><CanvasIcon name="Minimap" /></button>
+            </Tooltip>
+            <button type="button" aria-label="适配画布" onClick={() => fitView({ padding: 0.16, duration: 420 })} title="适配画布"><CanvasIcon name="AimOutlined" /></button>
+            <button type="button" aria-label="恢复百分之百缩放" onClick={() => zoomTo(1, { duration: 250 })} title="恢复 100% 缩放">{Math.round(canvasZoom * 100)}%</button>
+          </div>
+
           <div className="workflow-floating-tools" aria-label="画布工具">
-            <button aria-label="添加节点" className={`workflow-add-node-button${libraryOpen ? ' active' : ''}`} onClick={() => { setLibraryAnchor(null); setContextMenu(null); setLibraryOpen((open) => !open); }} title="添加节点">{libraryOpen ? <CloseOutlined /> : <PlusOutlined />}</button>
-            <button aria-label="选择工具" onClick={clearSelection} title="选择工具"><DragOutlined /></button>
-            <button aria-label="连接节点" onClick={() => message.info('拖动节点两侧的连接点即可建立工作流')} title="连接节点"><NodeIndexOutlined /></button>
-            <button aria-label="素材与图片" onClick={() => showCreativeLibrary('character')} title="角色、风格与特效库"><PictureOutlined /></button>
-            <button aria-label="自动排版" onClick={arrangeNodes} title="自动排版"><LayoutOutlined /></button>
+            <button type="button" aria-label="添加节点" aria-expanded={libraryOpen} className={`workflow-add-node-button${libraryOpen ? ' active' : ''}`} onClick={() => { setLibraryAnchor(null); setContextMenu(null); setMoreOpen(false); setLibraryOpen(value => !value); }} title="添加节点"><CanvasIcon name={libraryOpen ? 'CloseOutlined' : 'PlusOutlined'} /></button>
+            <button type="button" aria-label="选择工具" aria-pressed={activeTool === 'select'} className={activeTool === 'select' ? 'active' : ''} onClick={() => setActiveTool('select')} title="选择节点"><CanvasIcon name="Cursor" /></button>
+            <button type="button" aria-label="移动画布" aria-pressed={activeTool === 'pan'} className={activeTool === 'pan' ? 'active' : ''} onClick={() => setActiveTool('pan')} title="移动画布"><CanvasIcon name="Hand" /></button>
+            <button type="button" aria-label="连接节点" onClick={() => message.info('拖动节点左右两侧连接点，即可连接节点')} title="连接节点"><CanvasIcon name="NodeIndexOutlined" /></button>
+            <button type="button" aria-label="素材与图片" onClick={() => showCreativeLibrary('character')} title="创意资源库"><CanvasIcon name="Cube" /></button>
+            <button type="button" aria-label="打开导演台" onClick={() => {
+              const existing = nodes.find(node => node.data.kind === 'director');
+              openDirector(existing?.id || addNode('director'));
+            }} title="导演台"><CanvasIcon name="VideoCameraOutlined" /></button>
             <span className="workflow-tool-divider" />
-            <button className="workflow-tool-secondary" aria-label="撤销" disabled={!pastCount} onClick={undo} title="撤销"><UndoOutlined /></button>
-            <button className="workflow-tool-secondary" aria-label="重做" disabled={!futureCount} onClick={redo} title="重做"><RedoOutlined /></button>
-            <button aria-label="适配画布" onClick={() => fitView({ padding: 0.16, duration: 420 })} title="适配画布"><AimOutlined /></button>
-            <button className={`workflow-tool-secondary${showMinimap ? ' active' : ''}`} aria-label="切换小地图" onClick={() => setShowMinimap((visible) => !visible)} title="切换小地图"><ApartmentOutlined /></button>
-            <button className="workflow-tool-secondary" aria-label="历史记录" onClick={() => message.info(`当前可撤销 ${pastCount} 步，可重做 ${futureCount} 步`)} title="历史记录"><HistoryOutlined /></button>
-            <button className="workflow-tool-secondary" aria-label="快捷键" onClick={showShortcutHelp} title="快捷键"><AppstoreOutlined /></button>
-            <button className="workflow-tool-secondary" aria-label="帮助" onClick={() => message.info('文本、视频和音频节点可展开编辑；其余节点用于引用资源、承接结果和连线')} title="帮助"><QuestionCircleOutlined /></button>
-            <button
-              className="workflow-tool-secondary"
-              aria-label="清空画布"
-              onClick={() => Modal.confirm({
-                title: '清空当前画布？',
-                content: '可以通过撤销恢复本次清空。',
-                okText: '清空',
-                cancelText: '取消',
-                okButtonProps: { danger: true },
-                onOk: clearCanvas,
-              })}
-              title="清空画布"
-            ><ClearOutlined /></button>
+            <button type="button" aria-label="历史记录" onClick={() => { setMoreOpen(value => !value); setLibraryOpen(false); }} title="历史与撤销"><CanvasIcon name="HistoryOutlined" /></button>
+            <button type="button" aria-label="快捷键" onClick={showShortcutHelp} title="快捷键"><CanvasIcon name="Keyboard" /></button>
+            <button type="button" aria-label="帮助" onClick={() => message.info('双击或右键画布添加节点；选中创作节点编辑提示词与参数，拖动两侧连接点建立工作流。')} title="帮助"><CanvasIcon name="QuestionCircleOutlined" /></button>
           </div>
         </div>
       </div>

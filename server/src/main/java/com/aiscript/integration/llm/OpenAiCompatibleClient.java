@@ -118,7 +118,6 @@ public class OpenAiCompatibleClient implements LlmClient {
 
     private SysApiProviderConfig requireProvider(String model) {
         SysApiProviderConfig provider = providerConfigService.resolveEnabled("llm", model);
-        if (provider == null && StringUtils.hasText(model)) provider = providerConfigService.firstEnabled("llm");
         if (provider == null || !StringUtils.hasText(provider.getEndpointUrl())) {
             throw new BusinessException("未配置LLM Provider");
         }
