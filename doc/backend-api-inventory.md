@@ -100,6 +100,8 @@
 | `PUT` | `/api/scripts/{id}` | 已实现 | Path: `id`; Body: `{"name":"脚本A","projectId":"1871234567890123001","type":"original","status":"draft","content":"第一版脚本文案"}` |
 | `DELETE` | `/api/scripts/{id}` | 已实现 | Path: `id` |
 | `GET` | `/api/scripts/templates` | 已实现 | 无参数 |
+| `GET` | `/api/scripts/{scriptId}/share-link` | 已实现 | Path: `scriptId`；返回 `enabled/status/permission/path/token`，脚本分享只有「未开启／互联网获得链接的人可评论」两种状态，链接不设有效期 |
+| `PUT` | `/api/scripts/{scriptId}/share-link` | 已实现 | Path: `scriptId`; Body: `{"enabled":true}`；`false` 表示关闭分享，链接立即失效，再次开启仍用同一链接 |
 | `GET` | `/api/admin/templates` | 已实现 | Query: `page,pageSize,keyword` |
 | `GET` | `/api/admin/templates/{id}` | 已实现 | Path: `id` |
 | `POST` | `/api/admin/templates` | 已实现 | Body: `{"name":"痛点种草模板","category":"种草","actor":"达人","people":"单人","popularity":"high","difficulty":"medium","status":"enabled"}` |

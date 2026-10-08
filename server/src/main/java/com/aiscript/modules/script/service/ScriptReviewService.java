@@ -4,9 +4,7 @@ import com.aiscript.common.api.ResultCode;
 import com.aiscript.common.exception.BusinessException;
 import com.aiscript.common.util.JsonUtils;
 import com.aiscript.framework.tenant.TenantContext;
-import com.aiscript.modules.project.dto.ShareLinkCreateDTO;
 import com.aiscript.modules.project.service.ProjectCollaborationService;
-import com.aiscript.modules.project.vo.ShareLinkVO;
 import com.aiscript.modules.auth.entity.SysUser;
 import com.aiscript.modules.auth.mapper.SysUserMapper;
 import com.aiscript.modules.script.convert.ScriptConvert;
@@ -23,6 +21,7 @@ import com.aiscript.modules.script.mapper.AiScriptReviewRecordMapper;
 import com.aiscript.modules.script.vo.ScriptAccessVO;
 import com.aiscript.modules.script.vo.ScriptReviewCommentVO;
 import com.aiscript.modules.script.vo.ScriptReviewContextVO;
+import com.aiscript.modules.script.vo.ScriptShareLinkVO;
 import com.aiscript.modules.script.vo.ScriptVersionVO;
 import com.aiscript.modules.storyboard.entity.AiScriptVersion;
 import com.aiscript.modules.storyboard.entity.AiStoryboardScript;
@@ -45,6 +44,11 @@ import org.springframework.util.StringUtils;
 @Service
 public class ScriptReviewService {
     private static final Integer DEFAULT_TENANT_ID = 1;
+    /** 链接分享唯一权限：获得链接的人可查看、批注并提交审核意见。 */
+    private static final String SHARE_PERMISSION = "comment";
+    private static final String SHARE_STATUS_ACTIVE = "active";
+    private static final String SHARE_STATUS_DISABLED = "disabled";
+    private static final String SHARE_STATUS_REVOKED = "revoked";
     private final AiStoryboardScriptMapper scriptMapper;
     private final AiScriptVersionMapper versionMapper;
     private final AiScriptReviewLinkMapper linkMapper;
@@ -86,23 +90,43 @@ public class ScriptReviewService {
         return script;
     }
 
+    public ScriptShareLinkVO shareLink(Integer scriptId) {
+        internalScript(scriptId);
+        return toShareLinkVO(ensureShareToken(latestShareLink(scriptId)));
+    }
+
+    /**
+     * 脚本分享只有两种状态：未开启 / 互联网获得链接的人可评论。链接不设有效期，关闭后立即失效。
+     */
     @Transactional(rollbackFor = Exception.class)
-    public ShareLinkVO createLink(Integer scriptId, ShareLinkCreateDTO dto) {
+    public ScriptShareLinkVO updateShareLink(Integer scriptId, boolean enabled) {
         AiStoryboardScript script = internalScript(scriptId);
-        String token = newToken();
-        AiScriptReviewLink link = new AiScriptReviewLink();
-        link.setTenantId(script.getTenantId());
-        link.setScriptId(scriptId);
-        link.setTokenHash(ProjectCollaborationService.hash(token));
-        link.setVersionScope(dto == null || dto.getVersionScope() == null ? "all" : dto.getVersionScope());
-        if ("current".equals(link.getVersionScope())) link.setFixedVersionId(script.getCurrentVersionId());
-        link.setStatus("active");
-        link.setUsedCount(0);
-        link.setMaxUses(dto == null ? null : dto.getMaxUses());
-        int hours = dto == null || dto.getExpiresInHours() == null ? 168 : Math.max(1, dto.getExpiresInHours());
-        link.setExpiresAt(LocalDateTime.now().plusHours(hours));
-        linkMapper.insert(link);
-        return new ShareLinkVO(String.valueOf(link.getId()), token, "/script-review/" + token, link.getExpiresAt().toString());
+        AiScriptReviewLink link = ensureShareToken(latestShareLink(scriptId));
+        if (!enabled) {
+            if (link != null && !SHARE_STATUS_DISABLED.equals(link.getStatus())) {
+                link.setStatus(SHARE_STATUS_DISABLED);
+                linkMapper.updateById(link);
+            }
+            return toShareLinkVO(link);
+        }
+        if (link == null) {
+            link = new AiScriptReviewLink();
+            link.setTenantId(script.getTenantId());
+            link.setScriptId(scriptId);
+            String token = newToken();
+            link.setShareToken(token);
+            link.setTokenHash(ProjectCollaborationService.hash(token));
+            link.setVersionScope("all");
+            link.setStatus(SHARE_STATUS_ACTIVE);
+            link.setUsedCount(0);
+            link.setMaxUses(null);
+            linkMapper.insert(link);
+        } else if (!SHARE_STATUS_ACTIVE.equals(link.getStatus())) {
+            link.setStatus(SHARE_STATUS_ACTIVE);
+            linkMapper.updateById(link);
+        }
+        reactivateAccess(link.getId());
+        return toShareLinkVO(link);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -113,11 +137,49 @@ public class ScriptReviewService {
             .eq(AiScriptReviewLink::getScriptId, scriptId)
             .eq(AiScriptReviewLink::getTenantId, tenantId()).last("LIMIT 1"));
         if (link == null) throw new BusinessException(ResultCode.NOT_FOUND, "评审链接不存在");
-        link.setStatus("revoked");
+        link.setStatus(SHARE_STATUS_REVOKED);
         linkMapper.updateById(link);
         List<AiScriptReviewAccess> accesses = accessMapper.selectList(new LambdaQueryWrapper<AiScriptReviewAccess>()
             .eq(AiScriptReviewAccess::getReviewLinkId, linkId));
-        accesses.forEach(access -> { access.setStatus("revoked"); accessMapper.updateById(access); });
+        accesses.forEach(access -> { access.setStatus(SHARE_STATUS_REVOKED); accessMapper.updateById(access); });
+    }
+
+    private AiScriptReviewLink latestShareLink(Integer scriptId) {
+        return linkMapper.selectOne(new LambdaQueryWrapper<AiScriptReviewLink>()
+            .eq(AiScriptReviewLink::getTenantId, tenantId())
+            .eq(AiScriptReviewLink::getScriptId, scriptId)
+            .orderByDesc(AiScriptReviewLink::getId)
+            .last("LIMIT 1"));
+    }
+
+    /**
+     * 早期版本只保存令牌哈希，无法再次展示链接，这里为缺少明文令牌的记录补发一次，旧链接随之失效。
+     */
+    private AiScriptReviewLink ensureShareToken(AiScriptReviewLink link) {
+        if (link == null || StringUtils.hasText(link.getShareToken())) return link;
+        String token = newToken();
+        link.setShareToken(token);
+        link.setTokenHash(ProjectCollaborationService.hash(token));
+        linkMapper.updateById(link);
+        return link;
+    }
+
+    private void reactivateAccess(Integer linkId) {
+        accessMapper.selectList(new LambdaQueryWrapper<AiScriptReviewAccess>()
+                .eq(AiScriptReviewAccess::getReviewLinkId, linkId)).stream()
+            .filter(access -> !SHARE_STATUS_ACTIVE.equals(access.getStatus()))
+            .forEach(access -> { access.setStatus(SHARE_STATUS_ACTIVE); accessMapper.updateById(access); });
+    }
+
+    private ScriptShareLinkVO toShareLinkVO(AiScriptReviewLink link) {
+        if (link == null) return new ScriptShareLinkVO(false, "none", SHARE_PERMISSION, null, null);
+        boolean enabled = SHARE_STATUS_ACTIVE.equals(link.getStatus()) && StringUtils.hasText(link.getShareToken());
+        return new ScriptShareLinkVO(
+            enabled,
+            link.getStatus(),
+            SHARE_PERMISSION,
+            enabled ? "/script-review/" + link.getShareToken() : null,
+            enabled ? link.getShareToken() : null);
     }
 
     @Transactional(rollbackFor = Exception.class)
@@ -307,7 +369,6 @@ public class ScriptReviewService {
             .eq(AiScriptReviewLink::getTokenHash, ProjectCollaborationService.hash(token))
             .eq(AiScriptReviewLink::getStatus, "active").last("LIMIT 1"));
         if (link == null) throw new BusinessException(ResultCode.NOT_FOUND, "评审链接不存在或已失效");
-        if (link.getExpiresAt() != null && link.getExpiresAt().isBefore(LocalDateTime.now())) throw new BusinessException("评审链接已过期");
         if (link.getMaxUses() != null && link.getUsedCount() >= link.getMaxUses()
             && accessMapper.selectCount(new LambdaQueryWrapper<AiScriptReviewAccess>()
                 .eq(AiScriptReviewAccess::getReviewLinkId, link.getId()).eq(AiScriptReviewAccess::getUserId, currentUser().getUserId())) == 0) {
@@ -352,8 +413,7 @@ public class ScriptReviewService {
         if (!comment.getUserId().equals(currentUser().getUserId())) throw new BusinessException(ResultCode.FORBIDDEN, "只能修改或删除自己的批注");
         if (comment.getReviewLinkId() != null) {
             AiScriptReviewLink link = linkMapper.selectById(comment.getReviewLinkId());
-            if (link == null || !"active".equals(link.getStatus())
-                || link.getExpiresAt() != null && link.getExpiresAt().isBefore(LocalDateTime.now())
+            if (link == null || !SHARE_STATUS_ACTIVE.equals(link.getStatus())
                 || accessMapper.selectCount(new LambdaQueryWrapper<AiScriptReviewAccess>()
                     .eq(AiScriptReviewAccess::getReviewLinkId, link.getId())
                     .eq(AiScriptReviewAccess::getUserId, currentUser().getUserId())

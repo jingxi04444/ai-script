@@ -170,11 +170,13 @@ export interface ScriptReviewComment {
   createdAt: string;
 }
 
-export interface ShareLinkResult {
-  id: string;
-  token: string;
-  path: string;
-  expiresAt: string;
+/** 脚本链接分享状态：未开启 / 互联网获得链接的人可评论，链接不设有效期。 */
+export interface ScriptShareLink {
+  enabled: boolean;
+  status: 'active' | 'disabled' | 'revoked' | 'none' | string;
+  permission: string;
+  path?: string | null;
+  token?: string | null;
 }
 
 export interface ScriptReviewContext {

@@ -11,6 +11,7 @@ import lombok.EqualsAndHashCode;
 @TableName("ai_script_review_link")
 public class AiScriptReviewLink extends TenantBaseEntity {
     private Integer scriptId;
+    private String shareToken;
     private String tokenHash;
     private String versionScope;
     private Integer fixedVersionId;

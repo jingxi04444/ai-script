@@ -1,0 +1,289 @@
+/* 脚本链接分享面板：未开启 / 互联网获得链接的人可评论，不设有效期 */
+.script-share-popover .ant-popover-inner {
+  padding: 0;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 16px;
+  background: #151719;
+  box-shadow: 0 20px 56px rgba(0, 0, 0, 0.46);
+}
+
+.script-share-panel {
+  width: 372px;
+  max-width: min(92vw, 372px);
+  display: grid;
+  color: #eaf2f3;
+}
+
+.script-share-panel .script-share-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 16px 18px 12px;
+}
+
+.script-share-panel .script-share-head strong {
+  color: #f4f7f8;
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.script-share-panel .script-share-head .anticon-loading {
+  color: var(--theme-accent, #62e670);
+}
+
+.script-share-panel .script-share-body {
+  display: grid;
+  gap: 12px;
+  padding: 0 18px 18px;
+}
+
+.script-share-panel h4 {
+  margin: 0;
+  color: #8b979d;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+}
+
+.script-share-panel .script-share-scope {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.script-share-panel .script-share-scope-icon {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(148, 163, 184, 0.16);
+  color: #9aa6ac;
+  font-size: 14px;
+}
+
+.script-share-panel .script-share-scope-icon.is-on {
+  background: rgba(var(--theme-accent-rgb, 98, 230, 112), 0.18);
+  color: var(--theme-accent, #62e670);
+}
+
+.script-share-panel .script-share-scope-trigger {
+  min-width: 0;
+  max-width: 220px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #eaf2f3;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.script-share-panel .script-share-scope-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.script-share-panel .script-share-scope-trigger .anticon-down {
+  flex: none;
+  color: #8b979d;
+  font-size: 10px;
+}
+
+.script-share-panel .script-share-scope-trigger:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.script-share-panel .script-share-scope-trigger:disabled {
+  cursor: wait;
+  opacity: 0.6;
+}
+
+.script-share-panel .script-share-permission {
+  margin-left: auto;
+  color: #9aa6ac;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.script-share-panel .script-share-scope-menu {
+  margin-top: -4px;
+  padding: 6px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 12px;
+  background: #1b1e21;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.38);
+  display: grid;
+  gap: 2px;
+}
+
+.script-share-panel .script-share-scope-menu p {
+  margin: 4px 8px 6px;
+  color: #7d888e;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.script-share-panel .script-share-scope-menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #d9e2e4;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.script-share-panel .script-share-scope-menu button:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.script-share-panel .script-share-scope-menu button[aria-selected='true'] {
+  color: var(--theme-accent, #62e670);
+  font-weight: 800;
+}
+
+.script-share-panel .script-share-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.script-share-panel .script-share-link input {
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #cfd8da;
+  font-size: 12px;
+}
+
+.script-share-panel .script-share-link button {
+  flex: none;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  border: 1px solid rgba(var(--theme-accent-rgb, 98, 230, 112), 0.42);
+  border-radius: 9px;
+  background: rgba(var(--theme-accent-rgb, 98, 230, 112), 0.16);
+  color: var(--theme-accent, #62e670);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.script-share-panel .script-share-link button:hover {
+  background: rgba(var(--theme-accent-rgb, 98, 230, 112), 0.26);
+}
+
+.script-share-panel .script-share-hint {
+  margin: 0;
+  color: #8b979d;
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.script-share-panel .script-share-hint b {
+  color: #cfd8da;
+}
+
+html[data-color-mode='light'] .script-share-popover .ant-popover-inner {
+  border-color: #d7dee1 !important;
+  background: #fff !important;
+  box-shadow: 0 16px 42px rgba(38, 48, 54, 0.16) !important;
+}
+
+html[data-color-mode='light'] .script-share-panel {
+  color: #263238;
+}
+
+html[data-color-mode='light'] .script-share-panel .script-share-head strong {
+  color: #1f2b30;
+}
+
+html[data-color-mode='light'] .script-share-panel h4,
+html[data-color-mode='light'] .script-share-panel .script-share-hint,
+html[data-color-mode='light'] .script-share-panel .script-share-permission {
+  color: #58666d;
+}
+
+html[data-color-mode='light'] .script-share-panel .script-share-hint b {
+  color: #263238;
+}
+
+html[data-color-mode='light'] .script-share-panel .script-share-scope-icon {
+  background: #eef1f3;
+  color: #657279;
+}
+
+html[data-color-mode='light'] .script-share-panel .script-share-scope-icon.is-on {
+  background: #e8f7e9;
+  color: #246f2d;
+}
+
+html[data-color-mode='light'] .script-share-panel .script-share-scope-trigger {
+  color: #263238;
+}
+
+html[data-color-mode='light'] .script-share-panel .script-share-scope-trigger:hover:not(:disabled) {
+  background: #f1f4f5;
+}
+
+html[data-color-mode='light'] .script-share-panel .script-share-scope-menu {
+  border-color: #d7dee1;
+  background: #fff;
+  box-shadow: 0 14px 34px rgba(38, 48, 54, 0.14);
+}
+
+html[data-color-mode='light'] .script-share-panel .script-share-scope-menu p {
+  color: #7b878d;
+}
+
+html[data-color-mode='light'] .script-share-panel .script-share-scope-menu button {
+  color: #2f3b41;
+}
+
+html[data-color-mode='light'] .script-share-panel .script-share-scope-menu button:hover {
+  background: #f1f4f5;
+}
+
+html[data-color-mode='light'] .script-share-panel .script-share-scope-menu button[aria-selected='true'] {
+  color: #246f2d;
+}
+
+html[data-color-mode='light'] .script-share-panel .script-share-link input {
+  border-color: #d7dee1;
+  background: #f7f9fa;
+  color: #344047;
+}
+
+html[data-color-mode='light'] .script-share-panel .script-share-link button {
+  border-color: rgba(78, 175, 88, 0.5);
+  background: #e8f7e9;
+  color: #246f2d;
+}
+
+html[data-color-mode='light'] .script-share-panel .script-share-link button:hover {
+  background: #dcf2de;
+}

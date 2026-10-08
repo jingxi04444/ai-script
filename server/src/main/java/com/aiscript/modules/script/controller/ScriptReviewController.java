@@ -1,14 +1,14 @@
 package com.aiscript.modules.script.controller;
 
 import com.aiscript.common.api.R;
-import com.aiscript.modules.project.dto.ShareLinkCreateDTO;
-import com.aiscript.modules.project.vo.ShareLinkVO;
 import com.aiscript.modules.script.dto.ReviewCommentDTO;
 import com.aiscript.modules.script.dto.ReviewDecisionDTO;
+import com.aiscript.modules.script.dto.ScriptShareLinkDTO;
 import com.aiscript.modules.script.service.ScriptReviewService;
 import com.aiscript.modules.script.vo.ScriptAccessVO;
 import com.aiscript.modules.script.vo.ScriptReviewCommentVO;
 import com.aiscript.modules.script.vo.ScriptReviewContextVO;
+import com.aiscript.modules.script.vo.ScriptShareLinkVO;
 import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -29,9 +29,24 @@ public class ScriptReviewController {
     @GetMapping("/scripts/{scriptId}/access")
     public R<ScriptAccessVO> access(@PathVariable Integer scriptId) { return R.ok(service.internalAccess(scriptId)); }
 
+    /** 读取当前脚本的链接分享状态：未开启 / 互联网获得链接的人可评论。 */
+    @GetMapping("/scripts/{scriptId}/share-link")
+    public R<ScriptShareLinkVO> shareLink(@PathVariable Integer scriptId) {
+        return R.ok(service.shareLink(scriptId));
+    }
+
+    /** 开启或关闭链接分享，链接不设有效期。 */
+    @PutMapping("/scripts/{scriptId}/share-link")
+    public R<ScriptShareLinkVO> updateShareLink(@PathVariable Integer scriptId,
+                                                @RequestBody(required = false) ScriptShareLinkDTO dto) {
+        boolean enabled = dto == null || dto.getEnabled() == null || dto.getEnabled();
+        return R.ok(service.updateShareLink(scriptId, enabled));
+    }
+
+    /** 兼容旧接口：等价于开启链接分享。 */
     @PostMapping("/scripts/{scriptId}/review-links")
-    public R<ShareLinkVO> createLink(@PathVariable Integer scriptId, @RequestBody(required = false) ShareLinkCreateDTO dto) {
-        return R.ok(service.createLink(scriptId, dto));
+    public R<ScriptShareLinkVO> createLink(@PathVariable Integer scriptId) {
+        return R.ok(service.updateShareLink(scriptId, true));
     }
 
     @DeleteMapping("/scripts/{scriptId}/review-links/{linkId}")

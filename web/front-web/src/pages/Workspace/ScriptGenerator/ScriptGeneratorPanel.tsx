@@ -41,6 +41,7 @@ import { scriptApi } from '../../../api/script';
 import { siteApi, type SiteConfig } from '../../../api/site';
 import { sourceApi } from '../../../api/source';
 import OperationCostLabel from '../../../components/Membership/OperationCostLabel';
+import ScriptSharePanel from '../../../components/Share/ScriptSharePanel';
 import TemplateBatchGenerationModal from './TemplateBatchGenerationModal';
 import { useAuthStore } from '../../../stores/authStore';
 import { isPolishWorking, useScriptPolishStore, type PolishEditorDraft } from '../../../stores/scriptPolishStore';
@@ -1984,14 +1985,6 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
     }
   };
 
-  const copyCurrentScriptLink = async () => {
-    if (!currentScript) return message.warning('请先生成脚本');
-    const share = await scriptApi.createReviewLink(currentScript.id, { expiresInHours: 168, versionScope: 'all' });
-    const url = new URL(share.path, window.location.origin).toString();
-    if (navigator.clipboard) await navigator.clipboard.writeText(url);
-    message.success('脚本评审链接已复制；访问者只能查看、批注和提交审核意见');
-  };
-
   const renderBriefSelect = () => (
     <Select
       value={selectedBriefId}
@@ -2187,7 +2180,9 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
                   </div>
                   <footer>
                     <button onClick={createScriptExport}><DownloadOutlined />下载分镜表</button>
-                    <button onClick={copyCurrentScriptLink}><ShareAltOutlined />分享分析报告</button>
+                    <ScriptSharePanel scriptId={currentScript?.id}>
+                      <button type="button"><ShareAltOutlined />分享分析报告</button>
+                    </ScriptSharePanel>
                   </footer>
                 </div>
               </section>
@@ -2614,7 +2609,9 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
                 </div>
               </div>
               <div className="script-output-head-actions">
-                <button type="button" onClick={copyCurrentScriptLink}><ShareAltOutlined /><span>分享</span></button>
+                <ScriptSharePanel scriptId={currentScript.id}>
+                  <button type="button"><ShareAltOutlined /><span>分享</span></button>
+                </ScriptSharePanel>
                 <button type="button" onClick={() => copyText(withScriptContentTitle(currentScript.content, currentScript.name))}><CopyOutlined /><span>复制</span></button>
                 <button type="button" onClick={createScriptExport}><DownloadOutlined /><span>下载</span></button>
                 <button type="button" className="script-output-confirm" disabled={isScriptContentSaving || isPolishing} onClick={() => void saveCurrentScriptAndClose()}>

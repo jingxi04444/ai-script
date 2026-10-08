@@ -2,7 +2,7 @@ import { config } from '../config';
 import { mockScriptApi } from '../mock/script';
 import { mockTaskCenterApi } from '../mock/taskCenter';
 import api from './request';
-import type { Script, ScriptAccess, ScriptFormatOption, ScriptPolishMessage, ScriptReviewComment, ScriptReviewContext, ScriptTemplate, ScriptVersion, ShareLinkResult, GenerateScriptParams, PolishScriptParams, PolishScriptResult } from '../types/script';
+import type { Script, ScriptAccess, ScriptFormatOption, ScriptPolishMessage, ScriptReviewComment, ScriptReviewContext, ScriptShareLink, ScriptTemplate, ScriptVersion, GenerateScriptParams, PolishScriptParams, PolishScriptResult } from '../types/script';
 import type { PaginatedResponse } from '../types/api';
 import type { ScriptQueueItem, ScriptQueueState } from '../types/generation';
 
@@ -63,8 +63,10 @@ export const scriptApi = {
 
   getAccess: (id: string): Promise<ScriptAccess> => api.get(`/scripts/${id}/access`),
 
-  createReviewLink: (id: string, options?: { expiresInHours?: number; maxUses?: number; versionScope?: 'all' | 'current' }): Promise<ShareLinkResult> =>
-    api.post(`/scripts/${id}/review-links`, options || { expiresInHours: 168, versionScope: 'all' }),
+  getShareLink: (id: string): Promise<ScriptShareLink> => api.get(`/scripts/${id}/share-link`),
+
+  updateShareLink: (id: string, enabled: boolean): Promise<ScriptShareLink> =>
+    api.put(`/scripts/${id}/share-link`, { enabled }),
 
   getReviewContext: (token: string): Promise<ScriptReviewContext> => api.get(`/script-reviews/${token}`),
 
