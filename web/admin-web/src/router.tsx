@@ -8,6 +8,8 @@ const FrontendPage = lazy(() => import('./pages/Frontend/FrontendPage'));
 const ProjectListPage = lazy(() => import('./pages/Projects/ProjectListPage'));
 const UserListPage = lazy(() => import('./pages/Users/UserListPage'));
 const ModelsPage = lazy(() => import('./pages/Models/ModelsPage'));
+const MarketSourcesPage = lazy(() => import('./pages/MarketSources/MarketSourcesPage'));
+const MarketFunctionsPage = lazy(() => import('./pages/MarketFunctions/MarketFunctionsPage'));
 const BillingPage = lazy(() => import('./pages/Billing/BillingPage'));
 const ReviewPage = lazy(() => import('./pages/Review/ReviewPage'));
 const PaymentOrdersPage = lazy(() => import('./pages/Payments/PaymentOrdersPage'));
@@ -56,6 +58,14 @@ export const router: RouteObject[] = [
       {
         path: 'models',
         element: <LazyLoad><ModelsPage /></LazyLoad>,
+      },
+      {
+        path: 'market-sources',
+        element: <LazyLoad><MarketSourcesPage /></LazyLoad>,
+      },
+      {
+        path: 'market-functions',
+        element: <LazyLoad><MarketFunctionsPage /></LazyLoad>,
       },
       {
         path: 'billing',

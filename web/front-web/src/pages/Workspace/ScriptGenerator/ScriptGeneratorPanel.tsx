@@ -507,7 +507,7 @@ const ScriptGeneratorPanel = ({ projectId, ensureProjectId, operationCosts, dial
   const [prompt, setPrompt] = useState('');
   const [selectedOriginalCategory, setSelectedOriginalCategory] = useState<string>(fallbackOriginalScenarioCategories[0].id);
   const [selectedOriginalScenario, setSelectedOriginalScenario] = useState<string>(fallbackOriginalScenarioCategories[0].children[0].id);
-  const [referenceUrl, setReferenceUrl] = useState('');
+  const [referenceUrl, setReferenceUrl] = useState(() => searchParams.get('sourceUrl') || '');
   const [isParsing, setIsParsing] = useState(false);
   const [isAnalyzingCopy, setIsAnalyzingCopy] = useState(false);
   const [copyAnalyzed, setCopyAnalyzed] = useState(false);

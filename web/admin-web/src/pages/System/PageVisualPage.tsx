@@ -46,7 +46,7 @@ const defaultHomeVisual: HomeVisualConfig = {
   navItems: [
     { key: 'home', label: '首页' },
     { key: 'create', label: '创作大厅' },
-    { key: 'expert', label: '专家市场' },
+    { key: 'market', label: '市场' },
     { key: 'projects', label: '我的项目' },
     { key: 'assets', label: '资产管理' },
   ],

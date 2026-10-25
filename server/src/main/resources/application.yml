@@ -12,6 +12,8 @@ server:
 spring:
   application:
     name: ai-script-server  # 应用名称，用于日志、监控、服务注册等
+  config:
+    import: optional:file:./.env[.properties]  # 本地内部服务令牌；文件已被 Git 忽略
   profiles:
     active: prod  # 默认激活的环境：prod=生产，dev=本地开发；启动时可用 --spring.profiles.active=dev 覆盖
   servlet:
@@ -49,6 +51,15 @@ management:
 
 # AI Script 业务配置
 aiscript:
+  market:
+    cookie-check-cron: "${MARKET_COOKIE_CHECK_CRON:0 10 */6 * * ?}"
+    viral-search:
+      # 采集与复筛由 Python workflow-runner 的 market.category-viral-search Skill 执行。
+      enabled: ${MARKET_VIRAL_SEARCH_ENABLED:true}
+      skill-url: ${MARKET_VIRAL_SKILL_URL:http://127.0.0.1:8091/api/internal/skills/market-category-viral-search/execute}
+      skill-token: ${WORKFLOW_PROVIDER_GATEWAY_TOKEN:}
+      timeout-seconds: ${MARKET_VIRAL_SKILL_TIMEOUT_SECONDS:600}
+      freshness-days: ${MARKET_VIRAL_FRESHNESS_DAYS:7}
   workflow:
     provider-gateway:
       token: ${WORKFLOW_PROVIDER_GATEWAY_TOKEN:}

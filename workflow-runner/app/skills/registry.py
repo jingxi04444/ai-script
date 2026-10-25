@@ -2,6 +2,7 @@ from app.skills.base import Skill
 from app.skills.builtin import SimulatedSkill
 from app.skills.director import DirectorResourceSkill
 from app.skills.creative_library import CreativeResourceSkill
+from app.skills.market_viral import MarketCategoryViralSkill
 from app.providers.spring_gateway import SpringProviderGateway
 from app.skills.provider import BatchMaterialSkill, ProviderSkill, ResourceSkill
 
@@ -19,6 +20,7 @@ class SkillRegistry:
         self._skills: dict[str, Skill] = {}
         # A director is a real browser-authored resource, even in runner demo mode.
         self.register(DirectorResourceSkill())
+        self.register(MarketCategoryViralSkill())
         for kind in ("character", "style", "effect"):
             self.register(CreativeResourceSkill(kind))
         for kind in ("product", "scene", "result", "note"):

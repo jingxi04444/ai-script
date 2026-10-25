@@ -264,6 +264,58 @@ CREATE TABLE sys_api_provider_config (
   KEY idx_sys_provider_tenant (tenant_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='第三方Provider配置表';
 
+DROP TABLE IF EXISTS sys_market_source_config;
+CREATE TABLE sys_market_source_config (
+  id BIGINT NOT NULL COMMENT '主键ID，由MyBatis-Plus雪花算法生成',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  platform VARCHAR(32) NOT NULL COMMENT '采集平台：douyin/xiaohongshu',
+  cookie_encrypted LONGTEXT DEFAULT NULL COMMENT 'AES-GCM加密后的平台Cookie',
+  alert_phone_encrypted VARCHAR(1000) DEFAULT NULL COMMENT 'AES-GCM加密后的提醒手机号',
+  enabled TINYINT NOT NULL DEFAULT 1 COMMENT '是否启用采集：0否 1是',
+  alert_enabled TINYINT NOT NULL DEFAULT 1 COMMENT 'Cookie失效是否短信提醒：0否 1是',
+  cookie_status VARCHAR(24) NOT NULL DEFAULT 'unchecked' COMMENT 'unchecked/valid/check_failed/invalid',
+  notification_state VARCHAR(24) NOT NULL DEFAULT 'normal' COMMENT 'normal/alerted',
+  consecutive_failures INT NOT NULL DEFAULT 0 COMMENT '连续校验失败次数',
+  last_error_message VARCHAR(500) DEFAULT NULL COMMENT '最近一次失败摘要',
+  last_checked_at DATETIME DEFAULT NULL COMMENT '最近校验时间',
+  last_valid_at DATETIME DEFAULT NULL COMMENT '最近有效时间',
+  last_alert_at DATETIME DEFAULT NULL COMMENT '最近短信提醒时间',
+  create_by INT DEFAULT NULL COMMENT '创建人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_sys_market_source (tenant_id, platform),
+  KEY idx_sys_market_source_enabled (enabled, platform)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='市场采集平台Cookie与过期提醒配置';
+
+DROP TABLE IF EXISTS sys_market_function;
+CREATE TABLE sys_market_function (
+  id BIGINT NOT NULL COMMENT '主键ID，由MyBatis-Plus雪花算法生成',
+  code VARCHAR(80) NOT NULL COMMENT '功能唯一编码',
+  title VARCHAR(120) NOT NULL COMMENT '功能名称',
+  summary VARCHAR(500) NOT NULL COMMENT '市场卡片简介',
+  description TEXT DEFAULT NULL COMMENT '功能详情说明',
+  badge VARCHAR(40) DEFAULT NULL COMMENT '市场角标',
+  icon VARCHAR(60) NOT NULL DEFAULT 'sparkles' COMMENT '前端图标标识',
+  cover_url VARCHAR(2000) DEFAULT NULL COMMENT '市场卡片封面',
+  feature_type VARCHAR(24) NOT NULL DEFAULT 'builtin' COMMENT 'builtin/external',
+  route VARCHAR(1000) NOT NULL COMMENT '站内路由或外链',
+  category VARCHAR(60) DEFAULT NULL COMMENT '功能分类',
+  tags_json JSON DEFAULT NULL COMMENT '展示标签',
+  sort_order INT NOT NULL DEFAULT 0 COMMENT '排序，越小越靠前',
+  status TINYINT NOT NULL DEFAULT 0 COMMENT '状态：0草稿 1上架',
+  create_by INT DEFAULT NULL COMMENT '创建人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_sys_market_function_code (code),
+  KEY idx_sys_market_function_published (status, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='市场功能上架配置表';
+
 DROP TABLE IF EXISTS sys_prompt_template;
 CREATE TABLE sys_prompt_template (
   id INT NOT NULL AUTO_INCREMENT COMMENT '主键ID',
@@ -708,6 +760,50 @@ CREATE TABLE ai_viral_asset (
   KEY idx_ai_viral_asset_kind (asset_kind),
   KEY idx_ai_viral_asset_creator (tenant_id, create_by, update_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='爆款脚本资产库表';
+
+-- 市场：按品类聚合的短视频爆款链接。只保存公开元数据与源链接，不落视频文件。
+DROP TABLE IF EXISTS ai_market_viral_video;
+CREATE TABLE ai_market_viral_video (
+  id BIGINT NOT NULL COMMENT '主键ID，由MyBatis-Plus雪花算法生成',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  category VARCHAR(40) NOT NULL COMMENT '目标品类',
+  platform VARCHAR(32) NOT NULL COMMENT '来源平台：douyin/xiaohongshu',
+  external_id VARCHAR(120) NOT NULL COMMENT '平台内容ID',
+  title VARCHAR(500) NOT NULL DEFAULT '' COMMENT '标题与文案摘要',
+  author_name VARCHAR(160) DEFAULT NULL COMMENT '作者昵称',
+  source_url VARCHAR(2000) NOT NULL COMMENT '原视频链接',
+  cover_url VARCHAR(2000) DEFAULT NULL COMMENT '封面链接',
+  tags VARCHAR(1000) DEFAULT NULL COMMENT '标签，逗号分隔',
+  duration_seconds INT DEFAULT NULL COMMENT '视频时长（秒）',
+  like_count BIGINT NOT NULL DEFAULT 0 COMMENT '点赞数',
+  comment_count BIGINT NOT NULL DEFAULT 0 COMMENT '评论数',
+  collect_count BIGINT NOT NULL DEFAULT 0 COMMENT '收藏数',
+  share_count BIGINT NOT NULL DEFAULT 0 COMMENT '分享数',
+  published_at DATETIME DEFAULT NULL COMMENT '发布时间',
+  last_seen_at DATETIME NOT NULL COMMENT '最近一次采集确认时间',
+  discovery_query VARCHAR(100) DEFAULT NULL COMMENT '命中的搜索词',
+  create_by INT DEFAULT NULL COMMENT '创建人',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+  update_by INT DEFAULT NULL COMMENT '更新人',
+  update_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  deleted TINYINT NOT NULL DEFAULT 0 COMMENT '逻辑删除',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_ai_market_viral_source (tenant_id, platform, external_id),
+  KEY idx_ai_market_viral_rank (tenant_id, category, platform, last_seen_at, like_count),
+  KEY idx_ai_market_viral_duration (tenant_id, category, duration_seconds)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='市场品类爆款短视频链接';
+
+DROP TABLE IF EXISTS ai_market_viral_favorite;
+CREATE TABLE ai_market_viral_favorite (
+  id BIGINT NOT NULL COMMENT '主键ID，由MyBatis-Plus雪花算法生成',
+  tenant_id INT NOT NULL COMMENT '租户ID',
+  user_id INT NOT NULL COMMENT '用户ID',
+  video_id BIGINT NOT NULL COMMENT '市场爆款链接ID',
+  create_time DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '收藏时间',
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_ai_market_viral_favorite (tenant_id, user_id, video_id),
+  KEY idx_ai_market_viral_favorite_user (tenant_id, user_id, create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='市场品类爆款用户收藏';
 
 -- =========================
 -- 5. 爆款解析、结构公式、模板

@@ -687,6 +687,31 @@ ON DUPLICATE KEY UPDATE
   sort_order = VALUES(sort_order),
   status = VALUES(status);
 
+INSERT INTO sys_market_function (
+  id, code, title, summary, description, badge, icon, feature_type, route,
+  category, tags_json, sort_order, status, create_time, update_time, deleted
+)
+SELECT
+  900000000000000001,
+  'category-viral-links',
+  '品类爆款链接',
+  '按品类聚合抖音、小红书全时长的单品测评爆款链接。',
+  '输入品类后自动采集候选视频，剔除多品横测、榜单和跨品类推荐，并按点赞数从高到低展示。',
+  'HOT',
+  'flame',
+  'builtin',
+  '/market/category-viral-links',
+  '内容灵感',
+  JSON_ARRAY('爆款链接', '品类测评', '短视频'),
+  10,
+  1,
+  CURRENT_TIMESTAMP,
+  CURRENT_TIMESTAMP,
+  0
+WHERE NOT EXISTS (
+  SELECT 1 FROM sys_market_function WHERE code = 'category-viral-links'
+);
+
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- 原创示例资源（6套、14张AI生成图片）；两个角色均4/4独立视图，含真实表情九宫格。先执行 20260905120000_creative_resources.sql。

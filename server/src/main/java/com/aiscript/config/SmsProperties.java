@@ -15,6 +15,8 @@ public class SmsProperties {
     private String accessKeySecret;
     private String signName;
     private String templateCode;
+    private String marketCookieTemplateCode;
+    private String notificationEndpoint = "dysmsapi.aliyuncs.com";
     private String regionId = "ap-southeast-1";
     private long codeTtlSeconds = 300;
 }

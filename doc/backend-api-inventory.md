@@ -141,6 +141,25 @@
 | `POST` | `/api/video/share-url/parse` | 已实现，真实解析依赖 Provider | Body: `{"projectId":"1871234567890123001","url":"https://www.douyin.com/video/123","mode":"viral"}` |
 | `POST` | `/api/script-generator/extract-copy` | 已实现，视频转写依赖 ASR Provider | Body: `{"projectId":"1871234567890123001","videoUrl":"https://example.com/video.mp4","text":"这里是手动粘贴的文案"}` |
 
+### Market 品类爆款链接
+
+| 方法 | 路径 | 实现状态 | 测试参数 |
+| --- | --- | --- | --- |
+| `GET` | `/api/market/functions` | 已实现，只返回后台已上架功能 | 无 |
+| `GET` | `/api/admin/market-functions` | 已实现，返回草稿与已上架功能 | 无 |
+| `POST` | `/api/admin/market-functions` | 已实现 | Body: `{"code":"category-viral-links","title":"品类爆款链接","summary":"...","featureType":"builtin","route":"/market/category-viral-links","status":1,"sortOrder":10}` |
+| `PUT` | `/api/admin/market-functions/{id}` | 已实现 | Path: `id`; Body 同创建 |
+| `DELETE` | `/api/admin/market-functions/{id}` | 已实现 | Path: `id` |
+| `GET` | `/api/market/viral-videos` | 已实现 | Query: `page,pageSize,category,platform,keyword,favoriteOnly` |
+| `POST` | `/api/market/viral-videos/refresh` | 已实现，调用 Python `market.category-viral-search` Skill；采集依赖 AIONE 与平台登录态 | Body: `{"category":"油烟机","platforms":["douyin","xiaohongshu"],"requestNo":"demo-1"}` |
+| `POST` | `/api/market/viral-videos/{id}/favorite` | 已实现，收藏或取消收藏当前用户的爆款链接 | Path: `id` |
+| `GET` | `/api/admin/market-sources` | 已实现，返回 Cookie/手机号掩码与健康状态 | 无 |
+| `PUT` | `/api/admin/market-sources/{platform}` | 已实现，Cookie 和提醒手机号加密保存 | Body: `{"cookie":"sid=...","alertPhone":"13800138000","enabled":true,"alertEnabled":true}` |
+| `POST` | `/api/admin/market-sources/{platform}/validate` | 已实现，立即检测 Cookie | Path: `platform=douyin/xiaohongshu` |
+| `POST` | `Python /api/internal/skills/market-category-viral-search/execute` | 内部接口，需 `X-Workflow-Token` | Body: `{"tenantId":1,"category":"油烟机","platforms":["douyin","xiaohongshu"]}` |
+| `POST` | `Python /api/internal/skills/market-category-viral-search/validate-cookie` | 内部接口，需 `X-Workflow-Token` | Body: `{"tenantId":1,"platform":"douyin"}` |
+| `POST` | `/api/internal/workflow/providers/market-source-credential` | 内部接口，供 Python 临时读取解密 Cookie | Body: `{"tenantId":1,"platform":"douyin"}`; Header: `X-Workflow-Token` |
+
 ### Compliance 合规
 
 | 方法 | 路径 | 实现状态 | 测试参数 |

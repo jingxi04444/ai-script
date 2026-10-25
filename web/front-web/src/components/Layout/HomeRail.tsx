@@ -24,7 +24,7 @@ interface HomeRailProps {
   onRecharge?: () => void;
 }
 
-type HomeNavKey = 'home' | 'create' | 'expert' | 'projects' | 'assets';
+type HomeNavKey = 'home' | 'create' | 'market' | 'projects' | 'assets';
 
 interface HomeNavItem {
   key: HomeNavKey;
@@ -69,7 +69,7 @@ const loadMembershipSummary = () => {
 const defaultHomeNavItems: HomeNavItem[] = [
   { key: 'home', icon: 'home', label: '首页' },
   { key: 'create', icon: 'clapper', label: '创作大厅' },
-  { key: 'expert', icon: 'expert', label: '专家市场' },
+  { key: 'market', icon: 'expert', label: '市场' },
   { key: 'projects', icon: 'folder', label: '我的项目' },
   { key: 'assets', icon: 'assets', label: '资产管理' },
 ];
@@ -222,8 +222,8 @@ const HomeRail = ({
         return;
       }
       navigate('/workspace');
-    } else if (key === 'expert') {
-      message.info('专家市场即将开放');
+    } else if (key === 'market') {
+      navigate('/market');
     } else if (key === 'home') {
       onHome?.();
       navigate('/home');

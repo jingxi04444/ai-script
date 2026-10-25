@@ -88,6 +88,8 @@ sms:
   access-key-secret: ${SMS_ACCESS_KEY_SECRET:}  # 禁止提交真实密钥
   sign-name: ${SMS_SIGN_NAME:速通互联验证码}  # 短信签名
   template-code: ${SMS_TEMPLATE_CODE:100001}  # 短信模板 CODE
+  market-cookie-template-code: ${SMS_MARKET_COOKIE_TEMPLATE_CODE:}  # 市场Cookie过期提醒模板，变量：platform
+  notification-endpoint: ${SMS_NOTIFICATION_ENDPOINT:dysmsapi.aliyuncs.com}  # 阿里云短信服务 endpoint
   region-id: ${SMS_REGION_ID:ap-southeast-1}  # 阿里云 Region
   code-ttl-seconds: ${SMS_CODE_TTL_SECONDS:300}  # 验证码有效期（秒），同步传入模板 min 参数
 

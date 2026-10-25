@@ -2,6 +2,25 @@
 
 Python 工作流执行服务。Spring Boot 负责鉴权、项目、工作流定义、额度、公开 API 和 Provider 密钥；本服务消费 Redis Streams 命令，从共用 MySQL 读取不可变画布快照，按 DAG 依赖执行 Skill，并将运行事件写回 Redis。
 
+## 市场品类爆款 Skill
+
+`market.category-viral-search` 是市场“品类爆款链接”背后的独立 Skill。它通过
+All-IN-ONE CLI 搜索抖音与小红书，补全小红书视频时长，过滤多品横测和跨品类清单，
+最后按点赞数倒序返回。Spring Boot 可通过受内部令牌保护的接口直接调用：
+
+```text
+POST /api/internal/skills/market-category-viral-search/execute
+X-Workflow-Token: <WORKFLOW_PROVIDER_GATEWAY_TOKEN>
+```
+
+也可在画布节点的 `skillCode` 中直接填写 `market.category-viral-search`。本功能要求：
+
+- Python 环境可执行 `aione`，或通过 `WORKFLOW_AIONE_COMMAND` 配置绝对路径。
+- All-IN-ONE 已完成 `aione setup`；Cookie 在 Spring 后台「市场采集」配置，不需要 `aione auth set-cookie`。
+- Java 与 Python 使用相同的 `WORKFLOW_PROVIDER_GATEWAY_TOKEN`，同时用于内部 Skill 调用和临时读取后台加密 Cookie。
+
+完整部署与算法说明见 `doc/market-viral-link-discovery.md`。
+
 ## 本地启动
 
 推荐使用一键脚本：

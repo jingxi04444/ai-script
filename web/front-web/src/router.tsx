@@ -7,6 +7,8 @@ const RegisterPage = lazy(() => import('./pages/Auth/RegisterPage'));
 const HomePage = lazy(() => import('./pages/Home/HomePage'));
 const ProjectsPage = lazy(() => import('./pages/Projects/ProjectsPage'));
 const AssetsPage = lazy(() => import('./pages/Assets/AssetsPage'));
+const MarketHomePage = lazy(() => import('./pages/Market/MarketHomePage'));
+const MarketViralPage = lazy(() => import('./pages/Market/MarketViralPage'));
 const WorkspacePage = lazy(() => import('./pages/Workspace/WorkspacePage'));
 const BriefSharePage = lazy(() => import('./pages/BriefShare/BriefSharePage'));
 const BriefSharePackPage = lazy(() => import('./pages/BriefSharePack/BriefSharePackPage'));
@@ -51,6 +53,14 @@ export const router: RouteObject[] = [
   {
     path: '/assets',
     element: <RequireAuth><LazyLoad><AssetsPage /></LazyLoad></RequireAuth>,
+  },
+  {
+    path: '/market',
+    element: <RequireAuth><LazyLoad><MarketHomePage /></LazyLoad></RequireAuth>,
+  },
+  {
+    path: '/market/category-viral-links',
+    element: <RequireAuth><LazyLoad><MarketViralPage /></LazyLoad></RequireAuth>,
   },
   {
     path: '/workspace',

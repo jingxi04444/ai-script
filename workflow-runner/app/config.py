@@ -21,6 +21,11 @@ class Settings(BaseSettings):
     provider_gateway_url: str = "http://127.0.0.1:8080/api/internal/workflow/providers/execute"
     provider_gateway_token: str = ""
     provider_gateway_timeout_seconds: float = 320.0
+    market_credential_url: str = "http://127.0.0.1:8080/api/internal/workflow/providers/market-source-credential"
+    aione_command: str = "aione"
+    aione_timeout_seconds: float = 180.0
+    market_viral_max_candidates: int = 40
+    market_viral_xhs_detail_limit: int = 20
     simulation_delay_ms: int = 180
     worker_enabled: bool = True
 

@@ -9,6 +9,9 @@ import com.aliyun.auth.credentials.provider.StaticCredentialProvider;
 import com.aliyun.sdk.service.dypnsapi20170525.AsyncClient;
 import com.aliyun.sdk.service.dypnsapi20170525.models.SendSmsVerifyCodeRequest;
 import com.aliyun.sdk.service.dypnsapi20170525.models.SendSmsVerifyCodeResponse;
+import com.aliyun.dysmsapi20170525.models.SendSmsRequest;
+import com.aliyun.dysmsapi20170525.models.SendSmsResponse;
+import com.aliyun.teaopenapi.models.Config;
 import darabonba.core.client.ClientOverrideConfiguration;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
@@ -28,6 +31,7 @@ public class AliyunSmsClient implements SmsClient {
 
     private final SmsProperties smsProperties;
     private volatile AsyncClient client;
+    private volatile com.aliyun.dysmsapi20170525.Client notificationClient;
 
     public AliyunSmsClient(SmsProperties smsProperties) {
         this.smsProperties = smsProperties;
@@ -87,6 +91,53 @@ public class AliyunSmsClient implements SmsClient {
         }
     }
 
+    @Override
+    public void sendMarketCookieExpiryAlert(String phone, String platformName) {
+        ensureNotificationConfigured();
+        log.info(
+            "[SMS_NOTICE] Market cookie alert started: phone={}, platform={}, endpoint={}, templateCode={}",
+            maskPhone(phone), platformName,
+            normalizeEndpoint(smsProperties.getNotificationEndpoint()),
+            smsProperties.getMarketCookieTemplateCode()
+        );
+        try {
+            SendSmsRequest request = new SendSmsRequest()
+                .setPhoneNumbers(phone)
+                .setSignName(smsProperties.getSignName())
+                .setTemplateCode(smsProperties.getMarketCookieTemplateCode())
+                .setTemplateParam(JsonUtils.toJson(Map.of("platform", platformName)));
+            SendSmsResponse response = notificationClient()
+                .sendSmsWithOptions(request, new com.aliyun.teautil.models.RuntimeOptions()
+                    .setReadTimeout(10_000)
+                    .setConnectTimeout(10_000));
+            if (response.getBody() == null || !"OK".equalsIgnoreCase(response.getBody().getCode())) {
+                String responseCode = response.getBody() == null ? "EMPTY_RESPONSE" : response.getBody().getCode();
+                String responseMessage = response.getBody() == null ? "empty response" : response.getBody().getMessage();
+                log.warn(
+                    "[SMS_NOTICE] Aliyun rejected market cookie alert: phone={}, platform={}, providerCode={}, providerMessage={}, requestId={}",
+                    maskPhone(phone), platformName, responseCode, responseMessage,
+                    response.getBody() == null ? null : response.getBody().getRequestId()
+                );
+                throw notificationFailure();
+            }
+            log.info(
+                "[SMS_NOTICE] Aliyun accepted market cookie alert: phone={}, platform={}, providerCode={}, requestId={}",
+                maskPhone(phone), platformName, response.getBody().getCode(), response.getBody().getRequestId()
+            );
+        } catch (BusinessException exception) {
+            throw exception;
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw notificationFailure();
+        } catch (Exception exception) {
+            log.error(
+                "[SMS_NOTICE] Aliyun market cookie alert failed: phone={}, platform={}",
+                maskPhone(phone), platformName, exception
+            );
+            throw notificationFailure();
+        }
+    }
+
     private AsyncClient client() {
         AsyncClient current = client;
         if (current != null) return current;
@@ -112,6 +163,24 @@ public class AliyunSmsClient implements SmsClient {
         }
     }
 
+    private com.aliyun.dysmsapi20170525.Client notificationClient() throws Exception {
+        com.aliyun.dysmsapi20170525.Client current = notificationClient;
+        if (current != null) return current;
+        synchronized (this) {
+            if (notificationClient == null) {
+                Config config = new Config()
+                    .setAccessKeyId(smsProperties.getAccessKeyId())
+                    .setAccessKeySecret(smsProperties.getAccessKeySecret())
+                    .setRegionId(smsProperties.getRegionId())
+                    .setEndpoint(normalizeEndpoint(smsProperties.getNotificationEndpoint()))
+                    .setReadTimeout(10_000)
+                    .setConnectTimeout(10_000);
+                notificationClient = new com.aliyun.dysmsapi20170525.Client(config);
+            }
+            return notificationClient;
+        }
+    }
+
     private void ensureConfigured() {
         if (!smsProperties.isEnabled()) {
             log.warn("[SMS_CONFIG] SMS service is disabled: property=sms.enabled");
@@ -128,6 +197,25 @@ public class AliyunSmsClient implements SmsClient {
         addMissing(missingItems, "sms.template-code", smsProperties.getTemplateCode());
         if (!missingItems.isEmpty()) {
             log.error("[SMS_CONFIG] Aliyun SMS configuration is incomplete: missing={}", missingItems);
+            throw new BusinessException(ResultCode.PROVIDER_ERROR, "短信服务配置异常，请联系管理员");
+        }
+    }
+
+    private void ensureNotificationConfigured() {
+        if (!smsProperties.isEnabled()) {
+            log.warn("[SMS_CONFIG] SMS service is disabled for market cookie alert");
+            throw new BusinessException(ResultCode.PROVIDER_ERROR, "短信服务暂不可用，请稍后重试");
+        }
+        if (!"aliyun".equalsIgnoreCase(smsProperties.getProvider())) {
+            throw new BusinessException(ResultCode.PROVIDER_ERROR, "短信服务配置异常，请联系管理员");
+        }
+        List<String> missingItems = new ArrayList<>();
+        addMissing(missingItems, "sms.access-key-id", smsProperties.getAccessKeyId());
+        addMissing(missingItems, "sms.access-key-secret", smsProperties.getAccessKeySecret());
+        addMissing(missingItems, "sms.sign-name", smsProperties.getSignName());
+        addMissing(missingItems, "sms.market-cookie-template-code", smsProperties.getMarketCookieTemplateCode());
+        if (!missingItems.isEmpty()) {
+            log.error("[SMS_CONFIG] Aliyun notification configuration is incomplete: missing={}", missingItems);
             throw new BusinessException(ResultCode.PROVIDER_ERROR, "短信服务配置异常，请联系管理员");
         }
     }
@@ -150,6 +238,10 @@ public class AliyunSmsClient implements SmsClient {
 
     private BusinessException providerFailure() {
         return new BusinessException(ResultCode.PROVIDER_ERROR, "短信验证码发送失败，请稍后重试");
+    }
+
+    private BusinessException notificationFailure() {
+        return new BusinessException(ResultCode.PROVIDER_ERROR, "Cookie过期提醒短信发送失败");
     }
 
     private String maskPhone(String phone) {
